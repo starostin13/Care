@@ -30,13 +30,16 @@
     <Compile Include="CareBot\example_config.py" />
     <Compile Include="CareBot\config.py" />
     <Compile Include="CareBot\handlers.py" />
+    <Compile Include="CareBot\keyboard_constructor.py" />
     <Compile Include="CareBot\players_helper.py" />
+    <Compile Include="CareBot\sqllite_helper.py" />
     <Compile Include="runserver.py" />
     <Compile Include="CareBot\__init__.py" />
     <Compile Include="CareBot\views.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="CareBot\" />
+    <Folder Include="CareBot\database\" />
     <Folder Include="CareBot\static\" />
     <Folder Include="CareBot\static\content\" />
     <Folder Include="CareBot\static\fonts\" />
@@ -44,6 +47,7 @@
     <Folder Include="CareBot\templates\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="CareBot\database\schedule.sql" />
     <Content Include="requirements.txt" />
     <Content Include="CareBot\static\content\bootstrap.css" />
     <Content Include="CareBot\static\content\bootstrap.min.css" />

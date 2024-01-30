@@ -3,9 +3,10 @@ from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandle
 
 import config
 import players_helper
+import keyboard_constructor
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    rules = [[InlineKeyboardButton("Kill Team", callback_data="killteam"), InlineKeyboardButton("Boarding Action",callback_data="boardingaction")], [InlineKeyboardButton("WH40k 10",callback_data="wh40k"), InlineKeyboardButton("Combat patrol",callback_data="combatpatrol")], [InlineKeyboardButton("Battlefleet",callback_data="battlefleet")]]
+    rules = keyboard_constructor.get_keyboard_rules_keyboard_for_user(update.effective_user.id)
     menu = InlineKeyboardMarkup(rules)
     await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
     
