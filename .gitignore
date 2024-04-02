@@ -163,3 +163,5 @@ cython_debug/
 /CareBot/.vs/CareBot/FileContentIndex
 /CareBot/CareBot/config.py
 /CareBot/CareBot/db/database
+
+.fake
