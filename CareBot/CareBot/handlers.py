@@ -1,11 +1,15 @@
 from asyncio.windows_events import NULL
 from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update, InlineKeyboardButton
-from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler
 
 import config
 import players_helper
 import keyboard_constructor
 import sqllite_helper
+
+START_ROUTES, END_ROUTES = range(2)
+# Callback data
+ONE, TWO, THREE, FOUR = range(4)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     userId = update.effective_user.id
@@ -38,6 +42,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
+
+conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", hello)],
+        states={
+            START_ROUTES: [
+                CallbackQueryHandler(one, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(two, pattern="^" + str(TWO) + "$"),
+                CallbackQueryHandler(three, pattern="^" + str(THREE) + "$"),
+                CallbackQueryHandler(four, pattern="^" + str(FOUR) + "$"),
+            ],
+            END_ROUTES: [
+                CallbackQueryHandler(start_over, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(end, pattern="^" + str(TWO) + "$"),
+            ],
+        },
+        fallbacks=[CommandHandler("start", start)],
+    )
 
 bot.add_handler(CommandHandler("start", hello))
 bot.add_handler(CommandHandler("imin", im_in))
