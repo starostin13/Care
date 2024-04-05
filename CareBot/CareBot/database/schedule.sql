@@ -11,7 +11,8 @@ CREATE TABLE schedule (
                           UNIQUE,
     date          TEXT,
     rules         TEXT,
-    user_telegram TEXT    NOT NULL
+    user_telegram TEXT    NOT NULL,
+    date_week     INTEGER
 );
 
 INSERT INTO schedule (

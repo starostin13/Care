@@ -32,9 +32,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
-
+    when_markup = await keyboard_constructor.this_week()
     await sqllite_helper.insert_to_schedule(NULL, query.data, update.effective_user.id)
-    await query.edit_message_text(text=f"Selected option: {query.data}")
+    menu = InlineKeyboardMarkup(when_markup)
+    await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
