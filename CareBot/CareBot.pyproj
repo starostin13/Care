@@ -47,7 +47,9 @@
     <Folder Include="CareBot\templates\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="CareBot\database\alliances.sql" />
     <Content Include="CareBot\database\schedule.sql" />
+    <Content Include="CareBot\database\warmasters.sql" />
     <Content Include="requirements.txt" />
     <Content Include="CareBot\static\content\bootstrap.css" />
     <Content Include="CareBot\static\content\bootstrap.min.css" />
