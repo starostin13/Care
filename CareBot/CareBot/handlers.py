@@ -30,7 +30,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return START_ROUTES
     
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    opponents = players_helper.get_opponents(update.effective_user)
+    opponents = players_helper.get_opponents(update.effective_user.id)
     for opponent in opponents:
         reply_text += opponent
         players_helper.notify(opponent)
