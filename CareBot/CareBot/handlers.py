@@ -40,6 +40,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await sqllite_helper.insert_to_schedule(NULL, query.data, update.effective_user.id)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
+    return ConversationHandler.END
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
@@ -47,17 +48,14 @@ conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", hello)],
         states={
             START_ROUTES: [
-                CallbackQueryHandler(one, pattern="^" + str(ONE) + "$"),
-                CallbackQueryHandler(two, pattern="^" + str(TWO) + "$"),
-                CallbackQueryHandler(three, pattern="^" + str(THREE) + "$"),
-                CallbackQueryHandler(four, pattern="^" + str(FOUR) + "$"),
+                CallbackQueryHandler(hello, pattern="^" + str(ONE) + "$"),
             ],
             END_ROUTES: [
-                CallbackQueryHandler(start_over, pattern="^" + str(ONE) + "$"),
-                CallbackQueryHandler(end, pattern="^" + str(TWO) + "$"),
+                CallbackQueryHandler(im_in, pattern="^" + str(ONE) + "$"),
             ],
         },
-        fallbacks=[CommandHandler("start", start)],
+        fallbacks=[CommandHandler("start", hello)],
+        #per_message=True,
     )
 
 bot.add_handler(CommandHandler("start", hello))
