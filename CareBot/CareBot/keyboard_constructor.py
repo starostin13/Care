@@ -18,7 +18,7 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
     ]
     return rules
     
-async def this_week():
+async def this_week(rule):
     today = dt.today()
     week = today.isocalendar().week
     d = f"{today.year}-W{week}"
@@ -28,15 +28,15 @@ async def this_week():
 
     days = [
         [
-            InlineKeyboardButton(menu_values[6].strftime("%A"), callback_data=menu_values[6].strftime("%c")),
-            InlineKeyboardButton(menu_values[0].strftime("%A"), callback_data=menu_values[0].strftime("%c"))
+            InlineKeyboardButton(menu_values[6].strftime("%A"), callback_data=menu_values[6].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[0].strftime("%A"), callback_data=menu_values[0].strftime("%c") + ',' + rule)
         ],
         [
-            InlineKeyboardButton(menu_values[5].strftime("%A"), callback_data=menu_values[5].strftime("%c")),
-            InlineKeyboardButton(menu_values[4].strftime("%A"), callback_data=menu_values[4].strftime("%c")),
-            InlineKeyboardButton(menu_values[3].strftime("%A"), callback_data=menu_values[3].strftime("%c")),
-            InlineKeyboardButton(menu_values[2].strftime("%A"), callback_data=menu_values[2].strftime("%c")),
-            InlineKeyboardButton(menu_values[1].strftime("%A"), callback_data=menu_values[1].strftime("%c"))
+            InlineKeyboardButton(menu_values[5].strftime("%A"), callback_data=menu_values[5].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[4].strftime("%A"), callback_data=menu_values[4].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[3].strftime("%A"), callback_data=menu_values[3].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[2].strftime("%A"), callback_data=menu_values[2].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[1].strftime("%A"), callback_data=menu_values[1].strftime("%c") + ',' + rule)
         ]
     ]
     
