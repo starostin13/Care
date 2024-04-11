@@ -1,6 +1,6 @@
 from asyncio.windows_events import NULL
-from tkinter import END
-from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update, InlineKeyboardButton
+from msilib import sequence
+from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler
 
 import config
@@ -24,19 +24,26 @@ ONE, TWO, THREE, FOUR = range(4)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
+    await players_helper.add_warmaster(userId)
     rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
     menu = InlineKeyboardMarkup(rules)
     await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
     return START_ROUTES
     
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    opponents = players_helper.get_opponents(update.effective_user.id)
+    query = update.callback_query
+    data = query.data
+    data_arr = data.split(',')
+    sqllite_helper.insert_to_schedule(data_arr[0], data_arr[1].split(':')[1], update.effective_user.id)
+    opponents = await players_helper.get_opponents(update.effective_user.id, data)
+    await query.answer()
+    await query.edit_message_text(f'You will faced with')
     for opponent in opponents:
-        reply_text += opponent
-        players_helper.notify(opponent)
-    opponnentsContacts = [[KeyboardButton("Kill Team",request_contact="")]]
-    menu = ReplyKeyboardMarkup(opponnentsContacts)
-    await update.message.reply_text(f'You faced with {reply_text}', reply_markup=menu)
+        await update.effective_chat.send_contact(first_name="asdsad", username="@starostin13")
+        #reply_text += opponent
+        #players_helper.notify(opponent)
+        #await query.edit_message_text("")
+        #await query.edit_message_text(opponent[0])
     
 async def end_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'You faced')
@@ -49,8 +56,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
-    when_markup = await keyboard_constructor.this_week()
-    await sqllite_helper.insert_to_schedule(NULL, query.data, update.effective_user.id)
+    when_markup = await keyboard_constructor.this_week(query.data)
+    #await sqllite_helper.insert_to_schedule(NULL, query.data, update.effective_user.id)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
     return START_ROUTES
@@ -69,13 +76,8 @@ conv_handler = ConversationHandler(
         ],
     },
     fallbacks=[CommandHandler("start", hello)],
-        #per_message=True,
     )
 
 bot.add_handler(conv_handler)
-#bot.add_handler(CommandHandler("start", hello))
-#bot.add_handler(CallbackQueryHandler(im_in))
-#bot.add_handler(CallbackQueryHandler(end_poll))
-#bot.add_handler(CallbackQueryHandler(button))
 
 bot.run_polling()
