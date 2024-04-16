@@ -23,13 +23,16 @@ START_ROUTES, END_ROUTES = range(2)
 ONE, TWO, THREE, FOUR = range(4)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await keyboard_constructor.get_main_menu()
+    return START_ROUTES
+    
+async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
     await players_helper.add_warmaster(userId)
     rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
     menu = InlineKeyboardMarkup(rules)
-    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
-    return START_ROUTES
-    
+    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)    
+
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     data = query.data
