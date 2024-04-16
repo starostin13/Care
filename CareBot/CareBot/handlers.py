@@ -23,7 +23,9 @@ START_ROUTES, END_ROUTES = range(2)
 ONE, TWO, THREE, FOUR = range(4)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await keyboard_constructor.get_main_menu()
+    await keyboard_constructor.get_main_menu(update.effective_user.id)
+    menu = InlineKeyboardMarkup(menu)
+    await update.message.reply_text(reply_markup=menu)
     return START_ROUTES
     
 async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -71,6 +73,7 @@ conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", hello)],
     states={
         START_ROUTES: [
+            CallbackQueryHandler(appoint, pattern='start:game'),
             CallbackQueryHandler(button, pattern='rule'),
             CallbackQueryHandler(im_in),
         ],
