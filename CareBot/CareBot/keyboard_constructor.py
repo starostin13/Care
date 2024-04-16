@@ -26,6 +26,15 @@ async def get_main_menu(userId):
     if sqllite_helper.is_warmaster_registered(userId):
         items.append([InlineKeyboardButton("Games", callback_data="start:game")])
     return items
+
+async def setting(userId):
+    settings = sqllite_helper.get_settings(userId)
+    items = [[]]
+    if settings[0]:
+        items[0].append(InlineKeyboardButton("Set the name", callback_data="start"))
+    
+    items[0].append(InlineKeyboardButton("Back", callback_data=))
+    return items
     
 async def this_week(rule):
     today = dt.today()
