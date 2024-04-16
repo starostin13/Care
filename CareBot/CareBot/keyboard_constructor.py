@@ -20,10 +20,12 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
     return rules
 
 async def get_main_menu(userId):
-    if sqllite_helper.is_warmaster_registered(userId)
     items = [
-        [InlineKeyboardButton("Settings")]    
+        [InlineKeyboardButton("Settings", callback_data="start:settings")]
     ]
+    if sqllite_helper.is_warmaster_registered(userId):
+        items.append([InlineKeyboardButton("Games", callback_data="start:game")])
+    return items
     
 async def this_week(rule):
     today = dt.today()
