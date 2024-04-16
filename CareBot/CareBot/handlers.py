@@ -25,6 +25,8 @@ ONE, TWO, THREE, FOUR = range(4)
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await keyboard_constructor.get_main_menu(update.effective_user.id)
     menu = InlineKeyboardMarkup(menu)
+    query = update.callback_query
+    await query.answer()
     await update.message.reply_text(reply_markup=menu)
     return START_ROUTES
     
@@ -33,7 +35,7 @@ async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await players_helper.add_warmaster(userId)
     rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
     menu = InlineKeyboardMarkup(rules)
-    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)    
+    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
 
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -66,6 +68,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
     return START_ROUTES
+
+async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    menu = await keyboard_constructor.setting(update.effective_user.id)
+    query = update.callback_query    
+    await query.answer()
+    await update.message.reply_text("Your settings:", reply_markup=menu)
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
