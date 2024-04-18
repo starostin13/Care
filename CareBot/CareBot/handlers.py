@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 START_ROUTES, END_ROUTES = range(2)
 # Callback data
-ONE, TWO, THREE, FOUR, SETNAME = range(5)
+ONE, TWO, THREE, FOUR = range(4)
+TYPING_CHOICE, TYPING_REPLY = range(2)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await keyboard_constructor.get_main_menu(update.effective_user.id)
@@ -71,12 +72,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await players_helper.set_name()
+    text = update.message.text
+    context.user_data["choice"] = text
+    await update.message.reply_text(f"Your {text.lower()}? Yes, I would love to hear about that!")
+    return TYPING_REPLY
 
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         'Just type "/setname MyName"'
     )
-    return SETNAME
+    return TYPING_CHOICE
 
 async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = await keyboard_constructor.setting(update.effective_user.id)
@@ -93,8 +98,10 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(appoint, pattern='start:game'),
             CallbackQueryHandler(button, pattern='rule'),
             CallbackQueryHandler(im_in),
-            CallbackQueryHandler(set_name, pattern='request:setname'),
-            CallbackQueryHandler(, pattern='/setname')
+            CallbackQueryHandler(set_name, pattern='request:setname')
+        ],
+        TYPING_CHOICE: [            
+            CallbackQueryHandler(input_name, pattern='/setname')
         ],
         END_ROUTES: [
             CallbackQueryHandler(im_in),
