@@ -33,7 +33,7 @@ async def setting(userId):
     if settings[0]:
         items[0].append(InlineKeyboardButton("Set the name", callback_data="start"))
     
-    items[0].append(InlineKeyboardButton("Back", callback_data=))
+    items[0].append(InlineKeyboardButton("Back", callback_data="request:setname"))
     return items
     
 async def this_week(rule):
