@@ -69,6 +69,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
     return START_ROUTES
 
+async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await players_helper.set_name()
+
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         'Just type "/setname MyName"'
@@ -90,7 +93,8 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(appoint, pattern='start:game'),
             CallbackQueryHandler(button, pattern='rule'),
             CallbackQueryHandler(im_in),
-            CallbackQueryHandler(set_name, pattern='request:setname')
+            CallbackQueryHandler(set_name, pattern='request:setname'),
+            CallbackQueryHandler(, pattern='/setname')
         ],
         END_ROUTES: [
             CallbackQueryHandler(im_in),
