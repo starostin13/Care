@@ -10,7 +10,8 @@ CREATE TABLE warmasters (
                         UNIQUE
                         NOT NULL,
     telegram_id TEXT    UNIQUE,
-    alliance    TEXT    DEFAULT (0) 
+    alliance    TEXT    DEFAULT (0),
+    nickname    TEXT
 );
 
 INSERT INTO warmasters (
