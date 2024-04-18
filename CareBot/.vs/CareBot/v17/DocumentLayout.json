@@ -1,0 +1,104 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\keyboard_constructor.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|solutionrelative:CareBot\\keyboard_constructor.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\handlers.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|solutionrelative:CareBot\\handlers.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\example_config.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|solutionrelative:CareBot\\example_config.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\players_helper.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|solutionrelative:CareBot\\players_helper.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\sqllite_helper.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{E0AB424A-CA73-4B7F-ACB8-823C887AFB19}|CareBot.pyproj|solutionrelative:CareBot\\sqllite_helper.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "example_config.py",
+              "DocumentMoniker": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\example_config.py",
+              "RelativeDocumentMoniker": "CareBot\\example_config.py",
+              "ToolTip": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\example_config.py",
+              "RelativeToolTip": "CareBot\\example_config.py",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAAAAAAAkAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2024-04-17T15:31:58.714Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "keyboard_constructor.py",
+              "DocumentMoniker": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\keyboard_constructor.py",
+              "RelativeDocumentMoniker": "CareBot\\keyboard_constructor.py",
+              "ToolTip": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\keyboard_constructor.py",
+              "RelativeToolTip": "CareBot\\keyboard_constructor.py",
+              "ViewState": "AQIAABIAAAAAAAAAAAAswCMAAAA/AAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2024-04-16T15:36:01.275Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "handlers.py",
+              "DocumentMoniker": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\handlers.py",
+              "RelativeDocumentMoniker": "CareBot\\handlers.py",
+              "ToolTip": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\handlers.py",
+              "RelativeToolTip": "CareBot\\handlers.py",
+              "ViewState": "AQIAADcAAAAAAAAAAAAAAEQAAAA3AAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2024-01-26T16:10:25.682Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "players_helper.py",
+              "DocumentMoniker": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\players_helper.py",
+              "RelativeDocumentMoniker": "CareBot\\players_helper.py",
+              "ToolTip": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\players_helper.py",
+              "RelativeToolTip": "CareBot\\players_helper.py",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAAgAAAAgAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2024-01-26T20:21:35.199Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "sqllite_helper.py",
+              "DocumentMoniker": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\sqllite_helper.py",
+              "RelativeDocumentMoniker": "CareBot\\sqllite_helper.py",
+              "ToolTip": "C:\\Users\\al-gerasimov\\source\\repos\\Care\\CareBot\\CareBot\\sqllite_helper.py",
+              "RelativeToolTip": "CareBot\\sqllite_helper.py",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAABUAAAAZAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2024-01-30T08:26:11.637Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

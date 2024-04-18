@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 START_ROUTES, END_ROUTES = range(2)
 # Callback data
-ONE, TWO, THREE, FOUR = range(4)
+ONE, TWO, THREE, FOUR, SETNAME = range(5)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await keyboard_constructor.get_main_menu(update.effective_user.id)
@@ -69,6 +69,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
     return START_ROUTES
 
+async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        'Just type "/setname MyName"'
+    )
+    return SETNAME
+
 async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = await keyboard_constructor.setting(update.effective_user.id)
     query = update.callback_query    
@@ -84,6 +90,7 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(appoint, pattern='start:game'),
             CallbackQueryHandler(button, pattern='rule'),
             CallbackQueryHandler(im_in),
+            CallbackQueryHandler(set_name, pattern='request:setname')
         ],
         END_ROUTES: [
             CallbackQueryHandler(im_in),
