@@ -18,6 +18,23 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
         [InlineKeyboardButton("Battlefleet",callback_data="rule:battlefleet")],
     ]
     return rules
+
+async def get_main_menu(userId):
+    items = [
+        [InlineKeyboardButton("Settings", callback_data="callsettings")]
+    ]
+    if sqllite_helper.is_warmaster_registered(userId):
+        items.append([InlineKeyboardButton("Games", callback_data="callgame")])
+    return items
+
+async def setting(userId):
+    settings = sqllite_helper.get_settings(userId)
+    items = [[]]
+    if not settings:
+        items.append([InlineKeyboardButton("Set the name", callback_data="requestsetname")])
+    
+    items.append([InlineKeyboardButton("Back", callback_data="start")])
+    return items
     
 async def this_week(rule):
     today = dt.today()
