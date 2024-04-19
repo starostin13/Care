@@ -72,16 +72,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
     return MAIN_MENU
 
-async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await players_helper.set_name()
-    text = update.message.text
-    context.user_data["choice"] = text
-    await update.message.reply_text(f"Your {text.lower()}? Yes, I would love to hear about that!")
-    return TYPING_REPLY
+async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.split(' ')[1]
+    if text:
+        query = update.callback_query
+        await players_helper.set_name(update.effective_user.id, text)
+    
+        await update.message.reply_text(f"Your {text}? Yes, I would love to hear about that!")
 
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text(
-        'Just type "/setname MyName"'
+    query = update.callback_query    
+    await query.answer()
+    await query.edit_message_text(
+        'Just type "/ setname MyName"'
     )
     return TYPING_CHOICE
 
@@ -96,7 +99,8 @@ async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
 conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("start", hello)],
+    entry_points=[CommandHandler("start", hello),
+                  ],
     states={
         MAIN_MENU: [
             CallbackQueryHandler(button, pattern='rule'),
@@ -112,5 +116,6 @@ conv_handler = ConversationHandler(
     )
 
 bot.add_handler(conv_handler)
+bot.add_handler(CommandHandler("setname", input_name))
 
 bot.run_polling()
