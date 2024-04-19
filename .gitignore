@@ -160,6 +160,7 @@ cython_debug/
 #.idea/
 /.vs/Care/FileContentIndex
 /.vs/Care/v17
+/.vs/CareBot/v17
 /CareBot/.vs/CareBot/FileContentIndex
 /CareBot/CareBot/config.py
 /CareBot/CareBot/db/database
