@@ -12,4 +12,4 @@ async def get_opponents(forUserId: int, callback_data):
     return get_warmasters_opponents(alliance, rule=rule, week_day=weekday)
 
 async def set_name(user_telegram_id, nickname):
-    await sqllite_helper.set_nickname(user_telegram_id, user_telegram_id)
+    sqllite_helper.set_nickname(user_telegram_id, nickname)

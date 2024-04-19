@@ -38,7 +38,7 @@ def is_warmaster_registered(user_telegram_id):
 	return True
 
 def set_nickname(user_telegram_id, nickname):
-	cursor.execute(f'UPDATE warmasters SET nickname="${nickname}" WHERE telegram_id=${user_telegram_id}')
+	cursor.execute(f'UPDATE warmasters SET nickname="{nickname}" WHERE telegram_id={user_telegram_id}')
 	conn.commit()
 	
 	
