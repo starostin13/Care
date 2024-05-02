@@ -32,6 +32,9 @@ async def setting(userId):
     items = [[]]
     if not settings:
         items.append([InlineKeyboardButton("Set the name", callback_data="requestsetname")])
+    else:
+        if not settings[1]:
+            items.append([InlineKeyboardButton("Registration", callback_data="registration")])
     
     items.append([InlineKeyboardButton("Back", callback_data="start")])
     return items
