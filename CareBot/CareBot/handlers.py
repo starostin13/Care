@@ -1,7 +1,7 @@
 from asyncio.windows_events import NULL
 from msilib import sequence
 from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
 import config
 import players_helper
@@ -29,9 +29,20 @@ async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = InlineKeyboardMarkup(rules)
     await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
 
-async def contact_callback(bot, update):
-    contact = update.effective_message.contact
+async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    con_keyboard = KeyboardButton(text="send_contact", request_contact=True)
+    custom_keyboard = [[ con_keyboard ]]
+    reply_markup = ReplyKeyboardMarkup(custom_keyboard)
+
+    await update.message.reply_text(
+              text="Are you agree to share YOUR PHONE NUMBER? This is MANDATORY to participate in crusade.", 
+              reply_markup=reply_markup)
+    
+async def contact_callback(update, bot):
+    contact = update.message.contact
     phone = contact.phone_number
+    userid = contact.user_id
+    sqllite_helper.register_warmaster(userid, phone)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
@@ -88,7 +99,7 @@ async def registration_call(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     query = update.callback_query    
     await query.answer()
     await query.edit_message_text(
-        'Just type or click on it /registration'
+        'Just type or click on it /regme'
     )
 
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -129,6 +140,7 @@ conv_handler = ConversationHandler(
 
 bot.add_handler(conv_handler)
 bot.add_handler(CommandHandler("setname", input_name))
-bot.add_handler(MessageHandler(Filters.contact, contact_callback))
+bot.add_handler(CommandHandler("regme", contact))
+bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))
 
 bot.run_polling()
