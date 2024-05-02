@@ -28,8 +28,9 @@ def get_alliance_of_warmaster(telegram_user_id):
 	return result.fetchone()
 
 def insert_to_schedule(date: DateTime, rules: str, user_telegram: str):
-	weekNumber = 0
-	#result = cursor.execute('DELETE FROM schedule WHERE date_week<>?', weekNumber)
+	weekNumber = date.isocalendar()[1]
+	result = cursor.execute(f'DELETE FROM schedule WHERE date_week<>{str(weekNumber)}')
+	result.fetchall()
 	
 	cursor.execute('INSERT INTO schedule (date, rules, user_telegram, date_week) VALUES (?, ?, ?, ?)', (str(date), rules, user_telegram, weekNumber))
 	conn.commit()
