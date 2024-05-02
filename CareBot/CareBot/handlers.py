@@ -1,4 +1,5 @@
 from asyncio.windows_events import NULL
+from datetime import datetime
 from msilib import sequence
 from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
@@ -18,7 +19,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-MAIN_MENU, SETTINGS, GAMES = range(3)
+MAIN_MENU, SETTINGS, GAMES, SCHEDULE = range(4)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
@@ -54,12 +55,24 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Hi", reply_markup=menu_markup)
     #await query.answer()
     return MAIN_MENU
- 
+
+async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    userId = update.effective_user.id
+    query = update.callback_query
+    rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
+    menu = InlineKeyboardMarkup(rules)
+    await query.edit_message_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
+    return GAMES
+
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     data = query.data
     data_arr = data.split(',')
-    sqllite_helper.insert_to_schedule(data_arr[0], data_arr[1].split(':')[1], update.effective_user.id)
+    # ['Sat Apr 27 00:00:00 2024', 'rule:killteam']
+    sqllite_helper.insert_to_schedule(
+        datetime.strptime(data_arr[0],'%c'),
+        data_arr[1].split(':')[1],
+        update.effective_user.id)
     opponents = await players_helper.get_opponents(update.effective_user.id, data)
     await query.answer()
     await query.edit_message_text(f'You will faced with')
@@ -80,12 +93,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-    await query.answer()
+    # await query.answer()
     when_markup = await keyboard_constructor.this_week(query.data)
     #await sqllite_helper.insert_to_schedule(NULL, query.data, update.effective_user.id)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
-    return MAIN_MENU
+    return SCHEDULE
 
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.split(' ')[1]
@@ -125,7 +138,6 @@ conv_handler = ConversationHandler(
                   ],
     states={
         MAIN_MENU: [
-            CallbackQueryHandler(button, pattern='rule'),
             CallbackQueryHandler(set_name, pattern='^requestsetname$'),
             CallbackQueryHandler(setting, pattern='^callsettings$'),
             CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
@@ -134,6 +146,12 @@ conv_handler = ConversationHandler(
         SETTINGS: [
             CallbackQueryHandler(im_in)
         ],
+        GAMES: [            
+            CallbackQueryHandler(button, pattern='rule')
+        ],
+        SCHEDULE: [
+            CallbackQueryHandler(im_in)
+        ]    
     },
     fallbacks=[CommandHandler("start", hello)],
     )
