@@ -3,7 +3,7 @@ import sqlite3
 from xmlrpc.client import DateTime
 
 conn = sqlite3.connect(r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database", check_same_thread=False)
-conn.row_factory = lambda cursor, row: row[0]
+#conn.row_factory = lambda cursor, row: row[0]
 cursor = conn.cursor()
 
 async def add_warmaster(telegram_id):
@@ -15,7 +15,7 @@ def get_schedule_by_user(user_telegram: str):
 	return result.fetchall()
 
 def get_settings(telegram_user_id):
-	result = cursor.execute(f'SELECT nickname FROM warmasters WHERE telegram_id={telegram_user_id}')
+	result = cursor.execute(f'SELECT nickname, registered_as FROM warmasters WHERE telegram_id={telegram_user_id}')
 	return result.fetchone()
 
 def get_warmasters_opponents(against_alliance, rule, week_day):
@@ -36,6 +36,10 @@ def insert_to_schedule(date: DateTime, rules: str, user_telegram: str):
 	
 def is_warmaster_registered(user_telegram_id):
 	return True
+
+def register_warmaster(user_telegram_id, phone):
+	cursor.execute(f'UPDATE warmasters SET registered_as="{phone}" WHERE telegram_id={user_telegram_id}')
+	conn.commit()
 
 def set_nickname(user_telegram_id, nickname):
 	cursor.execute(f'UPDATE warmasters SET nickname="{nickname}" WHERE telegram_id={user_telegram_id}')

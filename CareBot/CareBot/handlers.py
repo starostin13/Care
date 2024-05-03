@@ -1,7 +1,7 @@
 from asyncio.windows_events import NULL
 from msilib import sequence
 from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
 import config
 import players_helper
@@ -22,6 +22,27 @@ MAIN_MENU, SETTINGS, GAMES = range(3)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
+   
+async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    userId = update.effective_user.id
+    rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
+    menu = InlineKeyboardMarkup(rules)
+    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
+
+async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    con_keyboard = KeyboardButton(text="send_contact", request_contact=True)
+    custom_keyboard = [[ con_keyboard ]]
+    reply_markup = ReplyKeyboardMarkup(custom_keyboard)
+
+    await update.message.reply_text(
+              text="Are you agree to share YOUR PHONE NUMBER? This is MANDATORY to participate in crusade.", 
+              reply_markup=reply_markup)
+    
+async def contact_callback(update, bot):
+    contact = update.message.contact
+    phone = contact.phone_number
+    userid = contact.user_id
+    sqllite_helper.register_warmaster(userid, phone)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
@@ -33,13 +54,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Hi", reply_markup=menu_markup)
     #await query.answer()
     return MAIN_MENU
-    
-async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    userId = update.effective_user.id
-    rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
-    menu = InlineKeyboardMarkup(rules)
-    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
-
+ 
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     data = query.data
@@ -80,6 +95,13 @@ async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
         await update.message.reply_text(f"Your {text}? Yes, I would love to hear about that!")
 
+async def registration_call(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query    
+    await query.answer()
+    await query.edit_message_text(
+        'Just type or click on it /regme'
+    )
+
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query    
     await query.answer()
@@ -106,7 +128,8 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(button, pattern='rule'),
             CallbackQueryHandler(set_name, pattern='^requestsetname$'),
             CallbackQueryHandler(setting, pattern='^callsettings$'),
-            CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$")
+            CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
+            CallbackQueryHandler(registration_call, pattern='^registration$')
         ],
         SETTINGS: [
             CallbackQueryHandler(im_in)
@@ -117,5 +140,7 @@ conv_handler = ConversationHandler(
 
 bot.add_handler(conv_handler)
 bot.add_handler(CommandHandler("setname", input_name))
+bot.add_handler(CommandHandler("regme", contact))
+bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))
 
 bot.run_polling()

@@ -6,22 +6,25 @@ CREATE TABLE sqlitestudio_temp_table AS SELECT *
 DROP TABLE warmasters;
 
 CREATE TABLE warmasters (
-    id          INTEGER PRIMARY KEY
-                        UNIQUE
-                        NOT NULL,
-    telegram_id TEXT    UNIQUE,
-    alliance    TEXT    DEFAULT (0),
-    nickname    TEXT
+    id            INTEGER PRIMARY KEY
+                          UNIQUE
+                          NOT NULL,
+    telegram_id   TEXT    UNIQUE,
+    alliance      TEXT    DEFAULT (0),
+    nickname      TEXT,
+    registered_as TEXT    UNIQUE
 );
 
 INSERT INTO warmasters (
                            id,
                            telegram_id,
-                           alliance
+                           alliance,
+                           nickname
                        )
                        SELECT id,
                               telegram_id,
-                              alliance
+                              alliance,
+                              nickname
                          FROM sqlitestudio_temp_table;
 
 DROP TABLE sqlitestudio_temp_table;
