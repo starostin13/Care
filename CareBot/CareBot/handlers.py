@@ -74,10 +74,10 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         data_arr[1].split(':')[1],
         update.effective_user.id)
     opponents = await players_helper.get_opponents(update.effective_user.id, data)
-    await query.answer()
+    #await query.answer()
     await query.edit_message_text(f'You will faced with')
     for opponent in opponents:
-        await update.effective_chat.send_contact(first_name="asdsad", username="@starostin13")
+        await update.effective_chat.send_contact(first_name=opponent[0], phone_number=opponent[1])
         #reply_text += opponent
         #players_helper.notify(opponent)
         #await query.edit_message_text("")
