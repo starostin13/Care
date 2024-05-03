@@ -18,8 +18,8 @@ def get_settings(telegram_user_id):
 	result = cursor.execute(f'SELECT nickname, registered_as FROM warmasters WHERE telegram_id={telegram_user_id}')
 	return result.fetchone()
 
-def get_warmasters_opponents(against_alliance, rule, week_day):
-	select = f'SELECT DISTINCT user_telegram FROM schedule JOIN warmasters ON warmasters.alliance<>"{against_alliance[0]}" WHERE rules="{rule}" AND date="{week_day}"'
+def get_warmasters_opponents(against_alliance, rule, date):
+	select = f'SELECT DISTINCT nickname, registered_as FROM warmasters JOIN schedule ON warmasters.alliance<>"{against_alliance[0]}" WHERE rules="{rule}" AND date="{str(datetime.datetime.strptime(date, "%c"))}"'
 	result = cursor.execute(select)
 	return result.fetchall()
 
