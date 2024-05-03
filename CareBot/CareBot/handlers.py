@@ -84,7 +84,7 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query    
     await query.answer()
     await query.edit_message_text(
-        'Just type "/ setname MyName"'
+        'Just type "/ setname MyName. Without spaces."'
     )
     return TYPING_CHOICE
 
