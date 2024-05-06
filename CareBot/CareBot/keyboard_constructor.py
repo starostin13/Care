@@ -21,10 +21,12 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
 
 async def get_main_menu(userId):
     items = [
-        [InlineKeyboardButton("Settings", callback_data="callsettings")]
+        [InlineKeyboardButton("Settings", callback_data="callsettings")],
+        [InlineKeyboardButton("Missions", callback_data="callmissions")]
     ]
     if sqllite_helper.is_warmaster_registered(userId):
         items.append([InlineKeyboardButton("Games", callback_data="callgame")])
+    
     return items
 
 async def setting(userId):
