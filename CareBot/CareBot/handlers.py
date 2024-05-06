@@ -19,7 +19,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-MAIN_MENU, SETTINGS, GAMES, SCHEDULE = range(4)
+MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS = range(5)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
@@ -130,6 +130,9 @@ async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     markup = InlineKeyboardMarkup(menu)
     await query.edit_message_text("Your settings:", reply_markup=markup)
     return MAIN_MENU
+
+async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    return MISSIONS
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
