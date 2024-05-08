@@ -42,6 +42,7 @@ async def setting(userId):
 async def this_week(rule):
     today = dt.today()
     week = today.isocalendar().week
+    day = today.isocalendar().weekday
     d = f"{today.year}-W{week}"
     menu_values = []
     for i in range(0, 7):
