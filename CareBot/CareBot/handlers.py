@@ -132,6 +132,8 @@ async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return MAIN_MENU
 
 async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    menu = await keyboard_constructor.missions_list(update.effective_user.id)
+    markup = InlineKeyboardMarkup(menu)
     return MISSIONS
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()

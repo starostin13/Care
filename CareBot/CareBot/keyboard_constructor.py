@@ -40,6 +40,9 @@ async def setting(userId):
     
     items.append([InlineKeyboardButton("Back", callback_data="start")])
     return items
+
+async def missions_list(user_id):
+    items = [[]]
     
 async def this_week(rule):
     today = dt.today()
