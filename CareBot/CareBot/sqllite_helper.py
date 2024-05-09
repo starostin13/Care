@@ -10,8 +10,11 @@ async def add_warmaster(telegram_id):
 	cursor.execute(f'INSERT OR IGNORE INTO warmasters(telegram_id) VALUES({telegram_id})')
 	conn.commit()
 	
-def get_schedule_by_user(user_telegram: str):
-	result = cursor.execute('SELECT * FROM schedule WHERE user_telegram={}'.format(user_telegram))
+def get_schedule_by_user(user_telegram: str, date=None):
+	select = 'SELECT * FROM schedule WHERE user_telegram={}'.format(user_telegram)
+	if date:
+		select += f' AND date="{date}"'
+	result = cursor.execute(select)
 	return result.fetchall()
 
 def get_settings(telegram_user_id):

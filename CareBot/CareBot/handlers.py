@@ -1,7 +1,7 @@
 from asyncio.windows_events import NULL
 from datetime import datetime
 from msilib import sequence
-from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
 import config
@@ -132,8 +132,10 @@ async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return MAIN_MENU
 
 async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    menu = await keyboard_constructor.missions_list(update.effective_user.id)
+    menu = await keyboard_constructor.today_schedule(update.effective_user.id)
     markup = InlineKeyboardMarkup(menu)
+    query = update.callback_query
+    await query.edit_message_text("Your appointments:", reply_markup=markup)
     return MISSIONS
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
@@ -146,7 +148,8 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(set_name, pattern='^requestsetname$'),
             CallbackQueryHandler(setting, pattern='^callsettings$'),
             CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
-            CallbackQueryHandler(registration_call, pattern='^registration$')
+            CallbackQueryHandler(registration_call, pattern='^registration$'),
+            CallbackQueryHandler(show_missions, pattern='^callmissions$')
         ],
         SETTINGS: [
             CallbackQueryHandler(im_in)
