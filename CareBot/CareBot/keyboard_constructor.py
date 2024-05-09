@@ -67,3 +67,10 @@ async def this_week(rule):
     ]
     
     return days
+
+async def today_schedule(user_id):
+    today = dt.today()
+    appointments = sqllite_helper.get_schedule_by_user(user_id, today.strftime("%c"))
+    buttons = map(lambda ap: InlineKeyboardButton(ap),appointments)
+    
+    return [[buttons]]
