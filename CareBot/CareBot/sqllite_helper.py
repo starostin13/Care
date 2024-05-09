@@ -35,7 +35,7 @@ def insert_to_schedule(date: DateTime, rules: str, user_telegram: str):
 	result = cursor.execute(f'DELETE FROM schedule WHERE date_week<>{str(weekNumber)}')
 	result.fetchall()
 	
-	cursor.execute('INSERT INTO schedule (date, rules, user_telegram, date_week) VALUES (?, ?, ?, ?)', (str(date), rules, user_telegram, weekNumber))
+	cursor.execute('INSERT INTO schedule (date, rules, user_telegram, date_week) VALUES (?, ?, ?, ?)', (str(date.date()), rules, user_telegram, weekNumber))
 	conn.commit()
 	
 def is_warmaster_registered(user_telegram_id):
