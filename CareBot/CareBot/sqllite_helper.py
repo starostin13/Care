@@ -18,7 +18,7 @@ def get_schedule_by_user(user_telegram: str, date=None):
 	return result.fetchall()
 
 def get_schedule_with_warmasters(user_telegram: str, date=None):
-	select = f'SELECT * FROM schedule WHERE user_telegram={user_telegram}AND date="{date}"'
+	select = f'SELECT schedule.id, schedule.rules, warmasters.nickname FROM schedule JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id AND schedule.user_telegram={user_telegram} AND schedule.date="{date}"'
 	result = cursor.execute(select)
 	return result.fetchall()
 
