@@ -17,6 +17,11 @@ def get_schedule_by_user(user_telegram: str, date=None):
 	result = cursor.execute(select)
 	return result.fetchall()
 
+def get_schedule_with_warmasters(user_telegram: str, date=None):
+	select = f'SELECT * FROM schedule WHERE user_telegram={user_telegram}AND date="{date}"'
+	result = cursor.execute(select)
+	return result.fetchall()
+
 def get_settings(telegram_user_id):
 	result = cursor.execute(f'SELECT nickname, registered_as FROM warmasters WHERE telegram_id={telegram_user_id}')
 	return result.fetchone()
