@@ -9,6 +9,7 @@ import players_helper
 import keyboard_constructor
 import logging
 import sqllite_helper
+import mission_helper
 
 # Enable logging
 logging.basicConfig(
@@ -48,9 +49,11 @@ async def contact_callback(update, bot):
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     mission = await sqllite_helper.get_mission()
     query = update.callback_query
-    if mission:
-        text = '\n'.join(map(lambda x: str(x or ''), (mission)))
-        await query.edit_message_text(text)
+    if not mission:
+        mission = mission_helper.generate_new_one()
+    
+    text = '\n'.join(map(lambda x: str(x or ''), (mission)))
+    await query.edit_message_text(text)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
