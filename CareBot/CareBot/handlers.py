@@ -46,9 +46,11 @@ async def contact_callback(update, bot):
     sqllite_helper.register_warmaster(userid, phone)
     
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    mission = sqllite_helper.get_mission()
-    text = mission
-    await
+    mission = await sqllite_helper.get_mission()
+    query = update.callback_query
+    if mission:
+        text = '\n'.join(map(lambda x: str(x or ''), (mission)))
+        await query.edit_message_text(text)
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
