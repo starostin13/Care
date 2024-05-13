@@ -44,6 +44,11 @@ async def contact_callback(update, bot):
     phone = contact.phone_number
     userid = contact.user_id
     sqllite_helper.register_warmaster(userid, phone)
+    
+async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    mission = sqllite_helper.get_mission()
+    text = mission
+    await
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
@@ -159,7 +164,10 @@ conv_handler = ConversationHandler(
         ],
         SCHEDULE: [
             CallbackQueryHandler(im_in)
-        ]    
+        ],
+        MISSIONS: [
+            CallbackQueryHandler(get_the_mission)    
+        ]
     },
     fallbacks=[CommandHandler("start", hello)],
     )
