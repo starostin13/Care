@@ -31,6 +31,7 @@
     <Compile Include="CareBot\config.py" />
     <Compile Include="CareBot\handlers.py" />
     <Compile Include="CareBot\keyboard_constructor.py" />
+    <Compile Include="CareBot\mission_helper.py" />
     <Compile Include="CareBot\players_helper.py" />
     <Compile Include="CareBot\sqllite_helper.py" />
     <Compile Include="runserver.py" />

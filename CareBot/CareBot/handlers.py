@@ -1,7 +1,10 @@
+﻿#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# vim:fileencoding=utf-8
 from asyncio.windows_events import NULL
 from datetime import datetime
 from msilib import sequence
-from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
 import config
@@ -9,6 +12,7 @@ import players_helper
 import keyboard_constructor
 import logging
 import sqllite_helper
+import mission_helper
 
 # Enable logging
 logging.basicConfig(
@@ -19,7 +23,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-MAIN_MENU, SETTINGS, GAMES, SCHEDULE = range(4)
+MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS = range(5)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
@@ -44,6 +48,38 @@ async def contact_callback(update, bot):
     phone = contact.phone_number
     userid = contact.user_id
     sqllite_helper.register_warmaster(userid, phone)
+    
+async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Получаем миссию из базы данных
+    mission = await sqllite_helper.get_mission()
+    query = update.callback_query
+    data = query.data  # Получаем данные из нажатой кнопки
+    
+    # Предположим, что event_id передается в data
+    
+    if not mission:
+        # Если миссия не найдена, генерируем новую
+        mission = mission_helper.generate_new_one()
+
+    # Преобразуем миссию в текст
+    text = '\n'.join(map(lambda x: str(x or ''), mission))
+
+    # Отправляем текст миссии текущему пользователю
+    await query.edit_message_text(text)
+
+    # Получаем список всех участников события
+    participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
+
+    # Рассылаем сообщение с миссией всем участникам
+    for participant_id in participants:
+        if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
+            try:
+                await context.bot.send_message(chat_id=participant_id, text=f"Новая миссия:\n{text}")
+            except Exception as e:
+                logger.error(f"Ошибка при отправке сообщения пользователю {participant_id}: {e}")
+
+    return MISSIONS
+
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
@@ -77,11 +113,9 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     #await query.answer()
     await query.edit_message_text(f'You will faced with')
     for opponent in opponents:
-        await update.effective_chat.send_contact(first_name=opponent[0], phone_number=opponent[1])
-        #reply_text += opponent
-        #players_helper.notify(opponent)
-        #await query.edit_message_text("")
-        #await query.edit_message_text(opponent[0])
+        if opponent[1] is not None:
+            await update.effective_chat.send_contact(first_name=str(opponent[0]), phone_number=opponent[1])
+        #await context.bot.send_message(job.chat_id, text=f"Beep! {job.data} seconds are over!")
     
 async def end_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'You faced')
@@ -131,6 +165,13 @@ async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.edit_message_text("Your settings:", reply_markup=markup)
     return MAIN_MENU
 
+async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    menu = await keyboard_constructor.today_schedule(update.effective_user.id)
+    markup = InlineKeyboardMarkup(menu)
+    query = update.callback_query
+    await query.edit_message_text("Your appointments:", reply_markup=markup)
+    return MISSIONS
+
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
 conv_handler = ConversationHandler(
@@ -141,7 +182,8 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(set_name, pattern='^requestsetname$'),
             CallbackQueryHandler(setting, pattern='^callsettings$'),
             CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
-            CallbackQueryHandler(registration_call, pattern='^registration$')
+            CallbackQueryHandler(registration_call, pattern='^registration$'),
+            CallbackQueryHandler(show_missions, pattern='^callmissions$')
         ],
         SETTINGS: [
             CallbackQueryHandler(im_in)
@@ -151,7 +193,10 @@ conv_handler = ConversationHandler(
         ],
         SCHEDULE: [
             CallbackQueryHandler(im_in)
-        ]    
+        ],
+        MISSIONS: [
+            CallbackQueryHandler(get_the_mission)    
+        ]
     },
     fallbacks=[CommandHandler("start", hello)],
     )

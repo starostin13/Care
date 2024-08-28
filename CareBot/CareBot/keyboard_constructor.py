@@ -21,10 +21,12 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
 
 async def get_main_menu(userId):
     items = [
-        [InlineKeyboardButton("Settings", callback_data="callsettings")]
+        [InlineKeyboardButton("Settings", callback_data="callsettings")],
+        [InlineKeyboardButton("Missions", callback_data="callmissions")]
     ]
     if sqllite_helper.is_warmaster_registered(userId):
         items.append([InlineKeyboardButton("Games", callback_data="callgame")])
+    
     return items
 
 async def setting(userId):
@@ -38,6 +40,9 @@ async def setting(userId):
     
     items.append([InlineKeyboardButton("Back", callback_data="start")])
     return items
+
+async def missions_list(user_id):
+    items = [[]]
     
 async def this_week(rule):
     today = dt.today()
@@ -62,3 +67,10 @@ async def this_week(rule):
     ]
     
     return days
+
+async def today_schedule(user_id):
+    today = dt.today()
+    appointments = sqllite_helper.get_schedule_with_warmasters(user_id, str(today.date()))
+    buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}'),appointments)]
+    
+    return [list(buttons)]
