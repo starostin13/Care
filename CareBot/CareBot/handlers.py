@@ -134,6 +134,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
     return SCHEDULE
 
+# Handler to process the reply to the message from show_missions
+async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Retrieve the original message's text and user's reply
+    original_message = update.message.reply_to_message.text
+    user_reply = update.message.text
+
+    # Example: You can log the interaction or perform some action based on the reply
+    logger.info(f"User {update.effective_user.id} replied to '{original_message}' with '{user_reply}'")
+
+    # Respond to the user's reply
+    await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
+
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.split(' ')[1]
     if text:
@@ -201,6 +213,9 @@ conv_handler = ConversationHandler(
     fallbacks=[CommandHandler("start", hello)],
     )
 
+# Handler for catching replies to the bot's messages, specifically replies to get_the_mission
+bot.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply))
+bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
 bot.add_handler(conv_handler)
 bot.add_handler(CommandHandler("setname", input_name))
 bot.add_handler(CommandHandler("regme", contact))
