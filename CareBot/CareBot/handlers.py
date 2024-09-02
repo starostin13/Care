@@ -65,7 +65,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = '\n'.join(map(lambda x: str(x or ''), mission))
 
     # Отправляем текст миссии текущему пользователю
-    await query.edit_message_text(text)
+    await query.edit_message_text(f"{text}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
 
     # Получаем список всех участников события
     participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
@@ -215,7 +215,6 @@ conv_handler = ConversationHandler(
 
 # Handler for catching replies to the bot's messages, specifically replies to get_the_mission
 bot.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply))
-bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
 bot.add_handler(conv_handler)
 bot.add_handler(CommandHandler("setname", input_name))
 bot.add_handler(CommandHandler("regme", contact))
