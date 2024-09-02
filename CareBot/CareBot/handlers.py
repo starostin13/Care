@@ -206,6 +206,7 @@ conv_handler = ConversationHandler(
     )
 
 bot.add_handler(conv_handler)
+bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
 bot.add_handler(CommandHandler("setname", input_name))
 bot.add_handler(CommandHandler("regme", contact))
 bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))
