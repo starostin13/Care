@@ -6,6 +6,10 @@ conn = sqlite3.connect(r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot
 #conn.row_factory = lambda cursor, row: row[0]
 cursor = conn.cursor()
 
+async def add_battle_result(mission_id, counts1, counts2):
+	cursor.execute(f"INSERT INTO battles(mission_id,fstplayer, sndplayer) VALUES({mission_id}, {counts1}, {counts2})")
+	conn.commit()
+
 async def add_warmaster(telegram_id):
 	cursor.execute(f'INSERT OR IGNORE INTO warmasters(telegram_id) VALUES({telegram_id})')
 	conn.commit()
