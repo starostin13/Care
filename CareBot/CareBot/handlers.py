@@ -56,7 +56,10 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data  # Получаем данные из нажатой кнопки
     
     # Преобразуем миссию в текст
-    text = '\n'.join(map(lambda i_x: f'#{i_x[4]}' if i_x[0] == 1 else str(i_x[1] or ''), enumerate(mission)))
+    text = '\n'.join(
+        f'#{mission[i]}' if i == 4 else str(item or '')
+        for i, item in enumerate(mission)
+    )
 
     # Отправляем текст миссии текущему пользователю
     await query.edit_message_text(f"{text}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
@@ -137,8 +140,12 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
     # Example: You can log the interaction or perform some action based on the reply
     logger.info(f"User {update.effective_user.id} replied to '{original_message}' with '{user_reply}'")
 
-    battle_id = original_message.split('#')[1]
-    mission_helper.write_battle_result(battle_id, user_reply)
+    # Разделяем текст на строки
+    lines = original_message.splitlines()
+
+    # Ищем строку, начинающуюся с '#'
+    battle_id = [line for line in lines if line.startswith('#')]
+    await mission_helper.write_battle_result(battle_id[0], user_reply)
 
     # Respond to the user's reply
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
