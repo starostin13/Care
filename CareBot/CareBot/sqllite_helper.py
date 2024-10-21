@@ -21,7 +21,7 @@ async def get_event_participants(eventId):
 	return result.fetchall()
 
 async def get_mission():
-	select = f'SELECT * FROM mission_stack'
+	select = f'SELECT * FROM mission_stack WHERE locked==0'
 	result = cursor.execute(select)
 	return result.fetchone()
 
@@ -54,6 +54,9 @@ def insert_to_schedule(date: DateTime, rules: str, user_telegram: str):
 	weekNumber = date.isocalendar()[1]
 	result = cursor.execute(f'DELETE FROM schedule WHERE date_week<>{str(weekNumber)}')
 	result.fetchall()
+
+	already_there = cursor.execute(f'SELECT * FROM schedule WHERE date={str(date.date())} AND rules={rules} AND user_telegram={user_telegram} AND date_week={weekNumber}')
+	already_there.fetchone()
 	
 	cursor.execute('INSERT INTO schedule (date, rules, user_telegram, date_week) VALUES (?, ?, ?, ?)', (str(date.date()), rules, user_telegram, weekNumber))
 	conn.commit()
