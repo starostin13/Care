@@ -1,9 +1,10 @@
 import sqllite_helper
+import random
 
 def generate_new_one():
-    return ('Onlu War', 'Onlu War', 2, 'Onlu War')
+    return ('Side by Side', 'Onlu War', 2, 'Onlu War')
 
-async def get_mission():
+async def get_mission(one_warmaster, another_warmaster):
     mission = await sqllite_helper.get_mission()
     
     if not mission:
@@ -11,6 +12,18 @@ async def get_mission():
         mission = generate_new_one()
     else:    
         sqllite_helper.lock_mission(mission[4])
+
+    # сначала случайным образом выбрать кто на кого нападат
+    if random.choice([True, False]):
+        attacker = one_warmaster
+        defender = another_warmaster
+    else:
+        attacker = another_warmaster
+        defender = one_warmaster
+
+    mission[4] = f'{mission[4]} \n Атакер: {attacker} \n Дефендр: {defender}'
+    # попытаться найти возззможную территорию на линии соприкосновения
+    # если нет линии соприкосновния то случайная трритория защищающгоя
     
     return mission
 
