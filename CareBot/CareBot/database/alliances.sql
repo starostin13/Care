@@ -1,5 +1,7 @@
 CREATE TABLE alliances (
-    name TEXT PRIMARY KEY
-            NOT NULL
-            UNIQUE
+    name TEXT    NOT NULL
+                 UNIQUE,
+    id   INTEGER UNIQUE
+                 NOT NULL
+                 PRIMARY KEY
 );

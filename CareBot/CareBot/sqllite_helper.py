@@ -3,7 +3,6 @@ import sqlite3
 from xmlrpc.client import DateTime
 
 conn = sqlite3.connect(r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database", check_same_thread=False)
-#conn.row_factory = lambda cursor, row: row[0]
 cursor = conn.cursor()
 
 async def add_battle_result(mission_id, counts1, counts2):
@@ -19,6 +18,62 @@ async def get_event_participants(eventId):
 	result = cursor.execute(select)
 
 	return result.fetchall()
+
+def get_hexs_on_frontline(attacker, defender):
+    # Получаем альянсы атакующего и защищающегося
+    alliance_query = """
+    SELECT 
+        wm1.alliance AS attacker_alliance,
+        wm2.alliance AS defender_alliance
+    FROM 
+        warmasters wm1, warmasters wm2
+    WHERE 
+        wm1.id = ? AND wm2.id = ?
+    """
+    
+    cursor.execute(alliance_query, (attacker, defender))
+    result = cursor.fetchone()
+
+    if not result:
+        return None
+    
+    attacker_alliance, defender_alliance = result
+
+    # Получаем все гексы защитника
+    defender_hexes_query = """
+    SELECT id FROM map
+    WHERE patron = ?
+    """
+    
+    cursor.execute(defender_hexes_query, (defender_alliance,))
+    defender_hexes = [row[0] for row in cursor.fetchall()]
+
+    # Получаем все гексы атакующего
+    attacker_hexes_query = """
+    SELECT id FROM map
+    WHERE patron = ?
+    """
+    
+    cursor.execute(attacker_hexes_query, (attacker_alliance,))
+    attacker_hexes = [row[0] for row in cursor.fetchall()]
+
+    # Получаем гексы защитника, которые граничат с гексами атакующего
+    frontline_hexes_query = """
+    SELECT DISTINCT m.id 
+    FROM map m
+    JOIN edges e ON (e.left_hexagon = m.id OR e.right_hexagon = m.id)
+    WHERE m.patron = ? AND (
+        (e.left_hexagon IN ({attacker_hexes}) AND e.right_hexagon = m.id) OR
+        (e.right_hexagon IN ({attacker_hexes}) AND e.left_hexagon = m.id)
+    )
+    """.format(attacker_hexes=", ".join("?" * len(attacker_hexes)))
+
+    # Выполняем запрос с использованием ID гексов атакующего как параметры
+    cursor.execute(frontline_hexes_query, [defender_alliance] + attacker_hexes)
+    frontline_hexes = [row[0] for row in cursor.fetchall()]
+
+    # Возвращаем результат
+    return frontline_hexes
 
 async def get_mission():
 	select = f'SELECT * FROM mission_stack WHERE locked==0'

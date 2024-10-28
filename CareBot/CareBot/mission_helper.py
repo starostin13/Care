@@ -1,4 +1,4 @@
-import sqllite_helper
+п»їimport sqllite_helper
 import random
 
 def generate_new_one():
@@ -8,12 +8,12 @@ async def get_mission(one_warmaster, another_warmaster):
     mission = await sqllite_helper.get_mission()
     
     if not mission:
-        # Если миссия не найдена, генерируем новую
+        # Р•СЃР»Рё РјРёСЃСЃРёСЏ РЅРµ РЅР°Р№РґРµРЅР°, РіРµРЅРµСЂРёСЂСѓРµРј РЅРѕРІСѓСЋ
         mission = generate_new_one()
     else:    
         sqllite_helper.lock_mission(mission[4])
 
-    # сначала случайным образом выбрать кто на кого нападат
+    # СЃРЅР°С‡Р°Р»Р° СЃР»СѓС‡Р°Р№РЅС‹Рј РѕР±СЂР°Р·РѕРј РІС‹Р±СЂР°С‚СЊ РєС‚Рѕ РЅР° РєРѕРіРѕ РЅР°РїР°РґР°С‚
     if random.choice([True, False]):
         attacker = one_warmaster
         defender = another_warmaster
@@ -21,10 +21,16 @@ async def get_mission(one_warmaster, another_warmaster):
         attacker = another_warmaster
         defender = one_warmaster
 
-    mission[4] = f'{mission[4]} \n Атакер: {attacker} \n Дефендр: {defender}'
-    # попытаться найти возззможную территорию на линии соприкосновения
-    # если нет линии соприкосновния то случайная трритория защищающгоя
-    
+    mission[4] = f'{mission[4]} \n РђС‚Р°РєРµСЂ: {attacker} \n Р”РµС„РµРЅРґСЂ: {defender}'
+    # РїРѕРїС‹С‚Р°С‚СЊСЃСЏ РЅР°Р№С‚Рё РІРѕР·Р·Р·РјРѕР¶РЅСѓСЋ С‚РµСЂСЂРёС‚РѕСЂРёСЋ РЅР° Р»РёРЅРёРё СЃРѕРїСЂРёРєРѕСЃРЅРѕРІРµРЅРёСЏ
+    hexagons = sqllite_helper.get_hexs_on_frontline(attacker, defender)
+        
+    # РµСЃР»Рё РЅРµС‚ Р»РёРЅРёРё СЃРѕРїСЂРёРєРѕСЃРЅРѕРІРЅРёСЏ С‚Рѕ СЃР»СѓС‡Р°Р№РЅР°СЏ С‚СЂСЂРёС‚РѕСЂРёСЏ Р·Р°С‰РёС‰Р°СЋС‰РіРѕСЏ
+    if not hexagons:
+        hexagons = sqllite_helper.get_hex_behind_frontline(attacker, defender)
+
+    sqllite_helper.mission_assert_hex(random.choice(hexagons))
+
     return mission
 
 async def write_battle_result(battle_id, user_reply):
