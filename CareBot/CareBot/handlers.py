@@ -50,10 +50,10 @@ async def contact_callback(update, bot):
     sqllite_helper.register_warmaster(userid, phone)
     
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Получаем миссию из базы данных
-    mission = await mission_helper.get_mission()
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
+    # Получаем миссию из базы данных
+    mission = await mission_helper.get_mission(data, query.from_user.id)
     
     # Преобразуем миссию в текст
     text = '\n'.join(

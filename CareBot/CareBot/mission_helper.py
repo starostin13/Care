@@ -1,10 +1,14 @@
 ﻿import sqllite_helper
 import random
+import re
 
 def generate_new_one():
     return ('Side by Side', 'Onlu War', 2, 'Onlu War')
 
-async def get_mission(one_warmaster, another_warmaster):
+async def get_mission(schedule_string, telegramid):
+    one_warmaster = sqllite_helper.get_warmasterid_ofshedule(int(re.search(r"sch_(\d+)", schedule_string).group(1)))
+    another_warmaster = sqllite_helper.get_warmaster_bytelegramid(telegramid)
+
     mission = await sqllite_helper.get_mission()
     
     if not mission:
