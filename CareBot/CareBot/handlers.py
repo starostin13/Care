@@ -57,7 +57,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Преобразуем миссию в текст
     text = '\n'.join(
-        f'#{mission[i]}' if i == 4 else str(item or '')
+        f'#{mission[i]}' if i == 3 else str(item or '')
         for i, item in enumerate(mission)
     )
 

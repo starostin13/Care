@@ -3,7 +3,7 @@ import random
 import re
 
 def generate_new_one():
-    return ('Side by Side', 'Onlu War', 2, 'Onlu War')
+    return (None, 'Side by Side', 'Onlu War', 2, 'Onlu War')
 
 async def get_mission(schedule_string, telegramid):
     one_warmaster = sqllite_helper.get_warmasterid_bytelegramid(
@@ -36,7 +36,8 @@ async def get_mission(schedule_string, telegramid):
     if not hexagons:
         hexagons = sqllite_helper.get_hex_behind_frontline(*attacker, *defender)
 
-    sqllite_helper.mission_assert_hex(random.choice(hexagons))
+    if mission[0]:
+        sqllite_helper.mission_assert_hex(mission[0], random.choice(hexagons))
 
     return mission_aslist
 

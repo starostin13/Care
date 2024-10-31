@@ -132,6 +132,10 @@ def lock_mission(mission_id):
 	cursor.execute(f'UPDATE mission_stack SET locked=1 WHERE id={mission_id}')
 	conn.commit()
 
+def mission_assert_hex(mission_id, hex_id):
+	cursor.execute(f'UPDATE mission_stack SET cell={hex_id} WHERE id={mission_id}')
+	conn.commit()
+
 def register_warmaster(user_telegram_id, phone):
 	cursor.execute(f'UPDATE warmasters SET registered_as="{phone}" WHERE telegram_id={user_telegram_id}')
 	conn.commit()
