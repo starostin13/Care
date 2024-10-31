@@ -105,6 +105,10 @@ def get_warmasterid_ofshedule(scheduleid):
     result = cursor.execute(f'SELECT user_telegram FROM schedule WHERE id={scheduleid}')
     return result.fetchone()
 
+def get_warmastername_by_id(warmasterid):
+	result = cursor.execute(f'SELECT nickname FROM warmasters WHERE id={warmasterid}')
+	return result.fetchone()
+
 def get_warmasters_opponents(against_alliance, rule, date):
 	select = f'SELECT DISTINCT nickname, registered_as FROM warmasters JOIN schedule ON warmasters.alliance<>"{against_alliance[0]}" WHERE rules="{rule}" AND date="{str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d"))}"'
 	result = cursor.execute(select)

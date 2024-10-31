@@ -28,7 +28,7 @@ async def get_mission(schedule_string, telegramid):
         defender = one_warmaster
 
     mission_aslist = list(mission)
-    mission_aslist[3] = f'{mission_aslist[3]} \n Атакер: {attacker} \n Дефендр: {defender}'
+    mission_aslist[3] = f'{mission_aslist[3]} \n Атакер: {sqllite_helper.get_warmastername_by_id(*attacker)[0]} \n Дефендр: {sqllite_helper.get_warmastername_by_id(*defender)[0]}'
     # попытаться найти возззможную территорию на линии соприкосновения
     hexagons = sqllite_helper.get_hexs_on_frontline(*attacker, *defender)
         
