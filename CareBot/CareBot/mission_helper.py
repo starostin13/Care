@@ -6,8 +6,10 @@ def generate_new_one():
     return ('Side by Side', 'Onlu War', 2, 'Onlu War')
 
 async def get_mission(schedule_string, telegramid):
-    one_warmaster = sqllite_helper.get_warmasterid_ofshedule(int(re.search(r"sch_(\d+)", schedule_string).group(1)))
-    another_warmaster = sqllite_helper.get_warmaster_bytelegramid(telegramid)
+    one_warmaster = sqllite_helper.get_warmasterid_bytelegramid(
+        int(*sqllite_helper.get_warmasterid_ofshedule(int(re.search(r"sch_(\d+)", schedule_string).group(1))))
+    )
+    another_warmaster = sqllite_helper.get_warmasterid_bytelegramid(telegramid)
 
     mission = await sqllite_helper.get_mission()
     
@@ -25,17 +27,18 @@ async def get_mission(schedule_string, telegramid):
         attacker = another_warmaster
         defender = one_warmaster
 
-    mission[4] = f'{mission[4]} \n Атакер: {attacker} \n Дефендр: {defender}'
+    mission_aslist = list(mission)
+    mission_aslist[3] = f'{mission_aslist[3]} \n Атакер: {attacker} \n Дефендр: {defender}'
     # попытаться найти возззможную территорию на линии соприкосновения
-    hexagons = sqllite_helper.get_hexs_on_frontline(attacker, defender)
+    hexagons = sqllite_helper.get_hexs_on_frontline(*attacker, *defender)
         
     # если нет линии соприкосновния то случайная трритория защищающгоя
     if not hexagons:
-        hexagons = sqllite_helper.get_hex_behind_frontline(attacker, defender)
+        hexagons = sqllite_helper.get_hex_behind_frontline(*attacker, *defender)
 
     sqllite_helper.mission_assert_hex(random.choice(hexagons))
 
-    return mission
+    return mission_aslist
 
 async def write_battle_result(battle_id, user_reply):
     counts = user_reply.split(' ')

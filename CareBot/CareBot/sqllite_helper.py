@@ -20,60 +20,61 @@ async def get_event_participants(eventId):
 	return result.fetchall()
 
 def get_hexs_on_frontline(attacker, defender):
-    # Получаем альянсы атакующего и защищающегося
-    alliance_query = """
-    SELECT 
-        wm1.alliance AS attacker_alliance,
-        wm2.alliance AS defender_alliance
-    FROM 
-        warmasters wm1, warmasters wm2
-    WHERE 
-        wm1.id = ? AND wm2.id = ?
-    """
+	# Получаем альянсы атакующего и защищающегося
+	alliance_query = """
+	SELECT 
+		wm1.alliance AS attacker_alliance,
+		wm2.alliance AS defender_alliance
+	FROM 
+		warmasters wm1, warmasters wm2
+	WHERE 
+		wm1.id = ? AND wm2.id = ?
+	"""
     
-    cursor.execute(alliance_query, (attacker, defender))
-    result = cursor.fetchone()
+	cursor.execute(alliance_query, (attacker, defender))
+	result = cursor.fetchone()
 
-    if not result:
-        return None
+	if not result:
+		return None
     
-    attacker_alliance, defender_alliance = result
+	attacker_alliance, defender_alliance = result
 
-    # Получаем все гексы защитника
-    defender_hexes_query = """
-    SELECT id FROM map
-    WHERE patron = ?
-    """
+	# Получаем все гексы защитника
+	defender_hexes_query = """
+	SELECT id FROM map
+	WHERE patron = ?
+	"""
     
-    cursor.execute(defender_hexes_query, (defender_alliance,))
-    defender_hexes = [row[0] for row in cursor.fetchall()]
+	cursor.execute(defender_hexes_query, (defender_alliance,))
+	defender_hexes = [row[0] for row in cursor.fetchall()]
 
-    # Получаем все гексы атакующего
-    attacker_hexes_query = """
-    SELECT id FROM map
-    WHERE patron = ?
-    """
+	# Получаем все гексы атакующего
+	attacker_hexes_query = """
+	SELECT id FROM map
+	WHERE patron = ?
+	"""
     
-    cursor.execute(attacker_hexes_query, (attacker_alliance,))
-    attacker_hexes = [row[0] for row in cursor.fetchall()]
+	cursor.execute(attacker_hexes_query, (attacker_alliance,))
+	attacker_hexes = [row[0] for row in cursor.fetchall()]
 
-    # Получаем гексы защитника, которые граничат с гексами атакующего
-    frontline_hexes_query = """
-    SELECT DISTINCT m.id 
-    FROM map m
-    JOIN edges e ON (e.left_hexagon = m.id OR e.right_hexagon = m.id)
-    WHERE m.patron = ? AND (
-        (e.left_hexagon IN ({attacker_hexes}) AND e.right_hexagon = m.id) OR
-        (e.right_hexagon IN ({attacker_hexes}) AND e.left_hexagon = m.id)
-    )
-    """.format(attacker_hexes=", ".join("?" * len(attacker_hexes)))
+	# Получаем гексы защитника, которые граничат с гексами атакующего
+	attacker_hexes_placeholder = ", ".join("?" for _ in attacker_hexes)
+	frontline_hexes_query = f"""
+	SELECT DISTINCT m.id 
+	FROM map m
+	JOIN edges e ON (e.left_hexagon = m.id OR e.right_hexagon = m.id)
+	WHERE m.patron = ? AND (
+		(e.left_hexagon IN ({attacker_hexes_placeholder}) AND e.right_hexagon = m.id) OR
+		(e.right_hexagon IN ({attacker_hexes_placeholder}) AND e.left_hexagon = m.id)
+	)
+	"""
 
-    # Выполняем запрос с использованием ID гексов атакующего как параметры
-    cursor.execute(frontline_hexes_query, [defender_alliance] + attacker_hexes)
-    frontline_hexes = [row[0] for row in cursor.fetchall()]
+	# Выполняем запрос с использованием ID гексов атакующего как параметры
+	cursor.execute(frontline_hexes_query, [defender_alliance] + attacker_hexes + attacker_hexes)
+	frontline_hexes = [row[0] for row in cursor.fetchall()]
 
-    # Возвращаем результат
-    return frontline_hexes
+	# Возвращаем результат
+	return frontline_hexes
 
 async def get_mission():
 	select = f'SELECT * FROM mission_stack WHERE locked==0'
@@ -95,6 +96,14 @@ def get_schedule_with_warmasters(user_telegram: str, date=None):
 def get_settings(telegram_user_id):
 	result = cursor.execute(f'SELECT nickname, registered_as FROM warmasters WHERE telegram_id={telegram_user_id}')
 	return result.fetchone()
+
+def get_warmasterid_bytelegramid(telegram_user_id):
+	result = cursor.execute(f'SELECT id FROM warmasters WHERE telegram_id={telegram_user_id}')
+	return result.fetchone()
+
+def get_warmasterid_ofshedule(scheduleid):
+    result = cursor.execute(f'SELECT user_telegram FROM schedule WHERE id={scheduleid}')
+    return result.fetchone()
 
 def get_warmasters_opponents(against_alliance, rule, date):
 	select = f'SELECT DISTINCT nickname, registered_as FROM warmasters JOIN schedule ON warmasters.alliance<>"{against_alliance[0]}" WHERE rules="{rule}" AND date="{str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d"))}"'
