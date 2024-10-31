@@ -1,4 +1,5 @@
 ﻿import datetime
+import select
 import sqlite3
 from xmlrpc.client import DateTime
 
@@ -80,6 +81,11 @@ async def get_mission():
 	select = f'SELECT * FROM mission_stack WHERE locked==0'
 	result = cursor.execute(select)
 	return result.fetchone()
+
+def get_rules_by_schedule(schedule_id):
+	select = f'SELECT rules FROM schedule WHERE id={schedule_id}'
+	result = cursor.execute(select)
+	return result.fetchall()
 
 def get_schedule_by_user(user_telegram: str, date=None):
 	select = 'SELECT * FROM schedule WHERE user_telegram={}'.format(user_telegram)
