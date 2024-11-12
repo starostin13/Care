@@ -19,9 +19,16 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
     ]
     return rules
 
-async def get_main_menu(userId):
+async def get_main_menu():
+    items = [        
+        [InlineKeyboardButton("Игры", callback_data="mm:allGames")],
+        [InlineKeyboardButton("Settings", callback_data="mm:settings")]
+    ]
+
+    return items
+
+async def get_crusaid_main_menu(userId):
     items = [
-        [InlineKeyboardButton("Settings", callback_data="callsettings")],
         [InlineKeyboardButton("Missions", callback_data="callmissions")]
     ]
     if sqllite_helper.is_warmaster_registered(userId):

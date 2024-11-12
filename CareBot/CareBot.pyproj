@@ -7,7 +7,7 @@
     <ProjectGuid>e0ab424a-ca73-4b7f-acb8-823c887afb19</ProjectGuid>
     <ProjectHome>.</ProjectHome>
     <ProjectTypeGuids>{789894c7-04a9-4a11-a6b5-3f4435165112};{1b580a1a-fdb3-4b32-83e1-6407eb2722e6};{349c5851-65df-11da-9384-00065b846f21};{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
-    <StartupFile>CareBot\handlers.py</StartupFile>
+    <StartupFile>CareBot\main.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -29,11 +29,20 @@
   <ItemGroup>
     <Compile Include="CareBot\example_config.py" />
     <Compile Include="CareBot\config.py" />
-    <Compile Include="CareBot\handlers.py" />
+    <Compile Include="CareBot\handlers\games.py" />
+    <Compile Include="CareBot\handlers\main_menu.py" />
+    <Compile Include="CareBot\handlers\missions.py" />
+    <Compile Include="CareBot\handlers\registration.py" />
+    <Compile Include="CareBot\handlers\schedule.py" />
+    <Compile Include="CareBot\handlers\settings.py" />
     <Compile Include="CareBot\keyboard_constructor.py" />
+    <Compile Include="CareBot\main.py" />
     <Compile Include="CareBot\mission_helper.py" />
     <Compile Include="CareBot\players_helper.py" />
+    <Compile Include="CareBot\services\user_service.py" />
     <Compile Include="CareBot\sqllite_helper.py" />
+    <Compile Include="CareBot\utils\database.py" />
+    <Compile Include="CareBot\utils\keyboard_utils.py" />
     <Compile Include="runserver.py" />
     <Compile Include="CareBot\__init__.py" />
     <Compile Include="CareBot\views.py" />
@@ -41,6 +50,9 @@
   <ItemGroup>
     <Folder Include="CareBot\" />
     <Folder Include="CareBot\database\" />
+    <Folder Include="CareBot\handlers\" />
+    <Folder Include="CareBot\services\" />
+    <Folder Include="CareBot\utils\" />
     <Folder Include="CareBot\static\" />
     <Folder Include="CareBot\static\content\" />
     <Folder Include="CareBot\static\fonts\" />

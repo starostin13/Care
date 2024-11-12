@@ -11,5 +11,8 @@ async def get_opponents(forUserId: int, callback_data):
     alliance = get_alliance_of_warmaster(forUserId)
     return get_warmasters_opponents(alliance, rule=rule, date=weekday)
 
+async def is_warmaster_registered(user_id):
+    return sqllite_helper.is_warmaster_registered(user_id)
+
 async def set_name(user_telegram_id, nickname):
     sqllite_helper.set_nickname(user_telegram_id, nickname)
