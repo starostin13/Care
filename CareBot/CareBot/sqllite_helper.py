@@ -5,6 +5,16 @@ from xmlrpc.client import DateTime
 conn = sqlite3.connect(r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database", check_same_thread=False)
 cursor = conn.cursor()
 
+def add_battle_participant(battle_id, participant):
+    cursor.execute('INSERT INTO battle_attenders(battle_id, attender_id) VALUES(?, ?)', (battle_id, participant))
+    conn.commit()
+
+def add_battle(mission_id):
+    cursor.execute('INSERT INTO battles(mission_id) VALUES(?)', (mission_id,))
+    conn.commit()
+    cursor.execute('SELECT last_insert_rowid()')
+    return cursor.fetchone()
+
 def set_cell_patron(cell_id, winner_alliance_id):
     cursor.execute('UPDATE map SET patron=? WHERE id=?', (winner_alliance_id, cell_id))
     conn.commit()

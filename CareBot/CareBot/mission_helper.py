@@ -18,3 +18,8 @@ async def write_battle_result(battle_id, user_reply):
     counts = user_reply.split(' ')
     bid = battle_id[1:]
     await sqllite_helper.add_battle_result(int(bid), counts[0], counts[1])
+
+async def start_battle(mission_id, participants):
+    battle_id = await sqllite_helper.add_battle(mission_id)
+    for participant in participants:
+        await sqllite_helper.add_battle_participant(battle_id, participant)
