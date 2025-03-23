@@ -7,6 +7,7 @@ from msilib import sequence
 from telegram import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
+from CareBot import map_helper
 import config
 import players_helper
 import keyboard_constructor
@@ -97,6 +98,7 @@ async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.edit_message_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
     return GAMES
 
+
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     data = query.data
@@ -146,6 +148,7 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
     # Ищем строку, начинающуюся с '#'
     battle_id = [line for line in lines if line.startswith('#')]
     await mission_helper.write_battle_result(battle_id[0], user_reply)
+    await map_helper.check_patronage(battle_id, user_reply, update.effective_user.id)
 
     # Respond to the user's reply
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")

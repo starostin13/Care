@@ -1,6 +1,16 @@
 import sqllite_helper
+import logging
 
-def check_patronage(battle_id, battle_result, user_telegram_id):
+# Enable logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+# set higher logging level for httpx to avoid all GET and POST requests being logged
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
+
+async def check_patronage(battle_id, battle_result, user_telegram_id):
     # Разделяем результат битвы на два числа
     scores = battle_result.split()
     user_score = int(scores[0])
@@ -8,15 +18,23 @@ def check_patronage(battle_id, battle_result, user_telegram_id):
 
     # Если ничья, то ничего не делаем
     if user_score == opponent_score:
+        logger("Draw in battle")
         return
 
-    # get cell id by battle id
-    cell_id = sqllite_helper.get_cell_id_by_battle_id(battle_id)
+    # Получаем cell id по battle id
+    cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
+    logger.info(f"Cell id: {cell_id}")
 
     # Определяем победителя
-    winner_telegram_id = user_telegram_id if user_score > opponent_score else sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
+    if user_score > opponent_score:
+        winner_telegram_id = user_telegram_id
+    else:
+        winner_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
+    logger.info(f"Winner: {winner_telegram_id}")
 
-    # todo: get alliance id of winner
-    winner_alliance_id = sqllite_helper.get_alliance_of_warmaster(winener_telegram_id)
-    # todo: update db - set up winner id as patron of cell
-    sqllite_helper.set_cell_patron(cell_id, winner_alliance_id)
+    # Получаем alliance id победителя
+    winner_alliance_id = await sqllite_helper.get_alliance_of_warmaster(winner_telegram_id)
+    logger.info(f"Winner alliance id: {winner_alliance_id}")
+
+    # Обновляем базу данных - устанавливаем победителя как патрона клетки
+    await sqllite_helper.set_cell_patron(cell_id, winner_alliance_id)
