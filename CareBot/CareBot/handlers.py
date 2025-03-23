@@ -52,13 +52,14 @@ async def contact_callback(update, bot):
     
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Получаем миссию из базы данных
-    mission = await mission_helper.get_mission()
+    mission = mission_helper.get_mission()
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
-    
+    index_of_mission_id = 4
+
     # Преобразуем миссию в текст
     text = '\n'.join(
-        f'#{mission[i]}' if i == 4 else str(item or '')
+        f'#{mission[i]}' if i == index_of_mission_id else str(item or '')
         for i, item in enumerate(mission)
     )
 
@@ -67,6 +68,8 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Получаем список всех участников события
     participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
+    
+    mission_helper.start_battle(mission[index_of_mission_id], participants)
 
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:
