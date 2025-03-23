@@ -6,6 +6,33 @@ conn = sqlite3.connect(r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot
 #conn.row_factory = lambda cursor, row: row[0]
 cursor = conn.cursor()
 
+async def set_cell_patron(cell_id, winner_alliance_id):
+	cursor.execute(f'UPDATE map SET patron={winner_alliance_id} WHERE id={cell_id}')
+	conn.commit()
+
+async def get_cell_id_by_battle_id(battle_id):
+	select_mission_id = f'SELECT mission_id FROM battles WHERE id={battle_id}'
+	result_mission_id = cursor.execute(select_mission_id)
+	mission_id = result_mission_id.fetchone()
+	select_mission_id = f'SELECT cell FROM mission_stack WHERE id={mission_id}'
+	result_mission_id = cursor.execute(select_mission_id)
+	return result_mission_id.fetchone()
+
+async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
+    # Получаем идентификатор текущего пользователя из таблицы warmasters
+    select_opponent_id = f'''
+        SELECT attender_id 
+        FROM battle_attenders 
+        WHERE battle_id = {battle_id} 
+        AND attender_id != (
+            SELECT id 
+            FROM warmasters 
+            WHERE telegram_id = {current_user_telegram_id}
+        )
+    '''
+    result = cursor.execute(select_opponent_id)
+    return result.fetchone()
+
 async def add_battle_result(mission_id, counts1, counts2):
 	cursor.execute(f"INSERT INTO battles(mission_id,fstplayer, sndplayer) VALUES({mission_id}, {counts1}, {counts2})")
 	conn.commit()
