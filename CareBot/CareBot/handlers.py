@@ -68,7 +68,8 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
 
     # Рассылаем сообщение с миссией всем участникам
-    for participant_id in participants:
+    for participant in participants:
+        participant_id = participant[0]
         if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
             try:
                 await context.bot.send_message(chat_id=participant_id, text=f"Новая миссия:\n{text}")
