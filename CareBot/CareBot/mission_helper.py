@@ -4,7 +4,7 @@ def generate_new_one():
     return ('Onlu War', 'Onlu War', 2, 'Onlu War')
 
 async def get_mission():
-    mission = await sqllite_helper.get_mission()
+    mission =await sqllite_helper.get_mission()
     
     if not mission:
         # ≈сли мисси€ не найдена, генерируем новую
@@ -16,8 +16,7 @@ async def get_mission():
 
 async def write_battle_result(battle_id, user_reply):
     counts = user_reply.split(' ')
-    bid = battle_id[1:]
-    await sqllite_helper.add_battle_result(int(bid), counts[0], counts[1])
+    await sqllite_helper.add_battle_result(int(battle_id), counts[0], counts[1])
 
 async def start_battle(mission_id, participants):
     battle_id = await sqllite_helper.add_battle(mission_id)
