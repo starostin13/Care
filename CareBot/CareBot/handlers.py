@@ -52,7 +52,7 @@ async def contact_callback(update, bot):
     
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Получаем миссию из базы данных
-    mission = mission_helper.get_mission()
+    mission = await mission_helper.get_mission()
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
     index_of_mission_id = 4
@@ -149,12 +149,16 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
     lines = original_message.splitlines()
 
     # Ищем строку, начинающуюся с '#'
-    battle_id = [line for line in lines if line.startswith('#')]
-    await mission_helper.write_battle_result(battle_id[0], user_reply)
-    await map_helper.check_patronage(battle_id, user_reply, update.effective_user.id)
+    battle_id_line = next((line for line in lines if line.startswith('#')), None)
+    if battle_id_line:
+        # Извлекаем значение после решётки и преобразуем его в число
+        battle_id = int(battle_id_line[1:])
+        await mission_helper.write_battle_result(battle_id, user_reply)
+        await map_helper.check_patronage(battle_id, user_reply, update.effective_user.id)
 
     # Respond to the user's reply
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
+
 
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.split(' ')[1]
