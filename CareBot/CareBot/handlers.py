@@ -14,6 +14,7 @@ import keyboard_constructor
 import logging
 import sqllite_helper
 import mission_helper
+import os
 
 # Enable logging
 logging.basicConfig(
@@ -69,8 +70,8 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Получаем список всех участников события
     participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
     
-    mission_helper.start_battle(mission[index_of_mission_id], participants)
-
+    await mission_helper.start_battle(mission[index_of_mission_id], participants)
+    
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:
         if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
