@@ -21,4 +21,4 @@ async def write_battle_result(battle_id, user_reply):
 async def start_battle(mission_id, participants):
     battle_id = await sqllite_helper.add_battle(mission_id)
     for participant in participants:
-        await sqllite_helper.add_battle_participant(battle_id, participant)
+        await sqllite_helper.add_battle_participant(battle_id[0], participant[0])
