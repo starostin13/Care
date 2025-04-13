@@ -38,11 +38,7 @@ async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
             SELECT attender_id 
             FROM battle_attenders 
             WHERE battle_id = ? 
-            AND attender_id != (
-                SELECT id 
-                FROM warmasters 
-                WHERE telegram_id = ?
-            )
+            AND attender_id != ?
         ''', (battle_id, current_user_telegram_id)) as cursor:
             return await cursor.fetchone()
 

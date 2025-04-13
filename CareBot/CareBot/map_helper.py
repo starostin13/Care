@@ -1,3 +1,4 @@
+from ast import Tuple
 import sqllite_helper
 import logging
 
@@ -32,9 +33,12 @@ async def check_patronage(battle_id, battle_result, user_telegram_id):
         winner_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
     logger.info(f"Winner: {winner_telegram_id}")
 
+    if isinstance(winner_telegram_id, tuple):
+        winner_telegram_id = winner_telegram_id[0]
+
     # ѕолучаем alliance id победител€
     winner_alliance_id = await sqllite_helper.get_alliance_of_warmaster(winner_telegram_id)
     logger.info(f"Winner alliance id: {winner_alliance_id}")
 
     # ќбновл€ем базу данных - устанавливаем победител€ как патрона клетки
-    await sqllite_helper.set_cell_patron(cell_id, winner_alliance_id)
+    await sqllite_helper.set_cell_patron(cell_id, winner_alliance_id[0])
