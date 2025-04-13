@@ -1,3 +1,6 @@
+п»ї#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# vim:fileencoding=utf-8
 from ast import Tuple
 import sqllite_helper
 import logging
@@ -12,21 +15,21 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 async def check_patronage(battle_id, battle_result, user_telegram_id):
-    # Разделяем результат битвы на два числа
+    # Р Р°Р·РґРµР»СЏРµРј СЂРµР·СѓР»СЊС‚Р°С‚ Р±РёС‚РІС‹ РЅР° РґРІР° С‡РёСЃР»Р°
     scores = battle_result.split()
     user_score = int(scores[0])
     opponent_score = int(scores[1])
 
-    # Если ничья, то ничего не делаем
+    # Р•СЃР»Рё РЅРёС‡СЊСЏ, С‚Рѕ РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј
     if user_score == opponent_score:
         logger("Draw in battle")
         return
 
-    # Получаем cell id по battle id
+    # РџРѕР»СѓС‡Р°РµРј cell id РїРѕ battle id
     cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
     logger.info(f"Cell id: {cell_id}")
 
-    # Определяем победителя
+    # РћРїСЂРµРґРµР»СЏРµРј РїРѕР±РµРґРёС‚РµР»СЏ
     if user_score > opponent_score:
         winner_telegram_id = user_telegram_id
     else:
@@ -36,9 +39,12 @@ async def check_patronage(battle_id, battle_result, user_telegram_id):
     if isinstance(winner_telegram_id, tuple):
         winner_telegram_id = winner_telegram_id[0]
 
-    # Получаем alliance id победителя
+    # РџРѕР»СѓС‡Р°РµРј alliance id РїРѕР±РµРґРёС‚РµР»СЏ
     winner_alliance_id = await sqllite_helper.get_alliance_of_warmaster(winner_telegram_id)
     logger.info(f"Winner alliance id: {winner_alliance_id}")
 
-    # Обновляем базу данных - устанавливаем победителя как патрона клетки
+    # РћР±РЅРѕРІР»СЏРµРј Р±Р°Р·Сѓ РґР°РЅРЅС‹С… - СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј РїРѕР±РµРґРёС‚РµР»СЏ РєР°Рє РїР°С‚СЂРѕРЅР° РєР»РµС‚РєРё
     await sqllite_helper.set_cell_patron(cell_id, winner_alliance_id[0])
+
+    new_patron_faction = await sqllite_helper.get_faction_of_warmaster(winner_telegram_id)
+    await sqllite_helper.add_to_story(cell_id, f"РќР°С…РѕРґРёР»Р°СЃСЊ РїРѕРґ РєРѕРЅС‚СЂРѕР»РµРј {new_patron_faction[0]}")

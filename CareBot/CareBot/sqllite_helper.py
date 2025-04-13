@@ -16,6 +16,11 @@ async def add_battle(mission_id):
         async with db.execute('SELECT last_insert_rowid()') as cursor:
             return await cursor.fetchone()
 
+async def add_to_story(cell_id, text):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('INSERT OR IGNORE INTO map_story(hex_id, content) VALUES(?,?)', (cell_id, text))
+        await db.commit()
+
 async def set_cell_patron(cell_id, winner_alliance_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('UPDATE map SET patron=? WHERE id=?', (winner_alliance_id, cell_id))
@@ -61,6 +66,15 @@ async def get_event_participants(eventId):
             AND rules = (SELECT rules FROM schedule WHERE id = ?)
         ''', (eventId, eventId)) as cursor:
             return await cursor.fetchall()
+
+async def get_faction_of_warmaster(user_telegram_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+         async with db.execute('''
+            SELECT faction
+            FROM warmasters
+            WHERE telegram_id = ?
+        ''', (str(user_telegram_id),)) as cursor:
+              return await cursor.fetchone()
 
 async def get_mission():
     async with aiosqlite.connect(DATABASE_PATH) as db:
