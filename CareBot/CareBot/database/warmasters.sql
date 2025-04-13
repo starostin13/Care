@@ -10,21 +10,24 @@ CREATE TABLE warmasters (
                           UNIQUE
                           NOT NULL,
     telegram_id   TEXT    UNIQUE,
-    alliance      TEXT    DEFAULT (0),
+    alliance      INTEGER DEFAULT (0),
     nickname      TEXT,
-    registered_as TEXT    UNIQUE
+    registered_as TEXT    UNIQUE,
+    faction       TEXT
 );
 
 INSERT INTO warmasters (
                            id,
                            telegram_id,
                            alliance,
-                           nickname
+                           nickname,
+                           registered_as
                        )
                        SELECT id,
                               telegram_id,
                               alliance,
-                              nickname
+                              nickname,
+                              registered_as
                          FROM sqlitestudio_temp_table;
 
 DROP TABLE sqlitestudio_temp_table;

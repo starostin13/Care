@@ -54,6 +54,7 @@
     <Content Include="CareBot\database\battle_attenders.sql" />
     <Content Include="CareBot\database\edges.sql" />
     <Content Include="CareBot\database\map.sql" />
+    <Content Include="CareBot\database\map_story.sql" />
     <Content Include="CareBot\database\mission_stack.sql" />
     <Content Include="CareBot\database\schedule.sql" />
     <Content Include="CareBot\database\warmasters.sql" />
