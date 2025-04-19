@@ -7,7 +7,7 @@ async def get_mission():
     mission = await sqllite_helper.get_mission()
     
     if not mission:
-        # Если миссия не найдена, генерируем новую
+        # пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
         mission = generate_new_one()
     else:    
         sqllite_helper.lock_mission(mission[4])
