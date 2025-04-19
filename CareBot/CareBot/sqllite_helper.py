@@ -104,7 +104,7 @@ async def get_faction_of_warmaster(user_telegram_id):
 
 async def get_mission():
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.execute('SELECT * FROM mission_stack') as cursor:
+        async with db.execute('SELECT * FROM mission_stack WHERE locked=0') as cursor:
             return await cursor.fetchone()
 
 async def get_schedule_by_user(user_telegram, date=None):
