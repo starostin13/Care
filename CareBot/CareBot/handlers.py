@@ -76,7 +76,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     for participant_id in participants:
         if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
             try:
-                await context.bot.send_message(chat_id=participant_id, text=f"Новая миссия:\n{text}")
+                await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
             except Exception as e:
                 logger.error(f"Ошибка при отправке сообщения пользователю {participant_id}: {e}")
 

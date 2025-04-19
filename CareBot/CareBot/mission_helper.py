@@ -1,17 +1,24 @@
+п»їfrom sqlite3 import sqlite_version
 import sqllite_helper
 
 def generate_new_one():
     return ('Onlu War', 'Onlu War', 2, 'Onlu War')
 
 async def get_mission():
-    mission =await sqllite_helper.get_mission()
+    mission = await sqllite_helper.get_mission()
     
     if not mission:
-        # Если миссия не найдена, генерируем новую
+        # Р•СЃР»Рё РјРёСЃСЃРёСЏ РЅРµ РЅР°Р№РґРµРЅР°, РіРµРЅРµСЂРёСЂСѓРµРј РЅРѕРІСѓСЋ
         mission = generate_new_one()
     
     sqllite_helper.lock_mission(mission[4])
+    number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(mission[2])
+    mission = mission + (f"Р‘РѕР№ РЅР° {number_of_safe_next_cells * 500} pts",)
+    history = await sqllite_helper.get_cell_histrory(mission[2])
     
+    for point in history:
+        mission = mission + point
+
     return mission
 
 async def write_battle_result(battle_id, user_reply):
