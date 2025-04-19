@@ -199,6 +199,10 @@ async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await query.edit_message_text("Your appointments:", reply_markup=markup)
     return MISSIONS
 
+async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Welcome to the Crusade Bot! Please type /start to begin.")
+
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
 conv_handler = ConversationHandler(
@@ -231,6 +235,7 @@ conv_handler = ConversationHandler(
 # Handler for catching replies to the bot's messages, specifically replies to get_the_mission
 bot.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply))
 bot.add_handler(conv_handler)
+bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
 bot.add_handler(CommandHandler("setname", input_name))
 bot.add_handler(CommandHandler("regme", contact))
 bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))
