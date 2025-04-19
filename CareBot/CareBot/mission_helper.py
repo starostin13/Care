@@ -11,10 +11,11 @@ async def get_mission():
         # Если миссия не найдена, генерируем новую
         mission = generate_new_one()
     
-    sqllite_helper.lock_mission(mission[4])
-    number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(mission[2])
-    mission = mission + (f"Бой на {number_of_safe_next_cells * 500} pts",)
-    history = await sqllite_helper.get_cell_histrory(mission[2])
+    cell_id = mission[2]
+    sqllite_helper.lock_mission(cell_id)
+    number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
+    mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
+    history = await sqllite_helper.get_cell_histrory(cell_id)
     
     for point in history:
         mission = mission + point

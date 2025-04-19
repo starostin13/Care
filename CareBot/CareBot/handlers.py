@@ -56,7 +56,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission = await mission_helper.get_mission()
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
-    index_of_mission_id = 4
+    index_of_mission_id = 2
 
     # Преобразуем миссию в текст
     text = '\n'.join(
