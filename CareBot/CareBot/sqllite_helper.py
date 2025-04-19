@@ -1,4 +1,5 @@
 ﻿import datetime
+from unittest import result
 import aiosqlite
 from xmlrpc.client import DateTime
 
@@ -21,6 +22,15 @@ async def add_to_story(cell_id, text):
         await db.execute('INSERT OR IGNORE INTO map_story(hex_id, content) VALUES(?,?)', (cell_id, text))
         await db.commit()
 
+async def get_cell_histrory(cell_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT content
+            FROM map_story
+            WHERE hex_id=?
+        ''', (cell_id,)) as cursor:
+            return await cursor.fetchall()
+
 async def set_cell_patron(cell_id, winner_alliance_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('UPDATE map SET patron=? WHERE id=?', (winner_alliance_id, cell_id))
@@ -36,6 +46,22 @@ async def get_cell_id_by_battle_id(battle_id: int):
         ''', (battle_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
+
+async def get_number_of_safe_next_cells(cell_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) AS same_patron_neighbors
+            FROM edges e
+            JOIN map m1 ON (e.left_hexagon = m1.id OR e.right_hexagon = m1.id)
+            JOIN map m2 ON (
+                (e.left_hexagon = m2.id OR e.right_hexagon = m2.id)
+                AND m2.id != m1.id
+            )
+            WHERE m1.id = ?
+              AND m2.patron = m1.patron;
+        ''', (cell_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
 
 async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
