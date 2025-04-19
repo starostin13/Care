@@ -31,6 +31,7 @@
     <Compile Include="CareBot\config.py" />
     <Compile Include="CareBot\handlers.py" />
     <Compile Include="CareBot\keyboard_constructor.py" />
+    <Compile Include="CareBot\map_helper.py" />
     <Compile Include="CareBot\mission_helper.py" />
     <Compile Include="CareBot\players_helper.py" />
     <Compile Include="CareBot\sqllite_helper.py" />
@@ -50,6 +51,10 @@
   <ItemGroup>
     <Content Include="CareBot\database\alliances.sql" />
     <Content Include="CareBot\database\battles.sql" />
+    <Content Include="CareBot\database\battle_attenders.sql" />
+    <Content Include="CareBot\database\edges.sql" />
+    <Content Include="CareBot\database\map.sql" />
+    <Content Include="CareBot\database\map_story.sql" />
     <Content Include="CareBot\database\mission_stack.sql" />
     <Content Include="CareBot\database\schedule.sql" />
     <Content Include="CareBot\database\warmasters.sql" />

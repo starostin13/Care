@@ -7,12 +7,14 @@ from msilib import sequence
 from telegram import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
+from CareBot import map_helper
 import config
 import players_helper
 import keyboard_constructor
 import logging
 import sqllite_helper
 import mission_helper
+import os
 
 # Enable logging
 logging.basicConfig(
@@ -54,10 +56,11 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission = await mission_helper.get_mission()
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
-    
+    index_of_mission_id = 2
+
     # Преобразуем миссию в текст
     text = '\n'.join(
-        f'#{mission[i]}' if i == 4 else str(item or '')
+        f'#{mission[i]}' if i == index_of_mission_id else str(item or '')
         for i, item in enumerate(mission)
     )
 
@@ -66,12 +69,14 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Получаем список всех участников события
     participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
-
+    
+    await mission_helper.start_battle(mission[index_of_mission_id], participants)
+    
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:
         if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
             try:
-                await context.bot.send_message(chat_id=participant_id, text=f"Новая миссия:\n{text}")
+                await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
             except Exception as e:
                 logger.error(f"Ошибка при отправке сообщения пользователю {participant_id}: {e}")
 
@@ -96,6 +101,7 @@ async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = InlineKeyboardMarkup(rules)
     await query.edit_message_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
     return GAMES
+
 
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -144,11 +150,16 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
     lines = original_message.splitlines()
 
     # Ищем строку, начинающуюся с '#'
-    battle_id = [line for line in lines if line.startswith('#')]
-    await mission_helper.write_battle_result(battle_id[0], user_reply)
+    battle_id_line = next((line for line in lines if line.startswith('#')), None)
+    if battle_id_line:
+        # Извлекаем значение после решётки и преобразуем его в число
+        battle_id = int(battle_id_line[1:])
+        await mission_helper.write_battle_result(battle_id, user_reply)
+        await map_helper.check_patronage(battle_id, user_reply, update.effective_user.id)
 
     # Respond to the user's reply
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
+
 
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.split(' ')[1]
