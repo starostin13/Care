@@ -1,57 +1,32 @@
+PRAGMA foreign_keys = 0;
+
+CREATE TABLE sqlitestudio_temp_table AS SELECT *
+                                          FROM map;
+
+DROP TABLE map;
+
 CREATE TABLE map (
-    id        INTEGER PRIMARY KEY
-                      UNIQUE
-                      NOT NULL,
-    planet_id INTEGER,
-    state     TEXT,
-    patron    INTEGER
+    id            INTEGER PRIMARY KEY
+                          UNIQUE
+                          NOT NULL,
+    planet_id     INTEGER,
+    state         TEXT,
+    patron        INTEGER,
+    has_warehouse INTEGER DEFAULT (0) 
 );
 
 INSERT INTO map (
-                    patron,
-                    state,
+                    id,
                     planet_id,
-                    id
+                    state,
+                    patron
                 )
-                VALUES (
-                    1,
-                    NULL,
-                    1,
-                    2
-                ),
-                (
-                    0,
-                    NULL,
-                    1,
-                    3
-                ),
-                (
-                    2,
-                    NULL,
-                    1,
-                    4
-                ),
-                (
-                    1,
-                    NULL,
-                    1,
-                    5
-                ),
-                (
-                    0,
-                    NULL,
-                    1,
-                    6
-                ),
-                (
-                    2,
-                    NULL,
-                    1,
-                    7
-                ),
-                (
-                    1,
-                    NULL,
-                    1,
-                    8
-                );
+                SELECT id,
+                       planet_id,
+                       state,
+                       patron
+                  FROM sqlitestudio_temp_table;
+
+DROP TABLE sqlitestudio_temp_table;
+
+PRAGMA foreign_keys = 1;
