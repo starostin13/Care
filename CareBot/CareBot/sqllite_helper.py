@@ -156,6 +156,38 @@ async def insert_to_schedule(date, rules, user_telegram):
         await db.execute('INSERT INTO schedule (date, rules, user_telegram, date_week) VALUES (?, ?, ?, ?)', (str(date.date()), rules, user_telegram, weekNumber))
         await db.commit()
 
+async def has_route_to_warehouse(start_id, patron):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("""
+            WITH RECURSIVE connected_hexes(id) AS (
+                SELECT id FROM map WHERE id = ? AND patron = ?
+
+                UNION
+
+                SELECT
+                    CASE
+                        WHEN e.left_hexagon = c.id THEN e.right_hexagon
+                        ELSE e.left_hexagon
+                    END
+                FROM edges e
+                JOIN connected_hexes c ON e.left_hexagon = c.id OR e.right_hexagon = c.id
+                JOIN map m_next ON (
+                    (e.left_hexagon = m_next.id OR e.right_hexagon = m_next.id)
+                    AND m_next.id != c.id
+                )
+                WHERE m_next.patron = ?
+            )
+            SELECT EXISTS (
+                SELECT 1
+                FROM connected_hexes ch
+                JOIN map m ON ch.id = m.id
+                WHERE m.has_warehouse = 1
+                  AND m.patron = ?
+            )
+        """, (start_id, patron, patron, patron)) as cursor:
+            return await cursor.fetchone()
+
+
 async def is_warmaster_registered(user_telegram_id):
     return True
 
