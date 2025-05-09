@@ -114,7 +114,7 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         update.effective_user.id)
     opponents = await players_helper.get_opponents(update.effective_user.id, data)
     #await query.answer()
-    await query.edit_message_text(f'You will faced with')
+    await query.edit_message_text('Ещё никто не запился на этот день' if len(opponents)==0 else f'You will faced with')
     for opponent in opponents:
         if opponent[1] is not None:
             await update.effective_chat.send_contact(first_name=str(opponent[0]), phone_number=opponent[1])
