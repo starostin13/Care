@@ -73,6 +73,16 @@ async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
         ''', (battle_id, current_user_telegram_id)) as cursor:
             return await cursor.fetchone()
 
+async def get_state(cell_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT state
+            FROM map 
+            WHERE id = ?
+        ''', (cell_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
 async def add_battle_result(mission_id, counts1, counts2):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('INSERT INTO battles(mission_id, fstplayer, sndplayer) VALUES(?, ?, ?)', (mission_id, counts1, counts2))
