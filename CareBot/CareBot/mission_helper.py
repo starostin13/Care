@@ -1,4 +1,5 @@
-﻿from sqlite3 import sqlite_version
+﻿import array
+from sqlite3 import sqlite_version
 import sqllite_helper
 
 def generate_new_one():
@@ -23,6 +24,15 @@ async def get_mission():
         mission = mission + point
 
     return mission
+
+async def get_situation(mission_id, telegram_ids):
+    cell_id = await sqllite_helper.get_cell_id_by_mission_id(mission_id)
+    result = array()
+    
+    for particpant_telegram in telegram_ids:
+        has_route_to_warehouse = await map_helper.has_route_to_warehouse(cell_id, particpant_telegram)
+        if(has_route_to_warehouse is False):
+            result.append(f"{particpant_telegram} не получает CP. Вместо этого использует колоду со страгеммами.")    
 
 async def write_battle_result(battle_id, user_reply):
     counts = user_reply.split(' ')
