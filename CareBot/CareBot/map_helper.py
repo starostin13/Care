@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim:fileencoding=utf-8
 from ast import Tuple
+from math import e, fabs
 import sqllite_helper
 import logging
 
@@ -48,3 +49,20 @@ async def check_patronage(battle_id, battle_result, user_telegram_id):
 
     new_patron_faction = await sqllite_helper.get_faction_of_warmaster(winner_telegram_id)
     await sqllite_helper.add_to_story(cell_id, f"Находилась под контролем {new_patron_faction[0]}")
+
+async def has_route_to_warehouse(cell_id, particpant_telegram):
+    if not isinstance(particpant_telegram, str):
+        particpant_telegram = particpant_telegram[0]
+    alliance = await sqllite_helper.get_alliance_of_warmaster(particpant_telegram)
+    # проверка принадлежит ли cell_id игроку
+    is_current_hex_patron = await sqllite_helper.is_hex_patroned_by(cell_id, alliance[0])
+    if is_current_hex_patron:
+        return await sqllite_helper.has_route_to_warehouse(cell_id, particpant_telegram)
+    else:
+        # получить все соседние hexы и для каждого принадлежащего participant вызвать has_route_to_warhouse, после первого true выйти из цикла
+        next_hexes = await sqllite_helper.get_next_hexes_filtered_by_patron(cell_id, particpant_telegram)
+        for next_hex in next_hexes:
+            current_hex_has_route_to_warhouse = await sqllite_helper.has_route_to_warehouse(next_hex, particpant_telegram)
+            if current_hex_has_route_to_warhouse == True:
+                return True
+        return False

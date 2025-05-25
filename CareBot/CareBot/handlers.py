@@ -60,8 +60,9 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Получаем список всех участников события
     participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
-
-    situation = await mission_helper.get_situation(mission[index_of_mission_id], participants)
+    
+    battle_id = await mission_helper.start_battle(mission[index_of_mission_id], participants)
+    situation = await mission_helper.get_situation(battle_id, participants)
 
     # Преобразуем миссию в текст
     text = '\n'.join(
@@ -70,9 +71,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
     # Отправляем текст миссии текущему пользователю
-    await query.edit_message_text(f"{text}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
-    
-    await mission_helper.start_battle(mission[index_of_mission_id], participants)
+    await query.edit_message_text(f"{text}\n{situation}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
     
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:

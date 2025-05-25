@@ -11,7 +11,9 @@ STATES = [
     "скалы",
     "токсичная зона",
     "разрушенные руины",
-    "заражённая чаща"
+    "заражённая чаща",
+    "останки корабля",
+    "магма"
 ]
 
 HEX_DIRECTIONS = [
@@ -67,7 +69,7 @@ def generate_map_and_edges(db_path='your_database.sqlite'):
             if radius == 0:
                 state = random.choice(STATES)
             else:
-                if random.random() < 0.5:
+                if random.random() < 0.1:
                     neighbors = hex_neighbors(q, r)
                     state = most_common_state(neighbors, hex_map)
                 else:

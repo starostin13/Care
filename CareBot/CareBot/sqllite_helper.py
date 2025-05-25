@@ -3,6 +3,8 @@ from unittest import result
 import aiosqlite
 from xmlrpc.client import DateTime
 
+from aiosqlite import cursor
+
 DATABASE_PATH = r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database"
 
 async def add_battle_participant(battle_id, participant):
@@ -46,6 +48,23 @@ async def get_cell_id_by_battle_id(battle_id: int):
         ''', (battle_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
+
+async def get_next_hexes_filtered_by_patron(cell_id, alliance):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT e.right_hexagon AS neighbor_id
+            FROM edges e
+            JOIN map m ON e.right_hexagon = m.id
+            WHERE e.left_hexagon = ?
+              AND m.patron = ?
+            UNION
+            SELECT e.left_hexagon AS neighbor_id
+            FROM edges e
+            JOIN map m ON e.left_hexagon = m.id
+            WHERE e.right_hexagon = ?
+              AND m.patron = ?
+        ''', (cell_id, alliance, cell_id, alliance)) as cursor:
+            return await cursor.fetchall()
 
 async def get_number_of_safe_next_cells(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -201,6 +220,20 @@ async def has_route_to_warehouse(start_id, patron):
 async def is_warmaster_registered(user_telegram_id):
     return True
 
+async def is_hex_patroned_by(cell_id, participant_telegram):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute(
+            '''
+            SELECT 1
+            FROM map
+            JOIN warmasters ON warmasters.alliance = map.patron
+            WHERE map.id = ? AND warmasters.telegram_id = ?
+            ''',
+            (cell_id, participant_telegram)
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+
 async def lock_mission(mission_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('UPDATE mission_stack SET locked=1 WHERE id=?', (mission_id,))
@@ -209,6 +242,11 @@ async def lock_mission(mission_id):
 async def register_warmaster(user_telegram_id, phone):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('UPDATE warmasters SET registered_as=? WHERE telegram_id=?', (phone, user_telegram_id))
+        await db.commit()
+
+async def save_mission(mission):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('INSERT INTO mission_stack(deploy, rules, cell, mission_description, locked) VALUES(?, ?, ?, ?, 1)', (mission[0], mission[1], mission[2], mission[3]))
         await db.commit()
 
 async def set_nickname(user_telegram_id, nickname):
