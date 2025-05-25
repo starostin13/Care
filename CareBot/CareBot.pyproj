@@ -27,6 +27,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="CareBot\database\generate_planet.py" />
     <Compile Include="CareBot\example_config.py" />
     <Compile Include="CareBot\config.py" />
     <Compile Include="CareBot\handlers.py" />
