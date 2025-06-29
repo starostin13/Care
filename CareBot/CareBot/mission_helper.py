@@ -35,7 +35,7 @@ async def get_situation(battle_id, telegram_ids):
     for particpant_telegram in telegram_ids:
         has_route_to_warehouse = await map_helper.has_route_to_warehouse(cell_id, particpant_telegram)
         if(has_route_to_warehouse is False):
-            result.append(f"{particpant_telegram} не получает CP. Вместо этого использует колоду со страгеммами.")
+            result.append(f"{await sqllite_helper.get_nicknamane(particpant_telegram)} не получает CP. Вместо этого использует колоду со страгеммами.")
 
     return result
 
