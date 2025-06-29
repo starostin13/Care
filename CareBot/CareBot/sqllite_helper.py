@@ -66,6 +66,12 @@ async def get_next_hexes_filtered_by_patron(cell_id, alliance):
         ''', (cell_id, alliance, cell_id, alliance)) as cursor:
             return await cursor.fetchall()
 
+async def get_nicknamane(telegram_id):
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            async with db.execute('SELECT nickname FROM warmasters WHERE telegram_id=?', (telegram_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else None
+
 async def get_number_of_safe_next_cells(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
