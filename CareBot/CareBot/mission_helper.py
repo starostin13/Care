@@ -1,30 +1,32 @@
 ﻿import array
 from sqlite3 import sqlite_version
+from typing import Optional
 import sqllite_helper
 import map_helper
 
 def generate_new_one():
     return ('Onlu War', 'Onlu War', 2, 'Onlu War')
 
-async def get_mission():
-    mission = await sqllite_helper.get_mission()
+async def get_mission(rules: Optional[str]):
+    mission = await sqllite_helper.get_mission(rules)
     
     if not mission:
         # Если миссия не найдена, генерируем новую
-        mission = generate_new_one()
+        mission = generate_new_one("rules")
         await sqllite_helper.save_mission(mission)
+
+    if "rules" == "wh40k":
+        cell_id = mission[2]
+        sqllite_helper.lock_mission(cell_id)
+        number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
+        mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
+        history = await sqllite_helper.get_cell_histrory(cell_id)
+        state = await sqllite_helper.get_state(cell_id)
+        if state is not None:
+            mission = mission + (state[0])
     
-    cell_id = mission[2]
-    sqllite_helper.lock_mission(cell_id)
-    number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
-    mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
-    history = await sqllite_helper.get_cell_histrory(cell_id)
-    state = await sqllite_helper.get_state(cell_id)
-    if state is not None:
-        mission = mission + (state[0])
-    
-    for point in history:
-        mission = mission + point
+        for point in history:
+            mission = mission + point
 
     return mission
 

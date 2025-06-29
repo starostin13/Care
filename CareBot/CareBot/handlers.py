@@ -52,8 +52,11 @@ async def contact_callback(update, bot):
     sqllite_helper.register_warmaster(userid, phone)
     
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # update.callback_query.data 'mission_sch_2'
+    mission_number = int(update.callback_query.data.replace("mission_sch_", ""))
+    rules = await sqllite_helper.get_rules_of_mission(mission_number)
     # Получаем миссию из базы данных
-    mission = await mission_helper.get_mission()
+    mission = await mission_helper.get_mission(rules=rules)
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
     index_of_mission_id = 2
@@ -109,7 +112,7 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data = query.data
     data_arr = data.split(',')
     # ['Sat Apr 27 00:00:00 2024', 'rule:killteam']
-    sqllite_helper.insert_to_schedule(
+    await sqllite_helper.insert_to_schedule(
         datetime.strptime(data_arr[0],'%c'),
         data_arr[1].split(':')[1],
         update.effective_user.id)

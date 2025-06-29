@@ -92,6 +92,15 @@ async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
         ''', (battle_id, current_user_telegram_id)) as cursor:
             return await cursor.fetchone()
 
+async def get_rules_of_mission(number_of_mission):
+    async with aiosqlite(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT rules
+            FROM schedule
+            WHERE id = ?
+        ''', (number_of_mission)) as cursor:
+            return await cursor.fetchone()
+
 async def get_state(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
