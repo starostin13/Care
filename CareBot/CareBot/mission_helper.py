@@ -3,16 +3,64 @@ from sqlite3 import sqlite_version
 from typing import Optional
 import sqllite_helper
 import map_helper
+import random
 
-def generate_new_one():
-    return ('Onlu War', 'Onlu War', 2, 'Onlu War')
+def generate_new_one(rules):
+    # Base mission types and objectives for different rule sets
+    if rules == "killteam":
+        deploy_types = ["Breach", "Sabotage", "Escape"]
+        missions = [
+            "Recon Sweep", "Data Recovery", "Assassination", 
+            "Asset Denial", "Supply Drop", "Scan and Locate"
+        ]
+        description = f"{random.choice(missions)}: Operatives must {random.choice(['secure objectives', 'eliminate targets', 'retrieve intelligence', 'establish control points'])}"
+        
+    elif rules == "boarding_action":
+        deploy_types = ["Breach Points", "Ship Interface", "Void Strike"]
+        missions = [
+            "Void Assault", "Engine Sabotage", "Bridge Takeover", 
+            "Datacore Theft", "Life Support Sabotage", "Vessel Capture"
+        ]
+        description = f"{random.choice(missions)}: Forces must {random.choice(['secure critical ship systems', 'eliminate enemy crew', 'download ship schematics', 'establish control of key areas'])}"
+        
+    elif rules == "combat_patrol":
+        deploy_types = ["Strategic Reserves", "Tactical Deployment", "Flanking Maneuvers"]
+        missions = [
+            "Forward Assault", "Strategic Seizure", "Patrol Encounter", 
+            "Hold Ground", "Supply Line Disruption", "Priority Target"
+        ]
+        description = f"{random.choice(missions)}: Patrol forces must {random.choice(['secure and hold territory', 'eliminate enemy patrols', 'establish forward operating base', 'capture strategic assets'])}"
+        
+    elif rules == "wh40k":
+        deploy_types = ["Dawn of War", "Hammer and Anvil", "Search and Destroy"]
+        missions = [
+            "No Mercy", "Vital Intelligence", "The Relic", 
+            "Scorched Earth", "Retrieval Mission", "Cleanse and Capture"
+        ]
+        description = f"{random.choice(missions)}: Armies must {random.choice(['secure critical objectives', 'destroy enemy forces', 'hold strategic positions', 'capture enemy intelligence'])}"
+        
+    elif rules == "battlefleet":
+        deploy_types = ["Convoy Pattern", "Battle Line", "Orbital Superiority"]
+        missions = [
+            "Fleet Engagement", "Convoy Protection", "Planetary Bombardment", 
+            "Naval Blockade", "Ship Hunter", "Defense Platform Assault"
+        ]
+        description = f"{random.choice(missions)}: Fleet must {random.choice(['destroy enemy vessels', 'protect supply ships', 'establish orbital dominance', 'disable enemy stations'])}"
+        
+    else:
+        # Default case if rules type is not recognized
+        return ('Only War', rules, 2, f'Generic mission for {rules}')
+    
+    # Generate the mission tuple
+    deploy = random.choice(deploy_types)
+    return (deploy, rules, 2, description)
 
 async def get_mission(rules: Optional[str]):
     mission = await sqllite_helper.get_mission(rules)
     
     if not mission:
         # Если миссия не найдена, генерируем новую
-        mission = generate_new_one("rules")
+        mission = generate_new_one(rules)
         await sqllite_helper.save_mission(mission)
 
     if "rules" == "wh40k":
@@ -41,8 +89,9 @@ async def get_situation(battle_id, telegram_ids):
 
     return result
 
-async def write_battle_result(battle_id, user_reply):
+async def write_battle_result(battle_id, user_reply, scenario: Optional[str]):
     counts = user_reply.split(' ')
+    rules = await sqllite_helper.get_rules_of_mission(battle_id)
     await sqllite_helper.add_battle_result(int(battle_id), counts[0], counts[1])
 
 async def start_battle(mission_id, participants):

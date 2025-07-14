@@ -5,6 +5,7 @@ from ast import Tuple
 from math import e, fabs
 import sqllite_helper
 import logging
+import random
 
 # Enable logging
 logging.basicConfig(
@@ -15,7 +16,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-async def check_patronage(battle_id, battle_result, user_telegram_id):
+async def update_map(battle_id, battle_result, user_telegram_id, scenario):
     # Разделяем результат битвы на два числа
     scores = battle_result.split()
     user_score = int(scores[0])
@@ -26,29 +27,53 @@ async def check_patronage(battle_id, battle_result, user_telegram_id):
         logger("Draw in battle")
         return
 
-    # Получаем cell id по battle id
-    cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
-    logger.info(f"Cell id: {cell_id}")
+    rules = await sqllite_helper.get_rules_of_mission(battle_id)
+    if rules == "wh40k":
+        # Получаем cell id по battle id
+        cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
+        logger.info(f"Cell id: {cell_id}")
 
-    # Определяем победителя
-    if user_score > opponent_score:
-        winner_telegram_id = user_telegram_id
-    else:
-        winner_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
-    logger.info(f"Winner: {winner_telegram_id}")
+        # Определяем победителя
+        if user_score > opponent_score:
+            winner_telegram_id = user_telegram_id
+        else:
+            winner_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
+        logger.info(f"Winner: {winner_telegram_id}")
 
-    if isinstance(winner_telegram_id, tuple):
-        winner_telegram_id = winner_telegram_id[0]
+        if isinstance(winner_telegram_id, tuple):
+            winner_telegram_id = winner_telegram_id[0]
 
-    # Получаем alliance id победителя
-    winner_alliance_id = await sqllite_helper.get_alliance_of_warmaster(winner_telegram_id)
-    logger.info(f"Winner alliance id: {winner_alliance_id}")
+        # Получаем alliance id победителя
+        winner_alliance_id = await sqllite_helper.get_alliance_of_warmaster(winner_telegram_id)
+        logger.info(f"Winner alliance id: {winner_alliance_id}")
 
-    # Обновляем базу данных - устанавливаем победителя как патрона клетки
-    await sqllite_helper.set_cell_patron(cell_id, winner_alliance_id[0])
+        # Обновляем базу данных - устанавливаем победителя как патрона клетки
+        await sqllite_helper.set_cell_patron(cell_id, winner_alliance_id[0])
 
-    new_patron_faction = await sqllite_helper.get_faction_of_warmaster(winner_telegram_id)
-    await sqllite_helper.add_to_story(cell_id, f"Находилась под контролем {new_patron_faction[0]}")
+        new_patron_faction = await sqllite_helper.get_faction_of_warmaster(winner_telegram_id)
+        await sqllite_helper.add_to_story(cell_id, f"Находилась под контролем {new_patron_faction[0]}")
+    if rules == "killteam":
+        if scenario == "sabotage":            
+            # Определяем победителя
+            if user_score > opponent_score:
+                loser_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
+                logger.info(f"Loser: {loser_telegram_id}")
+                warehouses = await sqllite_helper.get_warehouses_of_warmaster(loser_telegram_id)
+                if len(warehouses) > 0:
+                    # Выбираем случайный склад из списка складов проигравшего
+                    random_warehouse = random.choice(warehouses)
+                    # Уничтожаем склад
+                    await sqllite_helper.destroy_warehouse(random_warehouse[0])
+                    logger.info(f"Destroyed warehouse {random_warehouse[0]} belonging to {loser_telegram_id}")
+        if scenario == "breach":
+            if user_score > opponent_score:
+                loser_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
+                loser_alliance_id = await sqllite_helper.get_alliance_of_warmaster(loser_telegram_id)
+                await sqllite_helper.decrease_common_resource(loser_alliance_id)
+        if scenario == "escape":
+            if user_score > opponent_score:
+                winner_alliance_id = await sqllite_helper.get_alliance_of_warmaster(user_telegram_id)
+                await sqllite_helper.increase_common_resource(winner_alliance_id)
 
 async def has_route_to_warehouse(cell_id, particpant_telegram):
     if not isinstance(particpant_telegram, str):
