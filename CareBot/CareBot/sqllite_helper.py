@@ -121,6 +121,11 @@ async def add_warmaster(telegram_id):
         await db.execute('INSERT OR IGNORE INTO warmasters(telegram_id) VALUES(?)', (telegram_id,))
         await db.commit()
 
+async def destroy_warehouse(cell_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('UPDATE map SET has_warehouse=0 WHERE id=?', (cell_id,))
+        await db.commit()
+
 async def get_event_participants(eventId):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
@@ -140,9 +145,9 @@ async def get_faction_of_warmaster(user_telegram_id):
         ''', (str(user_telegram_id),)) as cursor:
               return await cursor.fetchone()
 
-async def get_mission():
+async def get_mission(rules):
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.execute('SELECT * FROM mission_stack WHERE locked=0') as cursor:
+        async with db.execute('SELECT * FROM mission_stack WHERE locked=0 AND rules=?', (rules,)) as cursor:
             return await cursor.fetchone()
 
 async def get_schedule_by_user(user_telegram, date=None):
@@ -170,6 +175,16 @@ async def get_settings(telegram_user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('SELECT nickname, registered_as FROM warmasters WHERE telegram_id=?', (telegram_user_id,)) as cursor:
             return await cursor.fetchone()
+
+async def get_warehouses_of_warmaster(telegram_user_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id 
+            FROM map 
+            WHERE patron = (SELECT alliance FROM warmasters WHERE telegram_id = ?)
+              AND has_warehouse = 1
+        ''', (telegram_user_id,)) as cursor:
+            return await cursor.fetchall()
 
 async def get_warmasters_opponents(against_alliance, rule, date):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -262,3 +277,52 @@ async def set_nickname(user_telegram_id, nickname):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('UPDATE warmasters SET nickname=? WHERE telegram_id=?', (nickname, user_telegram_id))
         await db.commit()
+
+async def _update_alliance_resource(alliance_id, change_amount):
+    """Helper function to update alliance resources.
+    
+    Args:
+        alliance_id: The ID of the alliance
+        change_amount: Positive to increase, negative to decrease
+        
+    Returns:
+        The new resource value
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get the current resource value
+        async with db.execute('SELECT common_resource FROM alliances WHERE id = ?', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            current_value = result[0] if result else 0
+        
+        # Calculate new value (ensure it doesn't go below 0)
+        new_value = max(0, current_value + change_amount)
+        
+        # Update the database
+        await db.execute('UPDATE alliances SET common_resource = ? WHERE id = ?', (new_value, alliance_id))
+        await db.commit()
+        
+        return new_value
+
+async def increase_common_resource(alliance_id, amount=1):
+    """Increase the common resource of an alliance.
+    
+    Args:
+        alliance_id: The ID of the alliance
+        amount: The amount to increase (default: 1)
+        
+    Returns:
+        The new resource value
+    """
+    return await _update_alliance_resource(alliance_id, amount)
+
+async def decrease_common_resource(alliance_id, amount=1):
+    """Decrease the common resource of an alliance.
+    
+    Args:
+        alliance_id: The ID of the alliance
+        amount: The amount to decrease (default: 1)
+        
+    Returns:
+        The new resource value
+    """
+    return await _update_alliance_resource(alliance_id, -amount)
