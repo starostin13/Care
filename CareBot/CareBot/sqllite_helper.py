@@ -253,3 +253,33 @@ async def set_nickname(user_telegram_id, nickname):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('UPDATE warmasters SET nickname=? WHERE telegram_id=?', (nickname, user_telegram_id))
         await db.commit()
+
+async def get_all_map_cells():
+    """Получить все клетки карты"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, planet_id, state, patron, has_warehouse
+            FROM map
+            ORDER BY id
+        ''') as cursor:
+            return await cursor.fetchall()
+
+async def get_cell_info(cell_id):
+    """Получить информацию о конкретной клетке"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, planet_id, state, patron, has_warehouse
+            FROM map
+            WHERE id = ?
+        ''', (cell_id,)) as cursor:
+            return await cursor.fetchone()
+
+async def get_alliance_name(alliance_id):
+    """Получить имя альянса по ID"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT name
+            FROM alliances
+            WHERE id = ?
+        ''', (alliance_id,)) as cursor:
+            return await cursor.fetchone()

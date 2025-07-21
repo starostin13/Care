@@ -1,0 +1,351 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="text-center mb-4">🗺️ Crusade Map</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-8">
+            <div id="map-container" class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Galaxy Map</h5>
+                    <small class="text-muted">Click on hexes to see details</small>
+                </div>
+                <div class="card-body p-2">
+                    <div style="overflow: auto; max-height: 70vh;">
+                        <svg id="map-svg" width="800" height="600" style="min-width: 600px; background: #1a1a2e;">
+                            <!-- Карта будет отрисована здесь -->
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div id="hex-info" class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Sector Information</h5>
+                </div>
+                <div class="card-body">
+                    <div id="hex-details">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-mouse-pointer fa-2x mb-3"></i>
+                            <p>Click on a sector to see details</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Legend</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="d-flex align-items-center mb-2">
+                                <div style="width: 20px; height: 20px; background: #ff6b6b; border: 1px solid #333; margin-right: 8px;"></div>
+                                <small>Alliance 1</small>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <div style="width: 20px; height: 20px; background: #4ecdc4; border: 1px solid #333; margin-right: 8px;"></div>
+                                <small>Alliance 2</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="d-flex align-items-center mb-2">
+                                <div style="width: 20px; height: 20px; background: #45b7d1; border: 1px solid #333; margin-right: 8px;"></div>
+                                <small>Alliance 3</small>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <div style="width: 20px; height: 10px; background: #ffd93d; border: 1px solid #333; margin-right: 8px;"></div>
+                                <small>Warehouse</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadMap();
+});
+
+function loadMap() {
+    fetch('/api/map-data')
+        .then(response => response.json())
+        .then(data => {
+            renderMap(data);
+        })
+        .catch(error => {
+            console.error('Error loading map:', error);
+            document.getElementById('hex-details').innerHTML = 
+                '<div class="alert alert-danger">Error loading map data</div>';
+        });
+}
+
+function renderMap(mapData) {
+    const svg = document.getElementById('map-svg');
+    const hexSize = 25;
+    const hexWidth = hexSize * Math.sqrt(3);
+    const hexHeight = hexSize * 2;
+    
+    // Очищаем SVG
+    svg.innerHTML = '';
+    
+    // Создаем градиенты для красивого отображения
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    
+    // Градиент для неконтролируемых территорий
+    const neutralGradient = document.createElementNS('http://www.w3.org/2000/svg', 'radialGradient');
+    neutralGradient.setAttribute('id', 'neutralGradient');
+    neutralGradient.innerHTML = `
+        <stop offset="0%" style="stop-color:#f0f0f0;stop-opacity:1" />
+        <stop offset="100%" style="stop-color:#d0d0d0;stop-opacity:1" />
+    `;
+    defs.appendChild(neutralGradient);
+    
+    svg.appendChild(defs);
+    
+    mapData.forEach(hex => {
+        // Вычисляем позицию hex в сетке
+        const col = hex.id % 10;
+        const row = Math.floor(hex.id / 10);
+        
+        const x = col * hexWidth * 0.75 + 50;
+        const y = row * hexHeight * 0.5 + 50 + (col % 2) * (hexHeight * 0.25);
+        
+        // Создаем группу для hex
+        const hexGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        
+        // Создаем шестиугольник
+        const hexagon = createHexagon(x, y, hexSize);
+        
+        // Определяем цвет в зависимости от патрона
+        let fillColor = 'url(#neutralGradient)';
+        let strokeColor = '#666';
+        
+        if (hex.patron) {
+            switch(hex.patron) {
+                case 1: 
+                    fillColor = '#ff6b6b'; 
+                    strokeColor = '#ff4757';
+                    break;
+                case 2: 
+                    fillColor = '#4ecdc4'; 
+                    strokeColor = '#26d0ce';
+                    break;
+                case 3: 
+                    fillColor = '#45b7d1'; 
+                    strokeColor = '#3c8dbc';
+                    break;
+                default: 
+                    fillColor = '#95e1d3';
+                    strokeColor = '#70a1ff';
+                    break;
+            }
+        }
+        
+        hexagon.setAttribute('fill', fillColor);
+        hexagon.setAttribute('stroke', strokeColor);
+        hexagon.setAttribute('stroke-width', '2');
+        hexagon.setAttribute('data-hex-id', hex.id);
+        hexagon.style.cursor = 'pointer';
+        hexagon.style.transition = 'all 0.3s ease';
+        
+        // Добавляем hover эффект
+        hexagon.addEventListener('mouseenter', function() {
+            this.setAttribute('stroke-width', '3');
+            this.style.filter = 'brightness(1.2)';
+        });
+        
+        hexagon.addEventListener('mouseleave', function() {
+            this.setAttribute('stroke-width', '2');
+            this.style.filter = 'brightness(1)';
+        });
+        
+        // Добавляем обработчик клика
+        hexagon.addEventListener('click', () => showHexInfo(hex));
+        
+        hexGroup.appendChild(hexagon);
+        
+        // Добавляем номер hex
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y + 5);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '11');
+        text.setAttribute('font-weight', 'bold');
+        text.setAttribute('fill', '#fff');
+        text.setAttribute('stroke', '#000');
+        text.setAttribute('stroke-width', '0.5');
+        text.textContent = hex.id;
+        hexGroup.appendChild(text);
+        
+        // Добавляем иконку склада если есть
+        if (hex.has_warehouse) {
+            const warehouse = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            warehouse.setAttribute('x', x - 8);
+            warehouse.setAttribute('y', y - 18);
+            warehouse.setAttribute('width', '16');
+            warehouse.setAttribute('height', '8');
+            warehouse.setAttribute('fill', '#ffd93d');
+            warehouse.setAttribute('stroke', '#f39c12');
+            warehouse.setAttribute('stroke-width', '1');
+            warehouse.setAttribute('rx', '1');
+            hexGroup.appendChild(warehouse);
+            
+            // Добавляем символ склада
+            const warehouseIcon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            warehouseIcon.setAttribute('x', x);
+            warehouseIcon.setAttribute('y', y - 12);
+            warehouseIcon.setAttribute('text-anchor', 'middle');
+            warehouseIcon.setAttribute('font-size', '8');
+            warehouseIcon.setAttribute('font-weight', 'bold');
+            warehouseIcon.setAttribute('fill', '#333');
+            warehouseIcon.textContent = '📦';
+            hexGroup.appendChild(warehouseIcon);
+        }
+        
+        svg.appendChild(hexGroup);
+    });
+}
+
+function createHexagon(x, y, size) {
+    const hexagon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    const points = [];
+    
+    for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i;
+        const px = x + size * Math.cos(angle);
+        const py = y + size * Math.sin(angle);
+        points.push(`${px},${py}`);
+    }
+    
+    hexagon.setAttribute('points', points.join(' '));
+    return hexagon;
+}
+
+function showHexInfo(hex) {
+    const detailsDiv = document.getElementById('hex-details');
+    
+    // Показываем загрузку
+    detailsDiv.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    
+    fetch(`/api/hex-info/${hex.id}`)
+        .then(response => response.json())
+        .then(data => {
+            let html = `
+                <h5 class="card-title">Sector ${hex.id}</h5>
+                <hr>
+                <div class="mb-3">
+                    <strong>Status:</strong> 
+                    <span class="badge badge-secondary">${hex.state || 'Unknown'}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Controlled by:</strong> 
+                    <span class="badge ${hex.patron ? 'badge-primary' : 'badge-light'}">
+                        ${data.patron_name || 'No Control'}
+                    </span>
+                </div>
+                <div class="mb-3">
+                    <strong>Infrastructure:</strong> 
+                    ${hex.has_warehouse ? 
+                        '<span class="badge badge-warning">📦 Warehouse</span>' : 
+                        '<span class="badge badge-light">No Infrastructure</span>'
+                    }
+                </div>
+            `;
+            
+            if (data.history && data.history.length > 0) {
+                html += `
+                    <hr>
+                    <h6>Battle History:</h6>
+                    <div class="history-list" style="max-height: 200px; overflow-y: auto;">
+                `;
+                data.history.forEach(event => {
+                    html += `<div class="small text-muted mb-1">• ${event}</div>`;
+                });
+                html += '</div>';
+            }
+            
+            detailsDiv.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error loading hex info:', error);
+            detailsDiv.innerHTML = '<div class="alert alert-danger small">Error loading sector information</div>';
+        });
+}
+
+// Telegram WebApp integration
+if (window.Telegram && window.Telegram.WebApp) {
+    window.Telegram.WebApp.ready();
+    window.Telegram.WebApp.expand();
+    
+    // Настраиваем тему в соответствии с темой Telegram
+    const themeParams = window.Telegram.WebApp.themeParams;
+    if (themeParams.bg_color) {
+        document.body.style.backgroundColor = themeParams.bg_color;
+    }
+}
+</script>
+
+<style>
+#map-container {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+#map-svg {
+    background: radial-gradient(circle at center, #16213e 0%, #0f172a 100%);
+    border-radius: 8px;
+}
+
+#hex-info {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.history-list {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+.badge {
+    font-size: 0.85em;
+}
+
+/* Telegram WebApp styling */
+body {
+    margin: 0;
+    padding: 15px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.container-fluid {
+    max-width: 100%;
+    padding: 0;
+}
+
+@media (max-width: 768px) {
+    .col-lg-8, .col-lg-4 {
+        margin-bottom: 15px;
+    }
+    
+    #map-svg {
+        width: 100%;
+        height: auto;
+    }
+    
+    body {
+        padding: 10px;
+    }
+}
+</style>
+{% endblock %}

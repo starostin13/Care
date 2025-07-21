@@ -1,5 +1,5 @@
 ﻿from datetime import datetime as dt
-from telegram import InlineKeyboardButton
+from telegram import InlineKeyboardButton, WebAppInfo
 import numpy as np
 
 import sqllite_helper
@@ -22,7 +22,8 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
 async def get_main_menu(userId):
     items = [
         [InlineKeyboardButton("Settings", callback_data="callsettings")],
-        [InlineKeyboardButton("Missions", callback_data="callmissions")]
+        [InlineKeyboardButton("Missions", callback_data="callmissions")],
+        [InlineKeyboardButton("🗺️ View Map", web_app=WebAppInfo(url="https://your-domain.com/map"))]
     ]
     if await sqllite_helper.is_warmaster_registered(userId):
         items.append([InlineKeyboardButton("Games", callback_data="callgame")])
