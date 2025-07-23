@@ -11,6 +11,56 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false,
+        },
+        {
+            "name": "🤖 Debug Telegram Bot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/handlers.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONUNBUFFERED": "1"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "autoReload": {
+                "enable": true
+            }
+        },
+        {
+            "name": "🌐 Debug Flask Web App",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/webapp.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONUNBUFFERED": "1",
+                "FLASK_ENV": "development",
+                "FLASK_DEBUG": "1"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "🔧 Debug Both (Bot + Web)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/debug_runner.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONUNBUFFERED": "1"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
         }
     ]
 }

@@ -1,0 +1,89 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "🤖 Run Telegram Bot",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"handlers.py"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			}
+		},
+		{
+			"label": "🌐 Run Flask Web App",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"webapp.py"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			}
+		},
+		{
+			"label": "🔧 Run Both Services",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"debug_runner.py"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			}
+		},
+		{
+			"label": "📦 Install Dependencies",
+			"type": "shell",
+			"command": "pip",
+			"args": [
+				"install",
+				"-r",
+				"requirements.txt"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new"
+			}
+		},
+		{
+			"label": "🗂️ Check Database",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-c",
+				"import sqllite_helper; import asyncio; print('Database connection test...'); asyncio.run(sqllite_helper.get_all_map_cells())"
+			],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new"
+			}
+		}
+	]
+}
