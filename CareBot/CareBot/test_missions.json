@@ -1,0 +1,70 @@
+[
+  {
+    "id": "e4ff2810-71b7-41b9-92dc-d8fc80dabbde",
+    "short_id": "M960",
+    "mission_type": "killteam",
+    "title": "Rescue Mission",
+    "description": "🎯 MISSION M960\nExtract the captured operative from enemy territory.\n\nLocation: Hex 5\nParticipants: Alice, Bob\n\nObjectives:\n1. Locate prisoner\n2. Eliminate guards\n3. Escape to extraction point\n\nSpecial Rules:\n• Prisoner is wounded\n• Alarm system\n\n\n📱 TO REPORT RESULTS:\nSend to Telegram Bot: /result M960 [your_score] [opponent_score]\nExample: /result M960 15 8",
+    "hex_id": 5,
+    "participants": [
+      "player1",
+      "player2"
+    ],
+    "created_at": "2025-07-28T19:09:20.446681",
+    "scheduled_for": null,
+    "completed": true,
+    "result": "15 - 8",
+    "winner_id": "player1"
+  },
+  {
+    "id": "0f5b4c6a-1f86-4077-9119-2d8276b37c6d",
+    "short_id": "M960",
+    "mission_type": "killteam",
+    "title": "Sabotage",
+    "description": "🎯 MISSION M960\nDestroy the enemy communications array.\n\nLocation: Hex 10\nParticipants: Player3, Player4\n\nObjectives:\n1. Locate the array\n2. Plant explosives\n3. Defend until detonation\n\nSpecial Rules:\n• Timed objectives\n• Reinforcements\n\n\n📱 TO REPORT RESULTS:\nSend to Telegram Bot: /result M960 [your_score] [opponent_score]\nExample: /result M960 15 8",
+    "hex_id": 10,
+    "participants": [
+      "player3",
+      "player4"
+    ],
+    "created_at": "2025-07-28T19:09:20.450495",
+    "scheduled_for": null,
+    "completed": false,
+    "result": null,
+    "winner_id": null
+  },
+  {
+    "id": "068252b4-53d6-437e-b72a-cc27db5a7ec8",
+    "short_id": "M960",
+    "mission_type": "wh40k",
+    "title": "Supply Line",
+    "description": "🎯 MISSION M960\nSecure the vital supply convoy route.\n\nLocation: Hex 11\nParticipants: Player4, Player5\n\nObjectives:\n1. Escort convoy\n2. Eliminate ambushes\n3. Reach destination\n\nSpecial Rules:\n• Moving objectives\n• Ambush deployment\n\n\n📱 TO REPORT RESULTS:\nSend to Telegram Bot: /result M960 [your_score] [opponent_score]\nExample: /result M960 15 8",
+    "hex_id": 11,
+    "participants": [
+      "player4",
+      "player5"
+    ],
+    "created_at": "2025-07-28T19:09:20.451503",
+    "scheduled_for": null,
+    "completed": false,
+    "result": null,
+    "winner_id": null
+  },
+  {
+    "id": "e93181d2-5659-4b53-9ac1-c1278deb9be2",
+    "short_id": "M960",
+    "mission_type": "killteam",
+    "title": "Rescue Mission",
+    "description": "🎯 MISSION M960\nExtract the captured operative from enemy territory.\n\nLocation: Hex 12\nParticipants: Player5, Player6\n\nObjectives:\n1. Locate prisoner\n2. Eliminate guards\n3. Escape to extraction point\n\nSpecial Rules:\n• Prisoner is wounded\n• Alarm system\n\n\n📱 TO REPORT RESULTS:\nSend to Telegram Bot: /result M960 [your_score] [opponent_score]\nExample: /result M960 15 8",
+    "hex_id": 12,
+    "participants": [
+      "player5",
+      "player6"
+    ],
+    "created_at": "2025-07-28T19:09:20.452506",
+    "scheduled_for": null,
+    "completed": false,
+    "result": null,
+    "winner_id": null
+  }
+]
