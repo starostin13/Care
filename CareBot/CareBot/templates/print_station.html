@@ -1,0 +1,337 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="text-center mb-4">🖨️ Mission Print Station</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Generate & Print Mission</h5>
+                </div>
+                <div class="card-body">
+                    <form id="missionForm">
+                        <div class="form-group">
+                            <label for="missionType">Mission Type</label>
+                            <select class="form-control" id="missionType" required>
+                                <option value="killteam">Kill Team</option>
+                                <option value="wh40k">Warhammer 40k</option>
+                                <option value="boardingaction">Boarding Action</option>
+                                <option value="combatpatrol">Combat Patrol</option>
+                                <option value="battlefleet">Battlefleet Gothic</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="player1">Player 1 Name</label>
+                            <input type="text" class="form-control" id="player1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="faction1">Player 1 Faction</label>
+                            <select class="form-control" id="faction1" required>
+                                <option value="space_marines">Space Marines</option>
+                                <option value="chaos">Chaos</option>
+                                <option value="orks">Orks</option>
+                                <option value="eldar">Eldar</option>
+                                <option value="tyranids">Tyranids</option>
+                                <option value="imperial_guard">Imperial Guard</option>
+                                <option value="necrons">Necrons</option>
+                                <option value="tau">Tau Empire</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="player2">Player 2 Name</label>
+                            <input type="text" class="form-control" id="player2" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="faction2">Player 2 Faction</label>
+                            <select class="form-control" id="faction2" required>
+                                <option value="chaos">Chaos</option>
+                                <option value="space_marines">Space Marines</option>
+                                <option value="orks">Orks</option>
+                                <option value="eldar">Eldar</option>
+                                <option value="tyranids">Tyranids</option>
+                                <option value="imperial_guard">Imperial Guard</option>
+                                <option value="necrons">Necrons</option>
+                                <option value="tau">Tau Empire</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="hexId">Target Hex ID</label>
+                            <input type="number" class="form-control" id="hexId" min="1" value="1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="scheduledTime">Scheduled Time (Optional)</label>
+                            <input type="datetime-local" class="form-control" id="scheduledTime">
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input type="checkbox" class="form-check-input" id="printImmediately" checked>
+                            <label class="form-check-label" for="printImmediately">
+                                Print immediately after generation
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-block">
+                            🎯 Generate Mission
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Mission Preview</h5>
+                </div>
+                <div class="card-body">
+                    <div id="missionPreview" class="mission-preview">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-file-alt fa-3x mb-3"></i>
+                            <p>Generate a mission to see preview</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Print Status</h6>
+                </div>
+                <div class="card-body">
+                    <div id="printStatus" class="text-center">
+                        <i class="fas fa-printer fa-2x text-muted"></i>
+                        <p class="text-muted mt-2">Ready to print</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Recent Missions</h6>
+                </div>
+                <div class="card-body">
+                    <div id="recentMissions">
+                        <div class="text-muted">No recent missions</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentMission = null;
+
+document.getElementById('missionForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    generateMission();
+});
+
+function generateMission() {
+    const formData = {
+        mission_type: document.getElementById('missionType').value,
+        player1: {
+            name: document.getElementById('player1').value,
+            faction: document.getElementById('faction1').value
+        },
+        player2: {
+            name: document.getElementById('player2').value,
+            faction: document.getElementById('faction2').value
+        },
+        hex_id: parseInt(document.getElementById('hexId').value),
+        scheduled_time: document.getElementById('scheduledTime').value || null,
+        print_immediately: document.getElementById('printImmediately').checked
+    };
+    
+    // Отправляем запрос на генерацию миссии
+    fetch('/api/generate-mission', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        
+        currentMission = data;
+        updateMissionPreview(data);
+        
+        if (formData.print_immediately) {
+            printMission(data.id);
+        }
+        
+        updateRecentMissions();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to generate mission');
+    });
+}
+
+function updateMissionPreview(mission) {
+    const preview = document.getElementById('missionPreview');
+    
+    preview.innerHTML = `
+        <div class="mission-header text-center mb-3">
+            <h5>${mission.title}</h5>
+            <span class="badge badge-primary">${mission.mission_type}</span>
+        </div>
+        
+        <div class="mission-info mb-3">
+            <div class="row">
+                <div class="col-6">
+                    <strong>Hex:</strong> ${mission.hex_id}
+                </div>
+                <div class="col-6">
+                    <strong>Players:</strong> ${mission.participants.length}
+                </div>
+            </div>
+        </div>
+        
+        <div class="mission-description">
+            <strong>Description:</strong>
+            <div class="bg-light p-2 rounded mt-1" style="max-height: 200px; overflow-y: auto; white-space: pre-line; font-size: 0.9em;">
+${mission.description}
+            </div>
+        </div>
+        
+        <div class="text-center mt-3">
+            <button class="btn btn-success" onclick="printMission('${mission.id}')">
+                🖨️ Print Mission
+            </button>
+        </div>
+    `;
+}
+
+function printMission(missionId) {
+    const printStatus = document.getElementById('printStatus');
+    
+    printStatus.innerHTML = `
+        <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+        <p class="text-primary mt-2">Printing...</p>
+    `;
+    
+    fetch(`/api/print-mission/${missionId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            printStatus.innerHTML = `
+                <i class="fas fa-check-circle fa-2x text-success"></i>
+                <p class="text-success mt-2">Printed successfully!</p>
+            `;
+            
+            setTimeout(() => {
+                printStatus.innerHTML = `
+                    <i class="fas fa-printer fa-2x text-muted"></i>
+                    <p class="text-muted mt-2">Ready to print</p>
+                `;
+            }, 3000);
+        } else {
+            printStatus.innerHTML = `
+                <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                <p class="text-danger mt-2">Print failed</p>
+            `;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        printStatus.innerHTML = `
+            <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+            <p class="text-danger mt-2">Print error</p>
+        `;
+    });
+}
+
+function updateRecentMissions() {
+    fetch('/api/missions')
+        .then(response => response.json())
+        .then(missions => {
+            const recentContainer = document.getElementById('recentMissions');
+            
+            if (missions.length === 0) {
+                recentContainer.innerHTML = '<div class="text-muted">No recent missions</div>';
+                return;
+            }
+            
+            const recent = missions.slice(-3).reverse();
+            let html = '';
+            
+            recent.forEach(mission => {
+                html += `
+                    <div class="border-bottom py-2">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <strong>${mission.title}</strong><br>
+                                <small class="text-muted">Hex ${mission.hex_id}</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="printMission('${mission.id}')">
+                                Print
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            recentContainer.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error loading recent missions:', error);
+        });
+}
+
+// Load recent missions on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateRecentMissions();
+});
+</script>
+
+<style>
+.mission-preview {
+    min-height: 300px;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 15px;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: #495057;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.mission-header h5 {
+    color: #007bff;
+    margin-bottom: 10px;
+}
+
+#printStatus {
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+</style>
+{% endblock %}

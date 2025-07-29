@@ -1,0 +1,214 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="text-center mb-4">🎯 Mission Management</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Active Missions</h5>
+                    <button class="btn btn-primary btn-sm float-right" onclick="generateNewMission()">
+                        Generate New Mission
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="missions-list">
+                        {% if missions %}
+                            {% for mission in missions %}
+                            <div class="mission-card mb-3 p-3 border rounded">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">{{ mission.title }}</h6>
+                                        <p class="text-muted mb-1">{{ mission.mission_type.value | title }}</p>
+                                        <small class="text-muted">Hex {{ mission.hex_id }} • {{ mission.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-info btn-sm" onclick="viewMission('{{ mission.id }}')">
+                                            View
+                                        </button>
+                                        <button class="btn btn-success btn-sm" onclick="printMission('{{ mission.id }}')">
+                                            🖨️ Print
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-muted">
+                                <i class="fas fa-clipboard-list fa-3x mb-3"></i>
+                                <p>No active missions</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Mission Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h4 class="text-primary">{{ missions|length }}</h4>
+                            <small>Active</small>
+                        </div>
+                        <div class="col-6">
+                            <h4 class="text-success">0</h4>
+                            <small>Completed Today</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-primary btn-block mb-2" onclick="window.location.href='/print-station'">
+                        🖨️ Print Station
+                    </button>
+                    <button class="btn btn-info btn-block mb-2" onclick="window.location.href='/map'">
+                        🗺️ View Map
+                    </button>
+                    <button class="btn btn-warning btn-block" onclick="syncWithMobile()">
+                        📱 Sync with Mobile
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mission Details Modal -->
+<div class="modal fade" id="missionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Mission Details</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="missionDetails">
+                Loading...
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success" onclick="printCurrentMission()">
+                    🖨️ Print Mission
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentMissionId = null;
+
+function generateNewMission() {
+    // Здесь должен быть интерфейс для создания новой миссии
+    alert('Mission generation interface - to be implemented');
+}
+
+function viewMission(missionId) {
+    currentMissionId = missionId;
+    
+    fetch(`/api/mission/${missionId}`)
+        .then(response => response.json())
+        .then(data => {
+            const modalBody = document.getElementById('missionDetails');
+            
+            if (data.error) {
+                modalBody.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            } else {
+                modalBody.innerHTML = `
+                    <h6>${data.title}</h6>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Type:</strong> ${data.mission_type}<br>
+                            <strong>Hex:</strong> ${data.hex_id}<br>
+                            <strong>Status:</strong> ${data.completed ? 'Completed' : 'Active'}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Created:</strong> ${new Date(data.created_at).toLocaleString()}<br>
+                            <strong>Participants:</strong> ${data.participants.length}
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="description">
+                        <strong>Description:</strong><br>
+                        <div class="bg-light p-3 rounded mt-2" style="white-space: pre-line;">${data.description}</div>
+                    </div>
+                `;
+            }
+            
+            $('#missionModal').modal('show');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to load mission details');
+        });
+}
+
+function printMission(missionId) {
+    if (confirm('Print this mission?')) {
+        fetch(`/api/print-mission/${missionId}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Mission sent to printer!');
+            } else {
+                alert('Failed to print mission: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to print mission');
+        });
+    }
+}
+
+function printCurrentMission() {
+    if (currentMissionId) {
+        printMission(currentMissionId);
+    }
+}
+
+function syncWithMobile() {
+    alert('Mobile sync status - to be implemented');
+}
+
+// Auto-refresh missions every 30 seconds
+setInterval(function() {
+    location.reload();
+}, 30000);
+</script>
+
+<style>
+.mission-card {
+    transition: box-shadow 0.3s ease;
+}
+
+.mission-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.modal-body {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+</style>
+{% endblock %}
