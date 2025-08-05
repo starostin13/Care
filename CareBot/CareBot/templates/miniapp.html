@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareBot Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .mission-card {
+            background: var(--tg-theme-secondary-bg-color, #f1f1f1);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #ccc);
+        }
+        .mission-id {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--tg-theme-accent-text-color, #007aff);
+            margin-bottom: 8px;
+        }
+        .mission-title {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .mission-details {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #666);
+        }
+        .btn {
+            background: var(--tg-theme-button-color, #007aff);
+            color: var(--tg-theme-button-text-color, #fff);
+            border: none;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .btn:hover {
+            opacity: 0.8;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .error {
+            color: #ff3b30;
+            text-align: center;
+            padding: 20px;
+        }
+        .map-container {
+            background: var(--tg-theme-secondary-bg-color, #f8f8f8);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .hex-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 4px;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+        .hex {
+            aspect-ratio: 1;
+            background: var(--tg-theme-hint-color, #ddd);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .hex.active {
+            background: var(--tg-theme-accent-text-color, #007aff);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 CareBot Mini App</h1>
+        
+        <!-- Карта -->
+        <div class="map-container">
+            <h2>🗺️ Карта кампании</h2>
+            <div class="hex-grid" id="hexGrid">
+                <!-- Hexes будут загружены через JavaScript -->
+            </div>
+            <p><small>Активные миссии выделены синим</small></p>
+        </div>
+        
+        <!-- Список миссий -->
+        <div id="missionsContainer">
+            <div class="loading">
+                <p>🔄 Загрузка миссий...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram Web App
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // Применяем цветовую схему Telegram
+        document.body.style.backgroundColor = tg.themeParams.bg_color || '#ffffff';
+        document.body.style.color = tg.themeParams.text_color || '#000000';
+
+        // Загрузка миссий
+        async function loadMissions() {
+            try {
+                const response = await fetch('/api/missions');
+                const data = await response.json();
+                
+                displayMissions(data.missions);
+                updateHexGrid(data.missions);
+            } catch (error) {
+                console.error('Error loading missions:', error);
+                displayError('Ошибка загрузки миссий');
+            }
+        }
+
+        // Отображение миссий
+        function displayMissions(missions) {
+            const container = document.getElementById('missionsContainer');
+            
+            if (missions.length === 0) {
+                container.innerHTML = '<div class="error">📭 Нет активных миссий</div>';
+                return;
+            }
+
+            const missionsHtml = missions.map(mission => `
+                <div class="mission-card">
+                    <div class="mission-id">📋 ${mission.short_id}</div>
+                    <div class="mission-title">${mission.title}</div>
+                    <div class="mission-details">
+                        📍 Hex ${mission.hex_id} | 
+                        🎮 ${mission.mission_type} | 
+                        👥 ${mission.participants_count} игроков
+                    </div>
+                    <div class="mission-details">
+                        📅 ${new Date(mission.created_at).toLocaleString('ru-RU')}
+                    </div>
+                    <button class="btn" onclick="viewMission('${mission.short_id}')">
+                        📖 Подробнее
+                    </button>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <h2>🎯 Активные миссии (${missions.length})</h2>
+                ${missionsHtml}
+            `;
+        }
+
+        // Обновление hex сетки
+        function updateHexGrid(missions) {
+            const hexGrid = document.getElementById('hexGrid');
+            const activeMissions = new Set(missions.map(m => m.hex_id));
+            
+            // Создаем простую 5x5 сетку
+            let hexesHtml = '';
+            for (let i = 1; i <= 25; i++) {
+                const isActive = activeMissions.has(i);
+                hexesHtml += `
+                    <div class="hex ${isActive ? 'active' : ''}" onclick="selectHex(${i})">
+                        ${i}
+                    </div>
+                `;
+            }
+            
+            hexGrid.innerHTML = hexesHtml;
+        }
+
+        // Обработчики событий
+        function viewMission(missionId) {
+            tg.showAlert(`Миссия ${missionId}\n\nДля ввода результата используйте команду в боте:\n/result ${missionId} [ваши_очки] [очки_противника]`);
+        }
+
+        function selectHex(hexId) {
+            tg.showAlert(`Hex ${hexId}\n\nЗдесь можно разместить информацию о клетке карты`);
+        }
+
+        function displayError(message) {
+            document.getElementById('missionsContainer').innerHTML = 
+                `<div class="error">${message}</div>`;
+        }
+
+        // Кнопка "Обновить" в Telegram
+        tg.MainButton.text = "🔄 Обновить";
+        tg.MainButton.show();
+        tg.MainButton.onClick(loadMissions);
+
+        // Загружаем данные при запуске
+        loadMissions();
+        
+        // Обновляем каждые 30 секунд
+        setInterval(loadMissions, 30000);
+    </script>
+</body>
+</html>

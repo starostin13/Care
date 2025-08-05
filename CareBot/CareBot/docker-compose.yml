@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # База данных PostgreSQL (можно заменить на SQLite для простоты)
+  database:
+    image: postgres:15-alpine
+    container_name: carebot_db
+    environment:
+      POSTGRES_DB: carebot
+      POSTGRES_USER: carebot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-carebot_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - carebot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carebot"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis для кэширования и очередей
+  redis:
+    image: redis:7-alpine
+    container_name: carebot_redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - carebot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Веб-приложение (Mini-app + Flask)
+  webapp:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: carebot_webapp
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://carebot:${DB_PASSWORD:-carebot_password}@database:5432/carebot
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+    volumes:
+      - ./db:/app/db
+      - ./static:/app/static
+      - ./logs:/app/logs
+      - missions_data:/app/missions
+    ports:
+      - "8080:5000"
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - carebot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Telegram Bot
+  telegram_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: carebot_telegram
+    environment:
+      - BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_URL=postgresql://carebot:${DB_PASSWORD:-carebot_password}@database:5432/carebot
+      - REDIS_URL=redis://redis:6379/0
+      - WEBAPP_URL=http://webapp:5000
+    volumes:
+      - ./db:/app/db
+      - ./logs:/app/logs
+      - missions_data:/app/missions
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      webapp:
+        condition: service_healthy
+    networks:
+      - carebot_network
+    restart: unless-stopped
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: carebot_nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/var/www/static:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - webapp
+    networks:
+      - carebot_network
+    restart: unless-stopped
+
+  # Мобильное приложение (опционально, для разработки)
+  mobile_sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: carebot_mobile_sync
+    environment:
+      - DATABASE_URL=postgresql://carebot:${DB_PASSWORD:-carebot_password}@database:5432/carebot
+      - REDIS_URL=redis://redis:6379/0
+    command: ["python", "sync_api.py"]
+    volumes:
+      - missions_data:/app/missions
+    ports:
+      - "8081:8081"
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - carebot_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  missions_data:
+
+networks:
+  carebot_network:
+    driver: bridge

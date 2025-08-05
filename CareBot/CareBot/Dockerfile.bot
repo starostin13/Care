@@ -1,0 +1,45 @@
+# Dockerfile для Telegram бота
+FROM python:3.11-slim
+
+# Устанавливаем системные зависимости
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создаем рабочую директорию
+WORKDIR /app
+
+# Копируем файлы зависимостей
+COPY requirements.txt .
+
+# Устанавливаем Python зависимости
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копируем необходимые файлы для бота
+COPY handlers.py .
+COPY config.py .
+COPY keyboard_constructor.py .
+COPY players_helper.py .
+COPY sqllite_helper.py .
+COPY mission_helper.py .
+COPY map_helper.py .
+COPY views.py .
+COPY mission_engine/ ./mission_engine/
+COPY db/ ./db/
+COPY utils/ ./utils/
+COPY services/ ./services/
+
+# Создаем директории для данных
+RUN mkdir -p logs db/data
+
+# Создаем пользователя для запуска бота
+RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
+USER botuser
+
+# Переменные окружения
+ENV PYTHONPATH=/app
+ENV BOT_MODE=production
+
+# Команда запуска бота
+CMD ["python", "handlers.py"]
