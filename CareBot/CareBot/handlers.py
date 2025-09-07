@@ -1,20 +1,17 @@
 ﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim:fileencoding=utf-8
-from asyncio.windows_events import NULL
 from datetime import datetime
-from msilib import sequence
-from telegram import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
-from CareBot import map_helper
+import map_helper
 import config
 import players_helper
 import keyboard_constructor
 import logging
 import sqllite_helper
 import mission_helper
-import os
 
 # Enable logging
 logging.basicConfig(
@@ -78,7 +75,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:
-        if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
+        if participant_id != (str(update.effective_user.id),):  # Исключаем текущего пользователя
             try:
                 await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
             except Exception as e:

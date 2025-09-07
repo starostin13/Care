@@ -4,16 +4,28 @@ from typing import Optional
 import sqllite_helper
 import map_helper
 import random
+from database.killzone_manager import get_killzone_for_mission
 
 def generate_new_one(rules):
     # Base mission types and objectives for different rule sets
     if rules == "killteam":
-        deploy_types = ["Breach", "Sabotage", "Escape"]
+        # 9 основных миссий Kill Team
         missions = [
-            "Recon Sweep", "Data Recovery", "Assassination", 
-            "Asset Denial", "Supply Drop", "Scan and Locate"
+            "Secure: Operatives must secure and hold key objectives",
+            "Loot: Operatives must retrieve valuable resources from the battlefield", 
+            "Transmission: Operatives must establish communication links and transmit data",
+            "Upload: Operatives must access terminals and upload critical intelligence",
+            "Intel: Operatives must gather intelligence from enemy positions",
+            "Extraction: Operatives must extract valuable assets from hostile territory",
+            "Sabotage: Operatives must sabotage enemy infrastructure and equipment",
+            "Power Surge: Operatives must disrupt enemy power systems and defensive networks",
+            "Coordinates: Operatives must destroy enemy warehouse coordinates and supply lines"
         ]
-        description = f"{random.choice(missions)}: Operatives must {random.choice(['secure objectives', 'eliminate targets', 'retrieve intelligence', 'establish control points'])}"
+        
+        mission_name = random.choice(missions).split(":")[0]
+        description = random.choice(missions)
+        
+        return (mission_name, rules, 2, description)
         
     elif rules == "boarding_action":
         deploy_types = ["Breach Points", "Ship Interface", "Void Strike"]
@@ -22,6 +34,8 @@ def generate_new_one(rules):
             "Datacore Theft", "Life Support Sabotage", "Vessel Capture"
         ]
         description = f"{random.choice(missions)}: Forces must {random.choice(['secure critical ship systems', 'eliminate enemy crew', 'download ship schematics', 'establish control of key areas'])}"
+        deploy = random.choice(deploy_types)
+        return (deploy, rules, 2, description)
         
     elif rules == "combat_patrol":
         deploy_types = ["Strategic Reserves", "Tactical Deployment", "Flanking Maneuvers"]
@@ -30,6 +44,8 @@ def generate_new_one(rules):
             "Hold Ground", "Supply Line Disruption", "Priority Target"
         ]
         description = f"{random.choice(missions)}: Patrol forces must {random.choice(['secure and hold territory', 'eliminate enemy patrols', 'establish forward operating base', 'capture strategic assets'])}"
+        deploy = random.choice(deploy_types)
+        return (deploy, rules, 2, description)
         
     elif rules == "wh40k":
         deploy_types = ["Dawn of War", "Hammer and Anvil", "Search and Destroy"]
@@ -38,6 +54,8 @@ def generate_new_one(rules):
             "Scorched Earth", "Retrieval Mission", "Cleanse and Capture"
         ]
         description = f"{random.choice(missions)}: Armies must {random.choice(['secure critical objectives', 'destroy enemy forces', 'hold strategic positions', 'capture enemy intelligence'])}"
+        deploy = random.choice(deploy_types)
+        return (deploy, rules, 2, description)
         
     elif rules == "battlefleet":
         deploy_types = ["Convoy Pattern", "Battle Line", "Orbital Superiority"]
@@ -46,6 +64,8 @@ def generate_new_one(rules):
             "Naval Blockade", "Ship Hunter", "Defense Platform Assault"
         ]
         description = f"{random.choice(missions)}: Fleet must {random.choice(['destroy enemy vessels', 'protect supply ships', 'establish orbital dominance', 'disable enemy stations'])}"
+        deploy = random.choice(deploy_types)
+        return (deploy, rules, 2, description)
         
     else:
         # Default case if rules type is not recognized
@@ -63,7 +83,24 @@ async def get_mission(rules: Optional[str]):
         mission = generate_new_one(rules)
         await sqllite_helper.save_mission(mission)
 
-    if "rules" == "wh40k":
+    if rules == "killteam":
+        cell_id = mission[2]
+        sqllite_helper.lock_mission(cell_id)
+        state = await sqllite_helper.get_state(cell_id)
+        
+        # Получаем killzone для данного state гекса (или None)
+        hex_state = state[0] if state is not None else None
+        killzone = get_killzone_for_mission(hex_state)
+        mission = mission + (f"Killzone: {killzone}",)
+        
+        if state is not None:
+            mission = mission + (state[0],)
+        
+        history = await sqllite_helper.get_cell_histrory(cell_id)
+        for point in history:
+            mission = mission + point
+
+    elif rules == "wh40k":
         cell_id = mission[2]
         sqllite_helper.lock_mission(cell_id)
         number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
@@ -71,7 +108,7 @@ async def get_mission(rules: Optional[str]):
         history = await sqllite_helper.get_cell_histrory(cell_id)
         state = await sqllite_helper.get_state(cell_id)
         if state is not None:
-            mission = mission + (state[0])
+            mission = mission + (state[0],)
     
         for point in history:
             mission = mission + point
