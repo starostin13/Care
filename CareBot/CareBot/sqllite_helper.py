@@ -346,3 +346,16 @@ async def get_hexes_by_alliance(alliance_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('SELECT id FROM map WHERE patron=?', (alliance_id,)) as cursor:
             return await cursor.fetchall()
+
+async def get_mission_id_by_battle_id(battle_id):
+    """Get the mission ID associated with a battle."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('SELECT mission_id FROM battles WHERE id = ?', (battle_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+async def get_mission_details(mission_id):
+    """Get mission details by mission ID."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('SELECT deploy, rules, cell, mission_description FROM mission_stack WHERE id = ?', (mission_id,)) as cursor:
+            return await cursor.fetchone()
