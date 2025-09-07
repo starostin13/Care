@@ -156,6 +156,11 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
         # Извлекаем значение после решётки и преобразуем его в число
         battle_id = int(battle_id_line[1:])
         await mission_helper.write_battle_result(battle_id, user_reply)
+        
+        # Apply mission-specific rewards
+        rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
+        
+        # Update the map based on battle results
         await map_helper.update_map(battle_id, user_reply, update.effective_user.id)
 
     # Respond to the user's reply
