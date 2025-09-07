@@ -359,3 +359,17 @@ async def get_mission_details(mission_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('SELECT deploy, rules, cell, mission_description FROM mission_stack WHERE id = ?', (mission_id,)) as cursor:
             return await cursor.fetchone()
+
+async def get_alliance_resources(alliance_id):
+    """Get the current resource amount for an alliance.
+    
+    Args:
+        alliance_id: The ID of the alliance
+        
+    Returns:
+        The current resource amount (integer)
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('SELECT common_resource FROM alliances WHERE id = ?', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0

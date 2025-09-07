@@ -203,6 +203,22 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
                 logger.info(f"Loot mission: Winner {winner_alliance_id} received {additional_resources + 1} resources total")
                 logger.info(f"Loot mission: Loser {loser_alliance_id} received 1 resource")
         
+        elif mission_type.lower() == "transmission":
+            # Winner gets resources equal to opponent's resources but limited by own resources
+            if winner_alliance_id and loser_alliance_id:
+                # Get current resource amounts
+                winner_resources = await sqllite_helper.get_alliance_resources(winner_alliance_id)
+                loser_resources = await sqllite_helper.get_alliance_resources(loser_alliance_id)
+                
+                # Calculate transfer amount (minimum of loser's resources and winner's resources)
+                transfer_amount = min(loser_resources, winner_resources)
+                
+                if transfer_amount > 0:
+                    await sqllite_helper.increase_common_resource(winner_alliance_id, transfer_amount)
+                    logger.info(f"Transmission mission: Winner {winner_alliance_id} received {transfer_amount} resources")
+                else:
+                    logger.info(f"Transmission mission: No resources transferred (either winner or loser has 0 resources)")
+        
         elif mission_type.lower() == "secure":
             # Winner gets resources, may create warehouse
             if winner_alliance_id:
