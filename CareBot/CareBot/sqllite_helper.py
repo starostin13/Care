@@ -5,7 +5,9 @@ from xmlrpc.client import DateTime
 
 from aiosqlite import cursor
 
-DATABASE_PATH = r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database"
+# Путь к SQLite базе данных (работает и локально и в Docker)
+import os
+DATABASE_PATH = os.getenv('SQLITE_DB_PATH', r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database")
 
 async def add_battle_participant(battle_id, participant):
     async with aiosqlite.connect(DATABASE_PATH) as db:

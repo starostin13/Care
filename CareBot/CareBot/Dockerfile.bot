@@ -40,6 +40,7 @@ USER botuser
 # Переменные окружения
 ENV PYTHONPATH=/app
 ENV BOT_MODE=production
+ENV SQLITE_DB_PATH=/app/db/database
 
 # Команда запуска бота
 CMD ["python", "handlers.py"]
