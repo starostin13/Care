@@ -1,6 +1,5 @@
 ﻿from datetime import datetime as dt
 from telegram import InlineKeyboardButton
-import numpy as np
 
 import sqllite_helper
 

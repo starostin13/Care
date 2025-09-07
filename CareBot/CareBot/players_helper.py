@@ -1,4 +1,4 @@
-from CareBot.sqllite_helper import get_alliance_of_warmaster, get_warmasters_opponents
+from sqllite_helper import get_alliance_of_warmaster, get_warmasters_opponents
 import sqllite_helper
 
 async def add_warmaster(user_id):

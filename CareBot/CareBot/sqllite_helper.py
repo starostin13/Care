@@ -93,13 +93,14 @@ async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
             return await cursor.fetchone()
 
 async def get_rules_of_mission(number_of_mission):
-    async with aiosqlite(DATABASE_PATH) as db:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT rules
             FROM schedule
             WHERE id = ?
-        ''', (number_of_mission)) as cursor:
-            return await cursor.fetchone()
+        ''', (number_of_mission,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
 
 async def get_state(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -326,3 +327,22 @@ async def decrease_common_resource(alliance_id, amount=1):
         The new resource value
     """
     return await _update_alliance_resource(alliance_id, -amount)
+
+async def create_warehouse(cell_id):
+    """Создает склад в указанном гексе."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('UPDATE map SET has_warehouse=1 WHERE id=?', (cell_id,))
+        await db.commit()
+
+async def has_warehouse_in_hex(cell_id):
+    """Проверяет, есть ли склад в указанном гексе."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('SELECT has_warehouse FROM map WHERE id=?', (cell_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] == 1 if result else False
+
+async def get_hexes_by_alliance(alliance_id):
+    """Получает все гексы, контролируемые указанным альянсом."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('SELECT id FROM map WHERE patron=?', (alliance_id,)) as cursor:
+            return await cursor.fetchall()
