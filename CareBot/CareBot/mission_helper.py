@@ -294,6 +294,17 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
                     "Secure mission: Winner %s received 2 resources",
                     winner_alliance_id)
 
+        elif mission_type.lower() == "intel":
+            # Creates warehouse in the hex where the mission took place
+            if winner_alliance_id:
+                cell_id = await sqllite_helper.get_cell_id_by_battle_id(
+                    battle_id)
+                await sqllite_helper.create_warehouse(cell_id)
+                logger.info(
+                    "Intel mission: Warehouse created in hex %s",
+                    cell_id)
+
+        elif mission_type.lower() == "sabotage":
             # No resource changes for sabotage missions
             logger.info("Sabotage mission: No resource changes")
 
