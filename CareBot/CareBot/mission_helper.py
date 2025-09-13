@@ -114,7 +114,7 @@ async def get_mission(rules: Optional[str]):
 
     if rules == "killteam":
         cell_id = mission[2]
-        sqllite_helper.lock_mission(cell_id)
+        await sqllite_helper.lock_mission(cell_id)
         state = await sqllite_helper.get_state(cell_id)
 
         # Получаем killzone для данного state гекса (или None)
@@ -131,7 +131,7 @@ async def get_mission(rules: Optional[str]):
 
     elif rules == "wh40k":
         cell_id = mission[2]
-        sqllite_helper.lock_mission(cell_id)
+        await sqllite_helper.lock_mission(cell_id)
         number_of_safe_next_cells = await sqllite_helper.\
             get_number_of_safe_next_cells(cell_id)
         mission = mission + \
