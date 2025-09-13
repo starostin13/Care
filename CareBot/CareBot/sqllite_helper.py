@@ -35,7 +35,7 @@ async def add_to_story(cell_id, text):
         ''', (cell_id, text))
         await db.commit()
 
-async def get_cell_histrory(cell_id):
+async def get_cell_history(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT content
