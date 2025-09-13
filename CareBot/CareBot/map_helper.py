@@ -16,7 +16,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-async def update_map(battle_id, battle_result, user_telegram_id, scenario):
+async def update_map(battle_id, battle_result, user_telegram_id, scenario: Optional[str]):
     # Разделяем результат битвы на два числа
     scores = battle_result.split()
     user_score = int(scores[0])
