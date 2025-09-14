@@ -159,8 +159,8 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # Apply mission-specific rewards
         rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
-        scenario_line = battle_id_line = next((line for line in lines if line.startswith('📜')), None)
-        scenario_name_regexp_result = re.search(r"📜(.*?)\:", text)
+        scenario_line = next((line for line in lines if line.startswith('📜')), None)
+        scenario_name_regexp_result = re.search(r"📜(.*?)\:", scenario_line) if scenario_line else None
         scenario = None
         if scenario_name_regexp_result:
             scenario = scenario_name_regexp_result.group(1)
