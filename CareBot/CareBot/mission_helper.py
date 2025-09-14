@@ -125,7 +125,7 @@ async def get_mission(rules: Optional[str]):
         if state is not None:
             mission = mission + (state[0],)
 
-        history = await sqllite_helper.get_cell_histrory(cell_id)
+        history = await sqllite_helper.get_cell_history(cell_id)
         for point in history:
             mission = mission + point
 
@@ -134,7 +134,7 @@ async def get_mission(rules: Optional[str]):
         await sqllite_helper.lock_mission(cell_id)
         number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
         mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
-        history = await sqllite_helper.get_cell_histrory(cell_id)
+        history = await sqllite_helper.get_cell_history(cell_id)
         state = await sqllite_helper.get_state(cell_id)
         if state is not None:
             mission = mission + (state[0],)
