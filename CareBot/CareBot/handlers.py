@@ -160,8 +160,15 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
         # Apply mission-specific rewards
         rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
         
+        scenario = await mission_helper.get_scenario(battle_id)
+
         # Update the map based on battle results
-        await map_helper.update_map(battle_id, user_reply, update.effective_user.id)
+        await map_helper.update_map(
+            battle_id,
+            user_reply,
+            update.effective_user.id,
+            scenario
+        )
 
     # Respond to the user's reply
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
