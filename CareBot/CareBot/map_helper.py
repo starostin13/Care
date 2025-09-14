@@ -3,6 +3,7 @@
 # vim:fileencoding=utf-8
 from ast import Tuple
 from math import e, fabs
+from typing import Optional
 import sqllite_helper
 import logging
 import random
