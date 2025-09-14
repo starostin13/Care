@@ -1,20 +1,17 @@
 ﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim:fileencoding=utf-8
-from asyncio.windows_events import NULL
 from datetime import datetime
-from msilib import sequence
-from telegram import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
-from CareBot import map_helper
+import map_helper
 import config
 import players_helper
 import keyboard_constructor
 import logging
 import sqllite_helper
 import mission_helper
-import os
 
 # Enable logging
 logging.basicConfig(
@@ -52,8 +49,11 @@ async def contact_callback(update, bot):
     sqllite_helper.register_warmaster(userid, phone)
     
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # update.callback_query.data 'mission_sch_2'
+    mission_number = int(update.callback_query.data.replace("mission_sch_", ""))
+    rules = await sqllite_helper.get_rules_of_mission(mission_number)
     # Получаем миссию из базы данных
-    mission = await mission_helper.get_mission()
+    mission = await mission_helper.get_mission(rules=rules)
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
     index_of_mission_id = 2
@@ -75,7 +75,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:
-        if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
+        if participant_id[0] != str(update.effective_user.id):  # Исключаем текущего пользователя
             try:
                 await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
             except Exception as e:
@@ -109,7 +109,7 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data = query.data
     data_arr = data.split(',')
     # ['Sat Apr 27 00:00:00 2024', 'rule:killteam']
-    sqllite_helper.insert_to_schedule(
+    await sqllite_helper.insert_to_schedule(
         datetime.strptime(data_arr[0],'%c'),
         data_arr[1].split(':')[1],
         update.effective_user.id)
@@ -156,7 +156,22 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
         # Извлекаем значение после решётки и преобразуем его в число
         battle_id = int(battle_id_line[1:])
         await mission_helper.write_battle_result(battle_id, user_reply)
-        await map_helper.check_patronage(battle_id, user_reply, update.effective_user.id)
+        
+        # Apply mission-specific rewards
+        rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
+        scenario_line = next((line for line in lines if line.startswith('📜')), None)
+        scenario_name_regexp_result = re.search(r"📜(.*?)\:", scenario_line) if scenario_line else None
+        scenario = None
+        if scenario_name_regexp_result:
+            scenario = scenario_name_regexp_result.group(1)
+
+        # Update the map based on battle results
+        await map_helper.update_map(
+            battle_id,
+            user_reply,
+            update.effective_user.id,
+            scenario
+        )
 
     # Respond to the user's reply
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
