@@ -132,10 +132,8 @@ async def get_mission(rules: Optional[str]):
     elif rules == "wh40k":
         cell_id = mission[2]
         await sqllite_helper.lock_mission(cell_id)
-        number_of_safe_next_cells = await sqllite_helper.\
-            get_number_of_safe_next_cells(cell_id)
-        mission = mission + \
-            (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
+        number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
+        mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
         history = await sqllite_helper.get_cell_histrory(cell_id)
         state = await sqllite_helper.get_state(cell_id)
         if state is not None:

@@ -126,7 +126,7 @@ async def get_state(cell_id):
             WHERE id = ?
         ''', (cell_id,)) as cursor:
             result = await cursor.fetchone()
-            return result if result else None
+            return result[0] if result else None
 
 
 async def add_battle_result(mission_id, counts1, counts2):
