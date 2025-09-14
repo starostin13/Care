@@ -321,8 +321,9 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         elif mission_type.lower() == "power surge" or mission_type.lower() == "coordinates":
             # Loser loses resources equal to number of warehouses (minimum 1)
             if winner_alliance_id and loser_alliance_id:
-                warehouse_count = await sqllite_helper.\
-                    get_warehouse_count_by_alliance(loser_alliance_id)
+                warehouse_count = await (
+                    sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
+                )
                 resource_loss = max(1, warehouse_count)
                 
                 await sqllite_helper.decrease_common_resource(
