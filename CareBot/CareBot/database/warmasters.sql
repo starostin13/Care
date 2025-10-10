@@ -13,7 +13,8 @@ CREATE TABLE warmasters (
     alliance      INTEGER DEFAULT (0),
     nickname      TEXT,
     registered_as TEXT    UNIQUE,
-    faction       TEXT
+    faction       TEXT,
+    is_admin      INTEGER DEFAULT (0)
 );
 
 INSERT INTO warmasters (
