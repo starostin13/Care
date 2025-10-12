@@ -206,7 +206,7 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
 async def get_settings(telegram_user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT nickname, registered_as FROM warmasters 
+            SELECT nickname, registered_as, language, notifications_enabled FROM warmasters 
             WHERE telegram_id=?
         ''', (telegram_user_id,)) as cursor:
             return await cursor.fetchone()
@@ -336,6 +336,30 @@ async def set_nickname(user_telegram_id, nickname):
             UPDATE warmasters SET nickname=? WHERE telegram_id=?
         ''', (nickname, user_telegram_id))
         await db.commit()
+
+
+async def set_language(user_telegram_id, language):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE warmasters SET language=? WHERE telegram_id=?
+        ''', (language, user_telegram_id))
+        await db.commit()
+
+
+async def toggle_notifications(user_telegram_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT notifications_enabled FROM warmasters WHERE telegram_id=?
+        ''', (user_telegram_id,)) as cursor:
+            result = await cursor.fetchone()
+            current_value = result[0] if result else 1
+        
+        new_value = 0 if current_value == 1 else 1
+        await db.execute('''
+            UPDATE warmasters SET notifications_enabled=? WHERE telegram_id=?
+        ''', (new_value, user_telegram_id))
+        await db.commit()
+        return new_value
 
 async def _update_alliance_resource(alliance_id, change_amount):
     """Helper function to update alliance resources.
