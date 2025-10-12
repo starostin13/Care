@@ -30,7 +30,7 @@ async def get_main_menu(userId):
 
 async def setting(userId):
     settings = await sqllite_helper.get_settings(userId)
-    items = [[]]
+    items = []
     
     if not settings:
         items.append([InlineKeyboardButton("Set the name", callback_data="requestsetname")])
