@@ -29,12 +29,25 @@ async def get_main_menu(userId):
     return items
 
 async def setting(userId):
-    settings =await sqllite_helper.get_settings(userId)
+    settings = await sqllite_helper.get_settings(userId)
     items = [[]]
+    
     if not settings:
         items.append([InlineKeyboardButton("Set the name", callback_data="requestsetname")])
     else:
-        if not settings[1]:
+        # Show current language
+        current_language = settings[2] if settings[2] else 'en'
+        items.append([InlineKeyboardButton(f"Language: {current_language}", callback_data="changelanguage")])
+        
+        # Show notification status
+        notifications_on = settings[3] if len(settings) > 3 else 1
+        notification_status = "ON" if notifications_on == 1 else "OFF"
+        items.append([InlineKeyboardButton(f"Weekday notifications: {notification_status}", callback_data="togglenotifications")])
+        
+        if not settings[0]:  # nickname not set
+            items.append([InlineKeyboardButton("Set the name", callback_data="requestsetname")])
+        
+        if not settings[1]:  # registered_as not set
             items.append([InlineKeyboardButton("Registration", callback_data="registration")])
     
     items.append([InlineKeyboardButton("Back", callback_data="start")])
@@ -73,3 +86,12 @@ async def today_schedule(user_id):
     buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}'),appointments)]
     
     return [list(buttons)]
+
+
+async def language_selection():
+    languages = [
+        [InlineKeyboardButton("🇬🇧 English", callback_data="lang:en")],
+        [InlineKeyboardButton("🇷🇺 Русский", callback_data="lang:ru")],
+        [InlineKeyboardButton("Back", callback_data="callsettings")]
+    ]
+    return languages

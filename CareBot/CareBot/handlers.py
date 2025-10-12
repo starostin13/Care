@@ -215,6 +215,42 @@ async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await query.edit_message_text("Your appointments:", reply_markup=markup)
     return MISSIONS
 
+
+async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    menu = await keyboard_constructor.language_selection()
+    query = update.callback_query
+    await query.answer()
+    markup = InlineKeyboardMarkup(menu)
+    await query.edit_message_text("Select your language:", reply_markup=markup)
+    return MAIN_MENU
+
+
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    language = query.data.split(':')[1]
+    await sqllite_helper.set_language(update.effective_user.id, language)
+    await query.answer()
+    
+    # Return to settings
+    menu = await keyboard_constructor.setting(update.effective_user.id)
+    markup = InlineKeyboardMarkup(menu)
+    await query.edit_message_text("Language updated! Your settings:", reply_markup=markup)
+    return MAIN_MENU
+
+
+async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    new_value = await sqllite_helper.toggle_notifications(update.effective_user.id)
+    await query.answer()
+    
+    status = "enabled" if new_value == 1 else "disabled"
+    
+    # Return to settings
+    menu = await keyboard_constructor.setting(update.effective_user.id)
+    markup = InlineKeyboardMarkup(menu)
+    await query.edit_message_text(f"Weekday notifications {status}! Your settings:", reply_markup=markup)
+    return MAIN_MENU
+
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to the Crusade Bot! Please type /start to begin.")
@@ -230,7 +266,10 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(setting, pattern='^callsettings$'),
             CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
             CallbackQueryHandler(registration_call, pattern='^registration$'),
-            CallbackQueryHandler(show_missions, pattern='^callmissions$')
+            CallbackQueryHandler(show_missions, pattern='^callmissions$'),
+            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+            CallbackQueryHandler(set_language, pattern='^lang:'),
+            CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$')
         ],
         SETTINGS: [
             CallbackQueryHandler(im_in)
