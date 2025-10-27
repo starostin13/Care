@@ -10,7 +10,7 @@ Warmasters now have access to personalized settings through the bot interface. T
 
 ### 1. Language Selection
 - **Available Languages:** English (🇬🇧) and Russian (🇷🇺)
-- **Default:** English ('en')
+- **Default:** Russian ('ru')
 - **Access:** Settings menu → "Language: [current]" button
 - **Storage:** `warmasters.language` column in database
 
@@ -56,7 +56,7 @@ CREATE TABLE warmasters (
     nickname      TEXT,
     registered_as TEXT    UNIQUE,
     faction       TEXT,
-    language      TEXT    DEFAULT ('en'),           -- NEW
+    language      TEXT    DEFAULT ('ru'),           -- NEW
     notifications_enabled INTEGER DEFAULT (1)        -- NEW
 );
 ```

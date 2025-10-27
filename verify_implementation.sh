@@ -16,7 +16,7 @@ echo ""
 
 # Check database schema
 echo "📋 Checking database schema..."
-if grep -q "language.*TEXT.*DEFAULT.*'en'" CareBot/CareBot/database/warmasters.sql; then
+if grep -q "language.*TEXT.*DEFAULT.*'ru'" CareBot/CareBot/database/warmasters.sql; then
     echo "✅ Language column found in warmasters.sql"
 else
     echo "❌ Language column missing"
