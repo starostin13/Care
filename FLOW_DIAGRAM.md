@@ -18,7 +18,7 @@
                               +------------------+
                               | Settings Menu    |
                               |                  |
-                              | [Language: en]   |---+
+                              | [Language: ru]   |---+
                               | [Notifications:  |   |
                               |      ON]         |---+
                               | [Set name]*      |   |
@@ -62,10 +62,10 @@ User selects language
 ```
 User Action                Database Operation              Result
 ───────────────────────────────────────────────────────────────────────
-1. Click Language button → get_settings(user_id)        → Show current: "en"
+1. Click Language button → get_settings(user_id)        → Show current: "ru"
    
-2. Select "Русский"      → set_language(user_id, "ru")  → Update DB
-                            COMMIT                          Language = "ru"
+2. Select "English"       → set_language(user_id, "en")  → Update DB
+                            COMMIT                          Language = "en"
 
 3. Click Notifications   → toggle_notifications(user_id) → Toggle value
                             SELECT current value            1 → 0 or 0 → 1
@@ -79,7 +79,7 @@ User Action                Database Operation              Result
 Button Text              Callback Data           Handler Function
 ──────────────────────────────────────────────────────────────────
 "Settings"            → "callsettings"       → setting()
-"Language: en"        → "changelanguage"     → change_language()
+"Language: ru"        → "changelanguage"     → change_language()
 "🇬🇧 English"          → "lang:en"            → set_language()
 "🇷🇺 Русский"          → "lang:ru"            → set_language()
 "Weekday notif.: ON"  → "togglenotifications"→ toggle_notifications()

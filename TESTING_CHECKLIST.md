@@ -12,7 +12,7 @@
 -- Verify new columns exist
 SELECT language, notifications_enabled FROM warmasters LIMIT 1;
 ```
-**Expected Result:** Columns exist with default values ('en' and 1)
+**Expected Result:** Columns exist with default values ('ru' and 1)
 
 ## Functional Tests
 

@@ -36,7 +36,7 @@ async def setting(userId):
         items.append([InlineKeyboardButton("Set the name", callback_data="requestsetname")])
     else:
         # Show current language
-        current_language = settings[2] if settings[2] else 'en'
+        current_language = settings[2] if settings[2] else 'ru'
         items.append([InlineKeyboardButton(f"Language: {current_language}", callback_data="changelanguage")])
         
         # Show notification status
