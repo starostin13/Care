@@ -12,6 +12,7 @@ import keyboard_constructor
 import logging
 import sqllite_helper
 import mission_helper
+import migrate_db
 
 # Enable logging
 logging.basicConfig(
@@ -255,6 +256,14 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to the Crusade Bot! Please type /start to begin.")
 
+# Run database migrations before starting the bot
+print("🔄 Checking for pending database migrations...")
+migration_success = migrate_db.run_migrations()
+if not migration_success:
+    print("❌ Database migration failed! Bot cannot start.")
+    exit(1)
+print("✅ Database migrations completed successfully.")
+
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
 conv_handler = ConversationHandler(
@@ -287,8 +296,11 @@ conv_handler = ConversationHandler(
     fallbacks=[CommandHandler("start", hello)],
     )
 
-# Handler for catching replies to the bot's messages, specifically replies to get_the_mission
-bot.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply))
+# Handler for catching replies to the bot's messages, specifically replies to
+# get_the_mission
+bot.add_handler(
+    MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply)
+)
 bot.add_handler(conv_handler)
 bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
 bot.add_handler(CommandHandler("setname", input_name))
