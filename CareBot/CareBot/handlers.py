@@ -1,6 +1,10 @@
 ﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim:fileencoding=utf-8
+import tracemalloc
+tracemalloc.start()
+
+import re
 from datetime import datetime
 from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
@@ -87,13 +91,26 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
+    logger.info(f"hello function called by user {userId}")
 
     await players_helper.add_warmaster(userId)
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
-    query = update.callback_query
-    await update.message.reply_text("Hi", reply_markup=menu_markup)
-    #await query.answer()
+    
+    if update.callback_query:
+        # This is a callback query (from "Back" button)
+        query = update.callback_query
+        logger.info(f"Processing callback query: {query.data}")
+        await query.answer()
+        await query.edit_message_text("Hi", reply_markup=menu_markup)
+        logger.info("Successfully processed callback query and updated message")
+    else:
+        # This is a regular message (from /start command)
+        logger.info("Processing regular message")
+        await update.message.reply_text("Hi", reply_markup=menu_markup)
+        logger.info("Successfully sent reply to message")
+    
+    logger.info(f"Returning to MAIN_MENU state")
     return MAIN_MENU
 
 async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -202,12 +219,14 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return TYPING_CHOICE
 
 async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    logger.info(f"setting function called")
     menu = await keyboard_constructor.setting(update.effective_user.id)
     query = update.callback_query    
     await query.answer()
     markup = InlineKeyboardMarkup(menu)
     await query.edit_message_text("Your settings:", reply_markup=markup)
-    return MAIN_MENU
+    logger.info("Returning to SETTINGS state")
+    return SETTINGS
 
 async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = await keyboard_constructor.today_schedule(update.effective_user.id)
@@ -281,16 +300,22 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$')
         ],
         SETTINGS: [
-            CallbackQueryHandler(im_in)
+            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+            CallbackQueryHandler(set_language, pattern='^lang:'),
+            CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$')
         ],
-        GAMES: [            
+        GAMES: [
+            CallbackQueryHandler(hello, pattern='^start$'),
             CallbackQueryHandler(button, pattern='rule')
         ],
         SCHEDULE: [
-            CallbackQueryHandler(im_in)
+            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(im_in, pattern=r'^.+,rule:.+$')  # Matches date,rule:rulename format
         ],
         MISSIONS: [
-            CallbackQueryHandler(get_the_mission)    
+            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(get_the_mission)
         ]
     },
     fallbacks=[CommandHandler("start", hello)],
