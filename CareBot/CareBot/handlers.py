@@ -17,6 +17,7 @@ import logging
 import sqllite_helper
 import mission_helper
 import migrate_db
+import localization
 
 # Enable logging
 logging.basicConfig(
@@ -89,6 +90,45 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return MISSIONS
 
 
+async def back_to_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 'Back' button from language selection"""
+    userId = update.effective_user.id
+    logger.info(f"back_to_settings called by user {userId}")
+    
+    query = update.callback_query
+    await query.answer()
+    
+    menu = await keyboard_constructor.setting(userId)
+    menu_markup = InlineKeyboardMarkup(menu)
+    
+    settings_text = await localization.get_text_for_user(userId, "settings_title")
+    await query.edit_message_text(settings_text, reply_markup=menu_markup)
+    logger.info("Successfully returned to settings menu")
+    return SETTINGS
+
+
+async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 'Back' button from settings menu"""
+    userId = update.effective_user.id
+    logger.info(f"back_to_main_menu called by user {userId}")
+    
+    query = update.callback_query
+    await query.answer()
+    
+    menu = await keyboard_constructor.get_main_menu(userId)
+    menu_markup = InlineKeyboardMarkup(menu)
+    
+    # Get localized greeting message
+    user_name = update.effective_user.first_name or "User"
+    greeting_text = await localization.get_text_for_user(
+        userId, 'main_menu_greeting', name=user_name
+    )
+    
+    await query.edit_message_text(greeting_text, reply_markup=menu_markup)
+    logger.info("Successfully returned to main menu")
+    return MAIN_MENU
+
+
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
     logger.info(f"hello function called by user {userId}")
@@ -97,17 +137,23 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
     
+    # Get localized greeting message
+    user_name = update.effective_user.first_name or "User"
+    greeting_text = await localization.get_text_for_user(
+        userId, 'main_menu_greeting', name=user_name
+    )
+    
     if update.callback_query:
         # This is a callback query (from "Back" button)
         query = update.callback_query
         logger.info(f"Processing callback query: {query.data}")
         await query.answer()
-        await query.edit_message_text("Hi", reply_markup=menu_markup)
+        await query.edit_message_text(greeting_text, reply_markup=menu_markup)
         logger.info("Successfully processed callback query and updated message")
     else:
         # This is a regular message (from /start command)
         logger.info("Processing regular message")
-        await update.message.reply_text("Hi", reply_markup=menu_markup)
+        await update.message.reply_text(greeting_text, reply_markup=menu_markup)
         logger.info("Successfully sent reply to message")
     
     logger.info(f"Returning to MAIN_MENU state")
@@ -220,56 +266,73 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     logger.info(f"setting function called")
-    menu = await keyboard_constructor.setting(update.effective_user.id)
+    user_id = update.effective_user.id
+    menu = await keyboard_constructor.setting(user_id)
     query = update.callback_query    
     await query.answer()
     markup = InlineKeyboardMarkup(menu)
-    await query.edit_message_text("Your settings:", reply_markup=markup)
+    
+    settings_text = await localization.get_text_for_user(user_id, "settings_title")
+    await query.edit_message_text(settings_text, reply_markup=markup)
     logger.info("Returning to SETTINGS state")
     return SETTINGS
 
 async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    menu = await keyboard_constructor.today_schedule(update.effective_user.id)
+    user_id = update.effective_user.id
+    menu = await keyboard_constructor.today_schedule(user_id)
     markup = InlineKeyboardMarkup(menu)
     query = update.callback_query
-    await query.edit_message_text("Your appointments:", reply_markup=markup)
+    
+    appointments_text = await localization.get_text_for_user(user_id, "appointments_title")
+    await query.edit_message_text(appointments_text, reply_markup=markup)
     return MISSIONS
 
 
 async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    menu = await keyboard_constructor.language_selection()
+    user_id = update.effective_user.id
+    menu = await keyboard_constructor.language_selection(user_id)
     query = update.callback_query
     await query.answer()
     markup = InlineKeyboardMarkup(menu)
-    await query.edit_message_text("Select your language:", reply_markup=markup)
+    
+    select_lang_text = await localization.get_text_for_user(user_id, "select_language")
+    await query.edit_message_text(select_lang_text, reply_markup=markup)
     return MAIN_MENU
 
 
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     language = query.data.split(':')[1]
-    await sqllite_helper.set_language(update.effective_user.id, language)
+    user_id = update.effective_user.id
+    await sqllite_helper.set_language(user_id, language)
     await query.answer()
     
     # Return to settings
-    menu = await keyboard_constructor.setting(update.effective_user.id)
+    menu = await keyboard_constructor.setting(user_id)
     markup = InlineKeyboardMarkup(menu)
-    await query.edit_message_text("Language updated! Your settings:", reply_markup=markup)
-    return MAIN_MENU
+    
+    lang_updated_text = await localization.get_text_for_user(user_id, "language_updated")
+    await query.edit_message_text(lang_updated_text, reply_markup=markup)
+    return SETTINGS
 
 
 async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    new_value = await sqllite_helper.toggle_notifications(update.effective_user.id)
+    user_id = update.effective_user.id
+    new_value = await sqllite_helper.toggle_notifications(user_id)
     await query.answer()
     
-    status = "enabled" if new_value == 1 else "disabled"
+    status_key = "notifications_enabled" if new_value == 1 else "notifications_disabled"
+    status_text = await localization.get_text_for_user(user_id, status_key)
     
     # Return to settings
-    menu = await keyboard_constructor.setting(update.effective_user.id)
+    menu = await keyboard_constructor.setting(user_id)
     markup = InlineKeyboardMarkup(menu)
-    await query.edit_message_text(f"Weekday notifications {status}! Your settings:", reply_markup=markup)
-    return MAIN_MENU
+    
+    settings_text = await localization.get_text_for_user(user_id, "settings_title")
+    message = f"Weekday notifications {status_text}! {settings_text}"
+    await query.edit_message_text(message, reply_markup=markup)
+    return SETTINGS
 
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -291,16 +354,21 @@ conv_handler = ConversationHandler(
     states={
         MAIN_MENU: [
             CallbackQueryHandler(set_name, pattern='^requestsetname$'),
+            CallbackQueryHandler(setting, pattern='^setting$'),
             CallbackQueryHandler(setting, pattern='^callsettings$'),
+            CallbackQueryHandler(appoint, pattern='^games$'),
             CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
+            CallbackQueryHandler(show_missions, pattern='^missions$'),
             CallbackQueryHandler(registration_call, pattern='^registration$'),
             CallbackQueryHandler(show_missions, pattern='^callmissions$'),
             CallbackQueryHandler(change_language, pattern='^changelanguage$'),
             CallbackQueryHandler(set_language, pattern='^lang:'),
-            CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$')
+            CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$'),
+            CallbackQueryHandler(back_to_settings, pattern='^back_to_settings$')
         ],
         SETTINGS: [
-            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
+            CallbackQueryHandler(back_to_main_menu, pattern='^start$'),
             CallbackQueryHandler(change_language, pattern='^changelanguage$'),
             CallbackQueryHandler(set_language, pattern='^lang:'),
             CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$')
