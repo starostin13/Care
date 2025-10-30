@@ -231,6 +231,20 @@ async def get_warehouses_of_warmaster(telegram_user_id):
             return await cursor.fetchall()
 
 
+async def get_players_for_game(rule, date):
+    """Get all players registered for a specific game by rule and date"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT DISTINCT warmasters.telegram_id, warmasters.nickname, warmasters.notifications_enabled
+            FROM warmasters
+            JOIN schedule ON warmasters.telegram_id = schedule.user_telegram
+            WHERE schedule.rules=?
+            AND schedule.date=?
+        ''', (rule, str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d")))
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def get_warmasters_opponents(against_alliance, rule, date):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
