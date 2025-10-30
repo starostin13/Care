@@ -80,6 +80,12 @@ async def get_next_hexes_filtered_by_patron(cell_id, alliance):
         ''', (cell_id, alliance, cell_id, alliance)) as cursor:
             return await cursor.fetchall()
 
+async def get_nicknamane(telegram_id):
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            async with db.execute('SELECT nickname FROM warmasters WHERE telegram_id=?', (telegram_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else None
+
 async def get_number_of_safe_next_cells(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
@@ -340,9 +346,18 @@ async def set_nickname(user_telegram_id, nickname):
 
 async def set_language(user_telegram_id, language):
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute('''
+        # First, try to update existing record
+        cursor = await db.execute('''
             UPDATE warmasters SET language=? WHERE telegram_id=?
         ''', (language, user_telegram_id))
+        
+        # If no rows were affected, insert new record
+        if cursor.rowcount == 0:
+            await db.execute('''
+                INSERT OR IGNORE INTO warmasters (telegram_id, language) 
+                VALUES (?, ?)
+            ''', (user_telegram_id, language))
+        
         await db.commit()
 
 
@@ -488,3 +503,32 @@ async def get_alliance_resources(alliance_id):
         ''', (alliance_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else 0
+
+
+async def get_text_by_key(key, language='ru'):
+    """Get localized text by key and language."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT value FROM texts WHERE key = ? AND language = ?
+        ''', (key, language)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def add_or_update_text(key, language, value):
+    """Add or update a text entry."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            INSERT OR REPLACE INTO texts (key, language, value)
+            VALUES (?, ?, ?)
+        ''', (key, language, value))
+        await db.commit()
+
+
+async def get_all_texts_for_language(language='ru'):
+    """Get all texts for a specific language."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT key, value FROM texts WHERE language = ?
+        ''', (language,)) as cursor:
+            return await cursor.fetchall()
