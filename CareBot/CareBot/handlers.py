@@ -1,20 +1,22 @@
 ﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim:fileencoding=utf-8
-from asyncio.windows_events import NULL
+import tracemalloc
+tracemalloc.start()
+
+import re
 from datetime import datetime
-from msilib import sequence
-from telegram import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
-from CareBot import map_helper
+import map_helper
 import config
 import players_helper
 import keyboard_constructor
 import logging
 import sqllite_helper
 import mission_helper
-import os
+import migrate_db
 
 # Enable logging
 logging.basicConfig(
@@ -52,8 +54,11 @@ async def contact_callback(update, bot):
     sqllite_helper.register_warmaster(userid, phone)
     
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # update.callback_query.data 'mission_sch_2'
+    mission_number = int(update.callback_query.data.replace("mission_sch_", ""))
+    rules = await sqllite_helper.get_rules_of_mission(mission_number)
     # Получаем миссию из базы данных
-    mission = await mission_helper.get_mission()
+    mission = await mission_helper.get_mission(rules=rules)
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
     index_of_mission_id = 2
@@ -75,7 +80,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:
-        if participant_id != update.effective_user.id:  # Исключаем текущего пользователя
+        if participant_id[0] != str(update.effective_user.id):  # Исключаем текущего пользователя
             try:
                 await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
             except Exception as e:
@@ -86,13 +91,26 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
+    logger.info(f"hello function called by user {userId}")
 
     await players_helper.add_warmaster(userId)
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
-    query = update.callback_query
-    await update.message.reply_text("Hi", reply_markup=menu_markup)
-    #await query.answer()
+    
+    if update.callback_query:
+        # This is a callback query (from "Back" button)
+        query = update.callback_query
+        logger.info(f"Processing callback query: {query.data}")
+        await query.answer()
+        await query.edit_message_text("Hi", reply_markup=menu_markup)
+        logger.info("Successfully processed callback query and updated message")
+    else:
+        # This is a regular message (from /start command)
+        logger.info("Processing regular message")
+        await update.message.reply_text("Hi", reply_markup=menu_markup)
+        logger.info("Successfully sent reply to message")
+    
+    logger.info(f"Returning to MAIN_MENU state")
     return MAIN_MENU
 
 async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -109,7 +127,7 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data = query.data
     data_arr = data.split(',')
     # ['Sat Apr 27 00:00:00 2024', 'rule:killteam']
-    sqllite_helper.insert_to_schedule(
+    await sqllite_helper.insert_to_schedule(
         datetime.strptime(data_arr[0],'%c'),
         data_arr[1].split(':')[1],
         update.effective_user.id)
@@ -156,7 +174,22 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
         # Извлекаем значение после решётки и преобразуем его в число
         battle_id = int(battle_id_line[1:])
         await mission_helper.write_battle_result(battle_id, user_reply)
-        await map_helper.check_patronage(battle_id, user_reply, update.effective_user.id)
+        
+        # Apply mission-specific rewards
+        rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
+        scenario_line = next((line for line in lines if line.startswith('📜')), None)
+        scenario_name_regexp_result = re.search(r"📜(.*?)\:", scenario_line) if scenario_line else None
+        scenario = None
+        if scenario_name_regexp_result:
+            scenario = scenario_name_regexp_result.group(1)
+
+        # Update the map based on battle results
+        await map_helper.update_map(
+            battle_id,
+            user_reply,
+            update.effective_user.id,
+            scenario
+        )
 
     # Respond to the user's reply
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
@@ -186,12 +219,14 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return TYPING_CHOICE
 
 async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    logger.info(f"setting function called")
     menu = await keyboard_constructor.setting(update.effective_user.id)
     query = update.callback_query    
     await query.answer()
     markup = InlineKeyboardMarkup(menu)
     await query.edit_message_text("Your settings:", reply_markup=markup)
-    return MAIN_MENU
+    logger.info("Returning to SETTINGS state")
+    return SETTINGS
 
 async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = await keyboard_constructor.today_schedule(update.effective_user.id)
@@ -200,9 +235,53 @@ async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await query.edit_message_text("Your appointments:", reply_markup=markup)
     return MISSIONS
 
+
+async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    menu = await keyboard_constructor.language_selection()
+    query = update.callback_query
+    await query.answer()
+    markup = InlineKeyboardMarkup(menu)
+    await query.edit_message_text("Select your language:", reply_markup=markup)
+    return MAIN_MENU
+
+
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    language = query.data.split(':')[1]
+    await sqllite_helper.set_language(update.effective_user.id, language)
+    await query.answer()
+    
+    # Return to settings
+    menu = await keyboard_constructor.setting(update.effective_user.id)
+    markup = InlineKeyboardMarkup(menu)
+    await query.edit_message_text("Language updated! Your settings:", reply_markup=markup)
+    return MAIN_MENU
+
+
+async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    new_value = await sqllite_helper.toggle_notifications(update.effective_user.id)
+    await query.answer()
+    
+    status = "enabled" if new_value == 1 else "disabled"
+    
+    # Return to settings
+    menu = await keyboard_constructor.setting(update.effective_user.id)
+    markup = InlineKeyboardMarkup(menu)
+    await query.edit_message_text(f"Weekday notifications {status}! Your settings:", reply_markup=markup)
+    return MAIN_MENU
+
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to the Crusade Bot! Please type /start to begin.")
+
+# Run database migrations before starting the bot
+print("🔄 Checking for pending database migrations...")
+migration_success = migrate_db.run_migrations()
+if not migration_success:
+    print("❌ Database migration failed! Bot cannot start.")
+    exit(1)
+print("✅ Database migrations completed successfully.")
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
@@ -215,26 +294,38 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(setting, pattern='^callsettings$'),
             CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
             CallbackQueryHandler(registration_call, pattern='^registration$'),
-            CallbackQueryHandler(show_missions, pattern='^callmissions$')
+            CallbackQueryHandler(show_missions, pattern='^callmissions$'),
+            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+            CallbackQueryHandler(set_language, pattern='^lang:'),
+            CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$')
         ],
         SETTINGS: [
-            CallbackQueryHandler(im_in)
+            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+            CallbackQueryHandler(set_language, pattern='^lang:'),
+            CallbackQueryHandler(toggle_notifications, pattern='^togglenotifications$')
         ],
-        GAMES: [            
+        GAMES: [
+            CallbackQueryHandler(hello, pattern='^start$'),
             CallbackQueryHandler(button, pattern='rule')
         ],
         SCHEDULE: [
-            CallbackQueryHandler(im_in)
+            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(im_in, pattern=r'^.+,rule:.+$')  # Matches date,rule:rulename format
         ],
         MISSIONS: [
-            CallbackQueryHandler(get_the_mission)    
+            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(get_the_mission)
         ]
     },
     fallbacks=[CommandHandler("start", hello)],
     )
 
-# Handler for catching replies to the bot's messages, specifically replies to get_the_mission
-bot.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply))
+# Handler for catching replies to the bot's messages, specifically replies to
+# get_the_mission
+bot.add_handler(
+    MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply)
+)
 bot.add_handler(conv_handler)
 bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
 bot.add_handler(CommandHandler("setname", input_name))
