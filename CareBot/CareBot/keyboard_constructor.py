@@ -21,27 +21,39 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
 
 async def get_main_menu(userId):
     items = []
-    items.append([
-        InlineKeyboardButton(
-            await localization.get_text_for_user(userId, "button_missions"),
-            callback_data="missions")
-    ])
-    items.append([
-        InlineKeyboardButton(
-            await localization.get_text_for_user(userId, "button_games"),
-            callback_data="games")
-    ])
+    
+    # Check if user has a nickname set
+    user_settings = await sqllite_helper.get_settings(userId)
+    has_nickname = user_settings and user_settings[0]  # nickname is the first field
+    
+    if has_nickname:
+        # If user has nickname, show missions and games
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_missions"),
+                callback_data="missions")
+        ])
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_games"),
+                callback_data="games")
+        ])
+
+    # Settings button is always available
     items.append([
         InlineKeyboardButton(
             await localization.get_text_for_user(userId, "button_settings"),
             callback_data="setting")
     ])
+
     return items
 
+
 async def setting(userId):
+    """Generate settings keyboard for user"""
     settings = await sqllite_helper.get_settings(userId)
     items = []
-    
+
     if not settings:
         items.append([
             InlineKeyboardButton(

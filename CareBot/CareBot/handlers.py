@@ -125,11 +125,19 @@ async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
 
-    # Get localized greeting message
+    # Check if user has nickname to show appropriate message
+    user_settings = await sqllite_helper.get_settings(userId)
+    has_nickname = user_settings and user_settings[0]
     user_name = update.effective_user.first_name or "User"
-    greeting_text = await localization.get_text_for_user(
-        userId, 'main_menu_greeting', name=user_name
-    )
+    
+    if has_nickname:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_greeting', name=user_name
+        )
+    else:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_nickname_required', name=user_name
+        )
 
     await query.edit_message_text(greeting_text, reply_markup=menu_markup)
     logger.info("Successfully returned to main menu")
@@ -144,11 +152,19 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
 
-    # Get localized greeting message
+    # Check if user has nickname to show appropriate message
+    user_settings = await sqllite_helper.get_settings(userId)
+    has_nickname = user_settings and user_settings[0]
     user_name = update.effective_user.first_name or "User"
-    greeting_text = await localization.get_text_for_user(
-        userId, 'main_menu_greeting', name=user_name
-    )
+    
+    if has_nickname:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_greeting', name=user_name
+        )
+    else:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_nickname_required', name=user_name
+        )
 
     if update.callback_query:
         # This is a callback query (from "Back" button)
