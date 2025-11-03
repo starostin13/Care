@@ -1,11 +1,12 @@
 ﻿from datetime import datetime as dt
 from telegram import InlineKeyboardButton
 
-import sqllite_helper
+import settings_helper
+import schedule_helper
 import localization
 
 async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
-    allready_scheduled_items =await sqllite_helper.get_schedule_by_user(user_telegram)
+    allready_scheduled_items = await schedule_helper.get_user_scheduled_games(user_telegram)
     
     #for ruleName in rules:
     #    data = ruleName.relace(' ', '_').lower()
@@ -23,7 +24,7 @@ async def get_main_menu(userId):
     items = []
     
     # Check if user has a nickname set
-    user_settings = await sqllite_helper.get_settings(userId)
+    user_settings = await settings_helper.get_user_settings(userId)
     has_nickname = user_settings and user_settings[0]  # nickname is the first field
     
     if has_nickname:
@@ -51,7 +52,7 @@ async def get_main_menu(userId):
 
 async def setting(userId):
     """Generate settings keyboard for user"""
-    settings = await sqllite_helper.get_settings(userId)
+    settings = await settings_helper.get_user_settings(userId)
     items = []
 
     if not settings:
@@ -62,7 +63,7 @@ async def setting(userId):
         ])
     else:
         # Show current language
-        current_language = settings[2] if settings[2] else 'ru'
+        current_language = settings[2] if len(settings) > 2 and settings[2] else 'ru'
         language_text = await localization.get_text_for_user(
             userId, "button_language")
         items.append([
@@ -72,7 +73,7 @@ async def setting(userId):
         ])
         
         # Show notification status
-        notifications_on = settings[3] if len(settings) > 3 else 1
+        notifications_on = settings[3] if len(settings) > 3 and settings[3] is not None else 1
         notification_status = "ON" if notifications_on == 1 else "OFF"
         notifications_text = await localization.get_text_for_user(
             userId, "button_notifications")
@@ -132,7 +133,8 @@ async def this_week(rule):
 
 async def today_schedule(user_id):
     today = dt.today()
-    appointments = await sqllite_helper.get_schedule_with_warmasters(user_id, str(today.date()))
+    # Временно используем пустой список, пока не реализуем функцию в schedule_helper
+    appointments = []  # await schedule_helper.get_schedule_with_warmasters(user_id, str(today.date()))
     buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}'),appointments)]
     
     return [list(buttons)]
