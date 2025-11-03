@@ -250,11 +250,12 @@ async def get_players_for_game(rule, date):
 async def get_warmasters_opponents(against_alliance, rule, date):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT DISTINCT nickname, registered_as
+            SELECT DISTINCT warmasters.nickname, warmasters.registered_as
             FROM warmasters
-            JOIN schedule ON warmasters.alliance<>?
-            WHERE rules=?
-            AND date=?
+            JOIN schedule ON warmasters.telegram_id = schedule.user_telegram
+            WHERE warmasters.alliance <> ?
+            AND schedule.rules = ?
+            AND schedule.date = ?
         ''', (against_alliance[0], rule, 
               str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d")))
         ) as cursor:
