@@ -3,9 +3,11 @@ using aiosqlite."""
 
 import datetime
 import aiosqlite
+import os
 
-DATABASE_PATH = (r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot"
-                 r"\db\database")
+# Use environment variable for database path, fallback to default
+DATABASE_PATH = os.environ.get('DATABASE_PATH', 
+    r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database")
 
 
 async def add_battle_participant(battle_id, participant):
