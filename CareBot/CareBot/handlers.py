@@ -5,13 +5,14 @@ from datetime import datetime
 from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
-import map_helper
-import config
-import players_helper
-import keyboard_constructor
+import re
+from . import map_helper
+from . import config
+from . import players_helper
+from . import keyboard_constructor
 import logging
-import sqllite_helper
-import mission_helper
+from . import sqllite_helper
+from . import mission_helper
 
 # Enable logging
 logging.basicConfig(

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  carebot:
+    build: .
+    ports:
+      - "5555:5555"
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      # Optional: mount config if needed
+      - ./config:/app/config:ro
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=5555
+      - DATABASE_PATH=/app/data/game_database.db
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-your_bot_token_here}
+    restart: unless-stopped
+    networks:
+      - carebot-network
+
+  # Optional: Add a database management tool
+  db-admin:
+    image: sqlitebrowser/sqlitebrowser:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    networks:
+      - carebot-network
+    profiles:
+      - admin
+
+networks:
+  carebot-network:
+    driver: bridge
+
+volumes:
+  carebot-data:
