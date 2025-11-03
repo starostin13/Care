@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  carebot-production:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: carebot_production
+    ports:
+      - "5555:5555"
+    volumes:
+      # Персистентное хранение базы данных
+      - ./data:/app/data
+      # Логи (опционально)
+      - ./logs:/app/logs
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=5555
+      - DATABASE_PATH=/app/data/game_database.db
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    restart: unless-stopped
+    networks:
+      - carebot-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5555/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Мониторинг базы данных (опционально, включается профилем admin)
+  db-viewer:
+    image: sqlitebrowser/sqlitebrowser:latest
+    container_name: carebot_db_viewer
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data:ro
+    networks:
+      - carebot-network
+    profiles:
+      - admin
+    depends_on:
+      - carebot-production
+
+networks:
+  carebot-network:
+    driver: bridge
+
+volumes:
+  carebot-data:
+    driver: local

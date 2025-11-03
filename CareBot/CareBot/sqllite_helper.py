@@ -3,9 +3,11 @@ using aiosqlite."""
 
 import datetime
 import aiosqlite
+import os
 
-DATABASE_PATH = (r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot"
-                 r"\db\database")
+# Use environment variable for database path, fallback to default
+DATABASE_PATH = os.environ.get('DATABASE_PATH', 
+    r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database")
 
 
 async def add_battle_participant(battle_id, participant):
@@ -248,11 +250,12 @@ async def get_players_for_game(rule, date):
 async def get_warmasters_opponents(against_alliance, rule, date):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT DISTINCT nickname, registered_as
+            SELECT DISTINCT warmasters.nickname, warmasters.registered_as
             FROM warmasters
-            JOIN schedule ON warmasters.alliance<>?
-            WHERE rules=?
-            AND date=?
+            JOIN schedule ON warmasters.telegram_id = schedule.user_telegram
+            WHERE warmasters.alliance <> ?
+            AND schedule.rules = ?
+            AND schedule.date = ?
         ''', (against_alliance[0], rule, 
               str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d")))
         ) as cursor:
@@ -344,9 +347,9 @@ async def save_mission(mission):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
-                                     mission_description, locked)
-            VALUES(?, ?, ?, ?, 1)
-        ''', (mission[0], mission[1], mission[2], mission[3]))
+                                     mission_description, winner_bonus, locked)
+            VALUES(?, ?, ?, ?, ?, 1)
+        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None))
         await db.commit()
 
 
@@ -502,6 +505,16 @@ async def get_mission_details(mission_id):
             return await cursor.fetchone()
 
 
+async def get_winner_bonus(mission_id):
+    """Get winner bonus for a mission by mission ID (secret until battle ends)."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT winner_bonus FROM mission_stack WHERE id = ?
+        ''', (mission_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def get_alliance_resources(alliance_id):
     """Get the current resource amount for an alliance.
     
@@ -514,6 +527,53 @@ async def get_alliance_resources(alliance_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT common_resource FROM alliances WHERE id = ?
+        ''', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
+async def destroy_warehouse_by_alliance(alliance_id):
+    """Destroy one warehouse owned by the specified alliance.
+    
+    Args:
+        alliance_id: The ID of the alliance whose warehouse should be destroyed
+        
+    Returns:
+        True if a warehouse was destroyed, False if no warehouse was found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Find and delete one warehouse owned by the alliance
+        # Assuming there's a warehouses table with cell_id and alliance_id
+        async with db.execute('''
+            SELECT cell_id FROM warehouses 
+            WHERE alliance_id = ? 
+            LIMIT 1
+        ''', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            
+        if result:
+            cell_id = result[0]
+            await db.execute('''
+                DELETE FROM warehouses 
+                WHERE cell_id = ? AND alliance_id = ?
+            ''', (cell_id, alliance_id))
+            await db.commit()
+            return True
+        return False
+
+
+async def get_warehouse_count_by_alliance(alliance_id):
+    """Get the number of warehouses owned by an alliance.
+    
+    Args:
+        alliance_id: The ID of the alliance
+        
+    Returns:
+        The number of warehouses owned by the alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM warehouses WHERE alliance_id = ?
         ''', (alliance_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else 0

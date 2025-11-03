@@ -3,6 +3,7 @@ This script runs the CareBot application using a development server.
 """
 
 from os import environ
+from CareBot import app
 
 if __name__ == '__main__':
     HOST = environ.get('SERVER_HOST', 'localhost')

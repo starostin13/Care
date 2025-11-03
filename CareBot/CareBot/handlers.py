@@ -5,14 +5,16 @@ import notification_service
 import localization
 import migrate_db
 import mission_helper
-import sqllite_helper
 import logging
 import keyboard_constructor
 import players_helper
 import config
 import map_helper
+import warmaster_helper
+import settings_helper
+import schedule_helper
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
-from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
 from datetime import datetime
 import re
 import tracemalloc
@@ -55,14 +57,14 @@ async def contact_callback(update, bot):
     contact = update.message.contact
     phone = contact.phone_number
     userid = contact.user_id
-    sqllite_helper.register_warmaster(userid, phone)
+    await warmaster_helper.register_warmaster(userid, phone)
 
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # update.callback_query.data 'mission_sch_2'
     mission_number = int(
         update.callback_query.data.replace("mission_sch_", ""))
-    rules = await sqllite_helper.get_rules_of_mission(mission_number)
+    rules = await schedule_helper.get_mission_rules(mission_number)
     # Получаем миссию из базы данных
     mission = await mission_helper.get_mission(rules=rules)
     query = update.callback_query
@@ -70,7 +72,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     index_of_mission_id = 2
 
     # Получаем список всех участников события
-    participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
+    participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
 
     battle_id = await mission_helper.start_battle(mission[index_of_mission_id], participants)
     situation = await mission_helper.get_situation(battle_id, participants)
@@ -126,7 +128,7 @@ async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     menu_markup = InlineKeyboardMarkup(menu)
 
     # Check if user has nickname to show appropriate message
-    user_settings = await sqllite_helper.get_settings(userId)
+    user_settings = await settings_helper.get_user_settings(userId)
     has_nickname = user_settings and user_settings[0]
     user_name = update.effective_user.first_name or "User"
     
@@ -153,7 +155,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     menu_markup = InlineKeyboardMarkup(menu)
 
     # Check if user has nickname to show appropriate message
-    user_settings = await sqllite_helper.get_settings(userId)
+    user_settings = await settings_helper.get_user_settings(userId)
     has_nickname = user_settings and user_settings[0]
     user_name = update.effective_user.first_name or "User"
     
@@ -203,7 +205,7 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
 
     # Register player for the game
-    await sqllite_helper.insert_to_schedule(
+    await schedule_helper.register_for_game(
         datetime.strptime(game_date, '%c'),
         game_rules,
         user_id)
@@ -295,12 +297,23 @@ async def handle_mission_reply(
 
 
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.split(' ')[1]
-    if text:
-        query = update.callback_query
-        await players_helper.set_name(update.effective_user.id, text)
-
+    user_id = update.effective_user.id
+    full_text = update.message.text
+    logger.info(f"input_name function called by user {user_id} with text: '{full_text}'")
+    
+    # Handle /setname command with parameter
+    text_parts = full_text.split(' ', 1)
+    logger.info(f"Split text into parts: {text_parts}")
+    
+    if len(text_parts) > 1:
+        text = text_parts[1]
+        logger.info(f"Setting name '{text}' for user {user_id} via /setname command")
+        await players_helper.set_name(user_id, text)
         await update.message.reply_text(f"Your {text}? Yes, I would love to hear about that!")
+        logger.info(f"Successfully set name via /setname command for user {user_id}")
+    else:
+        logger.warning(f"User {user_id} used /setname without providing a name")
+        await update.message.reply_text("Please provide a name after the command, for example: /setname YourName")
 
 
 async def registration_call(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -312,17 +325,40 @@ async def registration_call(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
     query = update.callback_query
+    logger.info(f"set_name function called by user {user_id}, callback_data: {query.data}")
+    
     await query.answer()
+    
+    # Get localized text for name input prompt
+    prompt_text = await localization.get_text_for_user(user_id, "enter_name_prompt")
+    logger.info(f"Sending name input prompt to user {user_id}: {prompt_text}")
+    
+    # Instead of changing state, send a message requesting reply
+    back_button = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            await localization.get_text_for_user(user_id, "button_back"),
+            callback_data="setting"
+        )
+    ]])
+    
     await query.edit_message_text(
-        'Just type "/ setname MyName. Without spaces."'
+        f"{prompt_text}\n\n⚠️ Просто напишите ваше имя следующим сообщением",
+        reply_markup=back_button
     )
-    return TYPING_CHOICE
+    
+    # Store that user is waiting for name input
+    context.user_data['waiting_for_name'] = True
+    logger.info(f"Set waiting_for_name flag for user {user_id}")
+    
+    return SETTINGS  # Stay in SETTINGS state
 
 
 async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    logger.info(f"setting function called")
     user_id = update.effective_user.id
+    logger.info(f"setting function called by user {user_id}")
+    
     menu = await keyboard_constructor.setting(user_id)
     query = update.callback_query
     await query.answer()
@@ -330,7 +366,7 @@ async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     settings_text = await localization.get_text_for_user(user_id, "settings_title")
     await query.edit_message_text(settings_text, reply_markup=markup)
-    logger.info("Returning to SETTINGS state")
+    logger.info(f"Returning to SETTINGS state for user {user_id}")
     return SETTINGS
 
 
@@ -361,7 +397,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     query = update.callback_query
     language = query.data.split(':')[1]
     user_id = update.effective_user.id
-    await sqllite_helper.set_language(user_id, language)
+    await settings_helper.set_user_language(user_id, language)
     await query.answer()
 
     # Return to settings
@@ -376,7 +412,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     user_id = update.effective_user.id
-    new_value = await sqllite_helper.toggle_notifications(user_id)
+    new_value = await settings_helper.toggle_user_notifications(user_id)
     await query.answer()
 
     status_key = "notifications_enabled" if new_value == 1 else "notifications_disabled"
@@ -392,9 +428,90 @@ async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYP
     return SETTINGS
 
 
+async def handle_name_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle user name input - DEPRECATED, use handle_text_message instead."""
+    user_id = update.effective_user.id
+    name = update.message.text.strip()
+    
+    logger.info(f"handle_name_input DEPRECATED called by user {user_id} with name: '{name}'")
+    
+    if not name or len(name) > 50:
+        logger.warning(f"Invalid name input from user {user_id}: name='{name}', length={len(name) if name else 0}")
+        error_text = await localization.get_text_for_user(user_id, "invalid_name_error")
+        await update.message.reply_text(error_text)
+        logger.info(f"Sent invalid name error to user {user_id}")
+        return ConversationHandler.END
+    
+    # Set the name
+    logger.info(f"Setting name '{name}' for user {user_id}")
+    await players_helper.set_name(user_id, name)
+    logger.info(f"Successfully set name for user {user_id}")
+    
+    # Send confirmation and return to main menu
+    success_text = await localization.get_text_for_user(user_id, "name_set_success", name=name)
+    
+    # Create main menu
+    menu = await keyboard_constructor.get_main_menu(user_id)
+    menu_markup = InlineKeyboardMarkup(menu)
+    
+    # Get greeting text
+    user_settings = await settings_helper.get_user_settings(user_id)
+    user_name = update.effective_user.first_name or "User"
+    greeting_text = await localization.get_text_for_user(
+        user_id, 'main_menu_greeting', name=user_name
+    )
+    
+    logger.info(f"Sending success confirmation to user {user_id} and returning to MAIN_MENU")
+    await update.message.reply_text(f"{success_text}\n\n{greeting_text}", reply_markup=menu_markup)
+    logger.info(f"Successfully completed name setting process for user {user_id}")
+    return MAIN_MENU
+
+
+async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle any text message - check if user is waiting for name input"""
+    user_id = update.effective_user.id
+    
+    # Check if user is waiting for name input
+    if context.user_data.get('waiting_for_name', False):
+        logger.info(f"Processing name input from user {user_id}")
+        context.user_data['waiting_for_name'] = False  # Clear flag
+        
+        name = update.message.text.strip()
+        
+        if not name or len(name) > 50 or len(name) < 2:
+            logger.warning(f"Invalid name input from user {user_id}: '{name}'")
+            error_text = await localization.get_text_for_user(user_id, "invalid_name_error")
+            await update.message.reply_text(error_text)
+            return ConversationHandler.END
+        
+        # Set the name
+        logger.info(f"Setting name '{name}' for user {user_id}")
+        await players_helper.set_name(user_id, name)
+        
+        # Send confirmation
+        success_text = await localization.get_text_for_user(user_id, "name_set_success", name=name)
+        await update.message.reply_text(success_text)
+        
+        logger.info(f"Successfully set name '{name}' for user {user_id}")
+        return ConversationHandler.END
+    
+    # If not waiting for name, show welcome message
+    await welcome(update, context)
+    return ConversationHandler.END
+
+
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to the Crusade Bot! Please type /start to begin.")
+
+
+async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug handler for unmatched callbacks"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    logger.warning(f"Unmatched callback from user {user_id}: '{query.data}'")
+    await query.answer()
+    return ConversationHandler.END
 
 # Run database migrations before starting the bot
 print("🔄 Checking for pending database migrations...")
@@ -429,10 +546,12 @@ conv_handler = ConversationHandler(
         SETTINGS: [
             CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
             CallbackQueryHandler(back_to_main_menu, pattern='^start$'),
+            CallbackQueryHandler(set_name, pattern='^requestsetname$'),
             CallbackQueryHandler(change_language, pattern='^changelanguage$'),
             CallbackQueryHandler(set_language, pattern='^lang:'),
             CallbackQueryHandler(toggle_notifications,
-                                 pattern='^togglenotifications$')
+                                 pattern='^togglenotifications$'),
+            CallbackQueryHandler(debug_callback)  # Catch all unmatched callbacks
         ],
         GAMES: [
             CallbackQueryHandler(hello, pattern='^start$'),
@@ -457,7 +576,7 @@ bot.add_handler(
     MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply)
 )
 bot.add_handler(conv_handler)
-bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
+bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
 bot.add_handler(CommandHandler("setname", input_name))
 bot.add_handler(CommandHandler("regme", contact))
 bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))
