@@ -7,9 +7,9 @@ import os
 import sys
 from yoyo import get_backend, read_migrations
 
-# Database path from sqllite_helper.py
-DATABASE_PATH = (r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot"
-                 r"\db\database")
+# Database path from environment variable or default
+DATABASE_PATH = os.environ.get('DATABASE_PATH', 
+    r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database")
 
 MIGRATIONS_DIR = "migrations"
 
