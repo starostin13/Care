@@ -28,6 +28,20 @@ switch ($Action) {
     "deploy" {
         Write-Status "Начинаем развертывание CareBot (проверенный метод)..."
         
+        # 0. Создание бэкапа базы данных ПЕРЕД деплоем
+        Write-Status "Создаем бэкап базы данных перед развертыванием..."
+        try {
+            $backupResult = ssh ${USER}@${SERVER} "cd ${REMOTE_PATH} && ./scripts/backup-database.sh 2>/dev/null"
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Бэкап создан успешно перед развертыванием"
+            } else {
+                Write-Warning "Не удалось создать бэкап (возможно, это первый деплой)"
+            }
+        }
+        catch {
+            Write-Warning "Предупреждение: Бэкап не создан - $($_.Exception.Message)"
+        }
+        
         # 1. Копирование файлов
         Write-Status "Копируем файлы на сервер..."
         scp -r CareBot ${USER}@${SERVER}:${REMOTE_PATH}/
@@ -111,6 +125,18 @@ switch ($Action) {
         ssh ${USER}@${SERVER} "cd ${REMOTE_PATH} && docker-compose logs carebot"
     }
     
+    "backup" {
+        Write-Status "Создаем ручной бэкап базы данных..."
+        ssh ${USER}@${SERVER} "cd ${REMOTE_PATH} && ./scripts/backup-database.sh"
+        Write-Success "Бэкап завершен"
+    }
+    
+    "restore" {
+        Write-Status "Восстанавливаем базу данных из последнего бэкапа..."
+        ssh ${USER}@${SERVER} "cd ${REMOTE_PATH} && ./scripts/restore-database.sh"
+        Write-Success "Восстановление завершено"
+    }
+    
     "restart" {
         Write-Status "Перезапускаем сервисы..."
         ssh ${USER}@${SERVER} "cd ${REMOTE_PATH} && docker-compose restart"
@@ -124,12 +150,14 @@ switch ($Action) {
     }
     
     default {
-        Write-Host "Использование: .\deploy-proven.ps1 [deploy|status|logs|restart|stop]" -ForegroundColor Yellow
+        Write-Host "Использование: .\deploy-proven.ps1 [deploy|status|logs|backup|restore|restart|stop]" -ForegroundColor Yellow
         Write-Host ""
         Write-Host "Команды:" -ForegroundColor Cyan
         Write-Host "  deploy  - Полное развертывание (по умолчанию)" -ForegroundColor White
         Write-Host "  status  - Проверка статуса сервисов" -ForegroundColor White
         Write-Host "  logs    - Просмотр логов CareBot" -ForegroundColor White
+        Write-Host "  backup  - Создание ручного бэкапа" -ForegroundColor White
+        Write-Host "  restore - Восстановление из последнего бэкапа" -ForegroundColor White
         Write-Host "  restart - Перезапуск сервисов" -ForegroundColor White
         Write-Host "  stop    - Остановка сервисов" -ForegroundColor White
     }
