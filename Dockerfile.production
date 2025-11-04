@@ -27,10 +27,6 @@ COPY CareBot/CareBot/db/ ./db_deploy/
 # Создание директории для данных
 RUN mkdir -p /app/data && chmod 755 /app/data
 
-# Копирование исправленного entrypoint script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
 # Переменные окружения
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=5555
@@ -43,5 +39,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 # Порт
 EXPOSE 5555
 
-# Точка входа с инициализацией базы
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Запуск напрямую без entrypoint
+CMD ["python", "run_hybrid.py"]
