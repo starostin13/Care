@@ -108,24 +108,30 @@ async def missions_list(user_id):
     items = [[]]
     
 async def this_week(rule):
+    from datetime import timedelta
+    
+    # Получаем сегодняшнюю дату
     today = dt.today()
-    week = today.isocalendar().week
-    d = f"{today.year}-W{week}"
+    
+    # Создаем список дат на следующие 7 дней начиная с сегодня
     menu_values = []
-    for i in range(0, 7):
-        menu_values.append(dt.strptime(f'{d}-{i}', "%Y-W%W-%w"))
+    for i in range(7):
+        date = today + timedelta(days=i)
+        menu_values.append(date)
 
     days = [
         [
-            InlineKeyboardButton(menu_values[6].strftime("%A"), callback_data=menu_values[6].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[0].strftime("%A"), callback_data=menu_values[0].strftime("%c") + ',' + rule)
+            InlineKeyboardButton(menu_values[0].strftime("%A %d.%m"), callback_data=menu_values[0].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[1].strftime("%A %d.%m"), callback_data=menu_values[1].strftime("%c") + ',' + rule)
         ],
         [
-            InlineKeyboardButton(menu_values[5].strftime("%A"), callback_data=menu_values[5].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[4].strftime("%A"), callback_data=menu_values[4].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[3].strftime("%A"), callback_data=menu_values[3].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[2].strftime("%A"), callback_data=menu_values[2].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[1].strftime("%A"), callback_data=menu_values[1].strftime("%c") + ',' + rule)
+            InlineKeyboardButton(menu_values[2].strftime("%A %d.%m"), callback_data=menu_values[2].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[3].strftime("%A %d.%m"), callback_data=menu_values[3].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[4].strftime("%A %d.%m"), callback_data=menu_values[4].strftime("%c") + ',' + rule)
+        ],
+        [
+            InlineKeyboardButton(menu_values[5].strftime("%A %d.%m"), callback_data=menu_values[5].strftime("%c") + ',' + rule),
+            InlineKeyboardButton(menu_values[6].strftime("%A %d.%m"), callback_data=menu_values[6].strftime("%c") + ',' + rule)
         ]
     ]
     
