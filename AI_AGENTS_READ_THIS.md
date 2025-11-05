@@ -29,6 +29,27 @@
 .\scripts\deploy-proven.ps1 status
 ```
 
+### 🛡️ РАБОЧИЕ КОМАНДЫ БЭКАПА
+
+**ВАЖНО:** Эти команды проверены и работают!
+
+```powershell
+# Создание бэкапа (РАБОЧИЙ способ, протестирован 5 ноября 2025)
+ssh ubuntu@192.168.0.125 "cd /home/ubuntu/carebot && ./scripts/backup-database.sh"
+
+# Проверка статуса контейнеров
+ssh ubuntu@192.168.0.125 "cd /home/ubuntu/carebot && docker-compose ps"
+
+# Просмотр логов приложения
+ssh ubuntu@192.168.0.125 "cd /home/ubuntu/carebot && docker-compose logs carebot"
+
+# Список бэкапов
+ssh ubuntu@192.168.0.125 "ls -la /home/ubuntu/carebot/backups/"
+
+# Восстановление базы данных
+ssh ubuntu@192.168.0.125 "cd /home/ubuntu/carebot && ./scripts/restore-database.sh"
+```
+
 ### Результат развертывания
 
 - **CareBot API:** http://192.168.0.125:5555 ✅
