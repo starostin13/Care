@@ -1,1 +1,2 @@
 Flask>=2.2.3
+yoyo-migrations>=8.0.0
