@@ -1,17 +1,25 @@
 ﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim:fileencoding=utf-8
-from datetime import datetime
-from telegram import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
-
-import map_helper
-import config
-import players_helper
-import keyboard_constructor
-import logging
-import sqllite_helper
+import notification_service
+import localization
+import migrate_db
 import mission_helper
+import logging
+import keyboard_constructor
+import players_helper
+import config
+import map_helper
+import warmaster_helper
+import settings_helper
+import schedule_helper
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
+from datetime import datetime
+import re
+import tracemalloc
+tracemalloc.start()
+
 
 # Enable logging
 logging.basicConfig(
@@ -26,41 +34,46 @@ MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS = range(5)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
-   
+
+
 async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
     rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
     menu = InlineKeyboardMarkup(rules)
     await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
 
+
 async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     con_keyboard = KeyboardButton(text="send_contact", request_contact=True)
-    custom_keyboard = [[ con_keyboard ]]
+    custom_keyboard = [[con_keyboard]]
     reply_markup = ReplyKeyboardMarkup(custom_keyboard)
 
     await update.message.reply_text(
-              text="Are you agree to share YOUR PHONE NUMBER? This is MANDATORY to participate in crusade.", 
-              reply_markup=reply_markup)
-    
+        text="Are you agree to share YOUR PHONE NUMBER? This is MANDATORY to participate in crusade.",
+        reply_markup=reply_markup)
+
+
 async def contact_callback(update, bot):
     contact = update.message.contact
     phone = contact.phone_number
     userid = contact.user_id
-    sqllite_helper.register_warmaster(userid, phone)
-    
+    await warmaster_helper.register_warmaster(userid, phone)
+
+
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # update.callback_query.data 'mission_sch_2'
-    mission_number = int(update.callback_query.data.replace("mission_sch_", ""))
-    rules = await sqllite_helper.get_rules_of_mission(mission_number)
+    mission_number = int(
+        update.callback_query.data.replace("mission_sch_", ""))
+    rules = await schedule_helper.get_mission_rules(mission_number)
     # Получаем миссию из базы данных
     mission = await mission_helper.get_mission(rules=rules)
     query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
     index_of_mission_id = 2
-    
+
     # Получаем список всех участников события
-    participants = await sqllite_helper.get_event_participants(data.rsplit('_', 1)[-1])
-    
+    participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
+
     battle_id = await mission_helper.start_battle(mission[index_of_mission_id], participants)
     situation = await mission_helper.get_situation(battle_id, participants)
 
@@ -72,28 +85,105 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Отправляем текст миссии текущему пользователю
     await query.edit_message_text(f"{text}\n{situation}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
-    
+
     # Рассылаем сообщение с миссией всем участникам
     for participant_id in participants:
-        if participant_id[0] != str(update.effective_user.id):  # Исключаем текущего пользователя
+        # Исключаем текущего пользователя
+        if participant_id[0] != str(update.effective_user.id):
             try:
                 await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
             except Exception as e:
-                logger.error(f"Ошибка при отправке сообщения пользователю {participant_id}: {e}")
+                logger.error(
+                    f"Ошибка при отправке сообщения пользователю {participant_id}: {e}")
 
     return MISSIONS
 
 
+async def back_to_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 'Back' button from language selection"""
+    userId = update.effective_user.id
+    logger.info(f"back_to_settings called by user {userId}")
+
+    query = update.callback_query
+    await query.answer()
+
+    menu = await keyboard_constructor.setting(userId)
+    menu_markup = InlineKeyboardMarkup(menu)
+
+    settings_text = await localization.get_text_for_user(userId, "settings_title")
+    await query.edit_message_text(settings_text, reply_markup=menu_markup)
+    logger.info("Successfully returned to settings menu")
+    return SETTINGS
+
+
+async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 'Back' button from settings menu"""
+    userId = update.effective_user.id
+    logger.info(f"back_to_main_menu called by user {userId}")
+
+    query = update.callback_query
+    await query.answer()
+
+    menu = await keyboard_constructor.get_main_menu(userId)
+    menu_markup = InlineKeyboardMarkup(menu)
+
+    # Check if user has nickname to show appropriate message
+    user_settings = await settings_helper.get_user_settings(userId)
+    has_nickname = user_settings and user_settings[0]
+    user_name = update.effective_user.first_name or "User"
+    
+    if has_nickname:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_greeting', name=user_name
+        )
+    else:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_nickname_required', name=user_name
+        )
+
+    await query.edit_message_text(greeting_text, reply_markup=menu_markup)
+    logger.info("Successfully returned to main menu")
+    return MAIN_MENU
+
+
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
+    logger.info(f"hello function called by user {userId}")
 
     await players_helper.add_warmaster(userId)
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
-    query = update.callback_query
-    await update.message.reply_text("Hi", reply_markup=menu_markup)
-    #await query.answer()
+
+    # Check if user has nickname to show appropriate message
+    user_settings = await settings_helper.get_user_settings(userId)
+    has_nickname = user_settings and user_settings[0]
+    user_name = update.effective_user.first_name or "User"
+    
+    if has_nickname:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_greeting', name=user_name
+        )
+    else:
+        greeting_text = await localization.get_text_for_user(
+            userId, 'main_menu_nickname_required', name=user_name
+        )
+
+    if update.callback_query:
+        # This is a callback query (from "Back" button)
+        query = update.callback_query
+        logger.info(f"Processing callback query: {query.data}")
+        await query.answer()
+        await query.edit_message_text(greeting_text, reply_markup=menu_markup)
+        logger.info("Successfully processed callback query and updated message")
+    else:
+        # This is a regular message (from /start command)
+        logger.info("Processing regular message")
+        await update.message.reply_text(greeting_text, reply_markup=menu_markup)
+        logger.info("Successfully sent reply to message")
+
+    logger.info(f"Returning to MAIN_MENU state")
     return MAIN_MENU
+
 
 async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
@@ -109,58 +199,87 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data = query.data
     data_arr = data.split(',')
     # ['Sat Apr 27 00:00:00 2024', 'rule:killteam']
-    await sqllite_helper.insert_to_schedule(
-        datetime.strptime(data_arr[0],'%c'),
-        data_arr[1].split(':')[1],
-        update.effective_user.id)
-    opponents = await players_helper.get_opponents(update.effective_user.id, data)
-    #await query.answer()
-    await query.edit_message_text('Ещё никто не запился на этот день' if len(opponents)==0 else f'You will faced with')
-    for opponent in opponents:
-        if opponent[1] is not None:
-            await update.effective_chat.send_contact(first_name=str(opponent[0]), phone_number=opponent[1])
-        #await context.bot.send_message(job.chat_id, text=f"Beep! {job.data} seconds are over!")
-    
+
+    game_date = data_arr[0]
+    game_rules = data_arr[1].split(':')[1]
+    user_id = update.effective_user.id
+
+    # Register player for the game
+    await schedule_helper.register_for_game(
+        datetime.strptime(game_date, '%c'),
+        game_rules,
+        user_id)
+
+    # Get opponents
+    opponents = await players_helper.get_opponents(user_id, data)
+    await query.answer()
+
+    # Send response to the player who just registered
+    if len(opponents) == 0:
+        await query.edit_message_text('Ещё никто не запился на этот день')
+    else:
+        await query.edit_message_text('You will faced with')
+        for opponent in opponents:
+            if opponent[1] is not None:
+                await update.effective_chat.send_contact(
+                    first_name=str(opponent[0]),
+                    phone_number=opponent[1]
+                )
+
+    # Notify players about new participant
+    await notification_service.notify_players_about_game(
+        context, user_id, game_date, game_rules
+    )
+
+    return MAIN_MENU
+
+
 async def end_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f'You faced')
+    """End the poll and show opponents"""
+    await update.message.reply_text('You faced')
     return SETTINGS
+
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
-
-    # CallbackQueries need to be answered, even if no notification to the user is needed
-    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-    # await query.answer()
     when_markup = await keyboard_constructor.this_week(query.data)
-    #await sqllite_helper.insert_to_schedule(NULL, query.data, update.effective_user.id)
     menu = InlineKeyboardMarkup(when_markup)
-    await query.edit_message_text(text=f"Selected option: {query.data}", reply_markup=menu)
+    await query.edit_message_text(
+        text=f"Selected option: {query.data}", reply_markup=menu
+    )
     return SCHEDULE
 
-# Handler to process the reply to the message from show_missions
-async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def handle_mission_reply(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
+    """Handler to process the reply to the message from show_missions"""
     # Retrieve the original message's text and user's reply
     original_message = update.message.reply_to_message.text
     user_reply = update.message.text
 
-    # Example: You can log the interaction or perform some action based on the reply
-    logger.info(f"User {update.effective_user.id} replied to '{original_message}' with '{user_reply}'")
+    logger.info(
+        "User %s replied to '%s' with '%s'",
+        update.effective_user.id, original_message, user_reply)
 
     # Разделяем текст на строки
     lines = original_message.splitlines()
 
     # Ищем строку, начинающуюся с '#'
-    battle_id_line = next((line for line in lines if line.startswith('#')), None)
+    battle_id_line = next(
+        (line for line in lines if line.startswith('#')), None)
     if battle_id_line:
         # Извлекаем значение после решётки и преобразуем его в число
         battle_id = int(battle_id_line[1:])
         await mission_helper.write_battle_result(battle_id, user_reply)
-        
+
         # Apply mission-specific rewards
         rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
-        scenario_line = next((line for line in lines if line.startswith('📜')), None)
-        scenario_name_regexp_result = re.search(r"📜(.*?)\:", scenario_line) if scenario_line else None
+        scenario_line = next(
+            (line for line in lines if line.startswith('📜')), None)
+        scenario_name_regexp_result = re.search(
+            r"📜(.*?)\:", scenario_line) if scenario_line else None
         scenario = None
         if scenario_name_regexp_result:
             scenario = scenario_name_regexp_result.group(1)
@@ -178,46 +297,229 @@ async def handle_mission_reply(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.split(' ')[1]
-    if text:
-        query = update.callback_query
-        await players_helper.set_name(update.effective_user.id, text)
+    user_id = update.effective_user.id
+    full_text = update.message.text
+    logger.info(f"input_name function called by user {user_id} with text: '{full_text}'")
     
+    # Handle /setname command with parameter
+    text_parts = full_text.split(' ', 1)
+    logger.info(f"Split text into parts: {text_parts}")
+    
+    if len(text_parts) > 1:
+        text = text_parts[1]
+        logger.info(f"Setting name '{text}' for user {user_id} via /setname command")
+        await players_helper.set_name(user_id, text)
         await update.message.reply_text(f"Your {text}? Yes, I would love to hear about that!")
+        logger.info(f"Successfully set name via /setname command for user {user_id}")
+    else:
+        logger.warning(f"User {user_id} used /setname without providing a name")
+        await update.message.reply_text("Please provide a name after the command, for example: /setname YourName")
+
 
 async def registration_call(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query    
+    query = update.callback_query
     await query.answer()
     await query.edit_message_text(
         'Just type or click on it /regme'
     )
 
+
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query    
+    user_id = update.effective_user.id
+    query = update.callback_query
+    logger.info(f"set_name function called by user {user_id}, callback_data: {query.data}")
+    
     await query.answer()
+    
+    # Get localized text for name input prompt
+    prompt_text = await localization.get_text_for_user(user_id, "enter_name_prompt")
+    logger.info(f"Sending name input prompt to user {user_id}: {prompt_text}")
+    
+    # Instead of changing state, send a message requesting reply
+    back_button = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            await localization.get_text_for_user(user_id, "button_back"),
+            callback_data="setting"
+        )
+    ]])
+    
     await query.edit_message_text(
-        'Just type "/ setname MyName. Without spaces."'
+        f"{prompt_text}\n\n⚠️ Просто напишите ваше имя следующим сообщением",
+        reply_markup=back_button
     )
-    return TYPING_CHOICE
+    
+    # Store that user is waiting for name input
+    context.user_data['waiting_for_name'] = True
+    logger.info(f"Set waiting_for_name flag for user {user_id}")
+    
+    return SETTINGS  # Stay in SETTINGS state
+
 
 async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    menu = await keyboard_constructor.setting(update.effective_user.id)
-    query = update.callback_query    
+    user_id = update.effective_user.id
+    logger.info(f"setting function called by user {user_id}")
+    
+    menu = await keyboard_constructor.setting(user_id)
+    query = update.callback_query
     await query.answer()
     markup = InlineKeyboardMarkup(menu)
-    await query.edit_message_text("Your settings:", reply_markup=markup)
-    return MAIN_MENU
+
+    settings_text = await localization.get_text_for_user(user_id, "settings_title")
+    await query.edit_message_text(settings_text, reply_markup=markup)
+    logger.info(f"Returning to SETTINGS state for user {user_id}")
+    return SETTINGS
+
 
 async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    menu = await keyboard_constructor.today_schedule(update.effective_user.id)
+    user_id = update.effective_user.id
+    menu = await keyboard_constructor.today_schedule(user_id)
     markup = InlineKeyboardMarkup(menu)
     query = update.callback_query
-    await query.edit_message_text("Your appointments:", reply_markup=markup)
+
+    appointments_text = await localization.get_text_for_user(user_id, "appointments_title")
+    await query.edit_message_text(appointments_text, reply_markup=markup)
     return MISSIONS
+
+
+async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    menu = await keyboard_constructor.language_selection(user_id)
+    query = update.callback_query
+    await query.answer()
+    markup = InlineKeyboardMarkup(menu)
+
+    select_lang_text = await localization.get_text_for_user(user_id, "select_language")
+    await query.edit_message_text(select_lang_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    language = query.data.split(':')[1]
+    user_id = update.effective_user.id
+    await settings_helper.set_user_language(user_id, language)
+    await query.answer()
+
+    # Return to settings
+    menu = await keyboard_constructor.setting(user_id)
+    markup = InlineKeyboardMarkup(menu)
+
+    lang_updated_text = await localization.get_text_for_user(user_id, "language_updated")
+    await query.edit_message_text(lang_updated_text, reply_markup=markup)
+    return SETTINGS
+
+
+async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    user_id = update.effective_user.id
+    new_value = await settings_helper.toggle_user_notifications(user_id)
+    await query.answer()
+
+    status_key = "notifications_enabled" if new_value == 1 else "notifications_disabled"
+    status_text = await localization.get_text_for_user(user_id, status_key)
+
+    # Return to settings
+    menu = await keyboard_constructor.setting(user_id)
+    markup = InlineKeyboardMarkup(menu)
+
+    settings_text = await localization.get_text_for_user(user_id, "settings_title")
+    message = f"Weekday notifications {status_text}! {settings_text}"
+    await query.edit_message_text(message, reply_markup=markup)
+    return SETTINGS
+
+
+async def handle_name_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle user name input - DEPRECATED, use handle_text_message instead."""
+    user_id = update.effective_user.id
+    name = update.message.text.strip()
+    
+    logger.info(f"handle_name_input DEPRECATED called by user {user_id} with name: '{name}'")
+    
+    if not name or len(name) > 50:
+        logger.warning(f"Invalid name input from user {user_id}: name='{name}', length={len(name) if name else 0}")
+        error_text = await localization.get_text_for_user(user_id, "invalid_name_error")
+        await update.message.reply_text(error_text)
+        logger.info(f"Sent invalid name error to user {user_id}")
+        return ConversationHandler.END
+    
+    # Set the name
+    logger.info(f"Setting name '{name}' for user {user_id}")
+    await players_helper.set_name(user_id, name)
+    logger.info(f"Successfully set name for user {user_id}")
+    
+    # Send confirmation and return to main menu
+    success_text = await localization.get_text_for_user(user_id, "name_set_success", name=name)
+    
+    # Create main menu
+    menu = await keyboard_constructor.get_main_menu(user_id)
+    menu_markup = InlineKeyboardMarkup(menu)
+    
+    # Get greeting text
+    user_settings = await settings_helper.get_user_settings(user_id)
+    user_name = update.effective_user.first_name or "User"
+    greeting_text = await localization.get_text_for_user(
+        user_id, 'main_menu_greeting', name=user_name
+    )
+    
+    logger.info(f"Sending success confirmation to user {user_id} and returning to MAIN_MENU")
+    await update.message.reply_text(f"{success_text}\n\n{greeting_text}", reply_markup=menu_markup)
+    logger.info(f"Successfully completed name setting process for user {user_id}")
+    return MAIN_MENU
+
+
+async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle any text message - check if user is waiting for name input"""
+    user_id = update.effective_user.id
+    
+    # Check if user is waiting for name input
+    if context.user_data.get('waiting_for_name', False):
+        logger.info(f"Processing name input from user {user_id}")
+        context.user_data['waiting_for_name'] = False  # Clear flag
+        
+        name = update.message.text.strip()
+        
+        if not name or len(name) > 50 or len(name) < 2:
+            logger.warning(f"Invalid name input from user {user_id}: '{name}'")
+            error_text = await localization.get_text_for_user(user_id, "invalid_name_error")
+            await update.message.reply_text(error_text)
+            return ConversationHandler.END
+        
+        # Set the name
+        logger.info(f"Setting name '{name}' for user {user_id}")
+        await players_helper.set_name(user_id, name)
+        
+        # Send confirmation
+        success_text = await localization.get_text_for_user(user_id, "name_set_success", name=name)
+        await update.message.reply_text(success_text)
+        
+        logger.info(f"Successfully set name '{name}' for user {user_id}")
+        return ConversationHandler.END
+    
+    # If not waiting for name, show welcome message
+    await welcome(update, context)
+    return ConversationHandler.END
+
 
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to the Crusade Bot! Please type /start to begin.")
+
+
+async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug handler for unmatched callbacks"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    logger.warning(f"Unmatched callback from user {user_id}: '{query.data}'")
+    await query.answer()
+    return ConversationHandler.END
+
+# Run database migrations before starting the bot
+print("🔄 Checking for pending database migrations...")
+migration_success = migrate_db.run_migrations()
+if not migration_success:
+    print("❌ Database migration failed! Bot cannot start.")
+    exit(1)
+print("✅ Database migrations completed successfully.")
 
 bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
@@ -227,31 +529,54 @@ conv_handler = ConversationHandler(
     states={
         MAIN_MENU: [
             CallbackQueryHandler(set_name, pattern='^requestsetname$'),
+            CallbackQueryHandler(setting, pattern='^setting$'),
             CallbackQueryHandler(setting, pattern='^callsettings$'),
+            CallbackQueryHandler(appoint, pattern='^games$'),
             CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
+            CallbackQueryHandler(show_missions, pattern='^missions$'),
             CallbackQueryHandler(registration_call, pattern='^registration$'),
-            CallbackQueryHandler(show_missions, pattern='^callmissions$')
+            CallbackQueryHandler(show_missions, pattern='^callmissions$'),
+            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+            CallbackQueryHandler(set_language, pattern='^lang:'),
+            CallbackQueryHandler(toggle_notifications,
+                                 pattern='^togglenotifications$'),
+            CallbackQueryHandler(
+                back_to_settings, pattern='^back_to_settings$')
         ],
         SETTINGS: [
-            CallbackQueryHandler(im_in)
+            CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
+            CallbackQueryHandler(back_to_main_menu, pattern='^start$'),
+            CallbackQueryHandler(set_name, pattern='^requestsetname$'),
+            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+            CallbackQueryHandler(set_language, pattern='^lang:'),
+            CallbackQueryHandler(toggle_notifications,
+                                 pattern='^togglenotifications$'),
+            CallbackQueryHandler(debug_callback)  # Catch all unmatched callbacks
         ],
-        GAMES: [            
+        GAMES: [
+            CallbackQueryHandler(hello, pattern='^start$'),
             CallbackQueryHandler(button, pattern='rule')
         ],
         SCHEDULE: [
-            CallbackQueryHandler(im_in)
+            CallbackQueryHandler(hello, pattern='^start$'),
+            # Matches date,rule:rulename format
+            CallbackQueryHandler(im_in, pattern=r'^.+,rule:.+$')
         ],
         MISSIONS: [
-            CallbackQueryHandler(get_the_mission)    
+            CallbackQueryHandler(hello, pattern='^start$'),
+            CallbackQueryHandler(get_the_mission)
         ]
     },
     fallbacks=[CommandHandler("start", hello)],
-    )
+)
 
-# Handler for catching replies to the bot's messages, specifically replies to get_the_mission
-bot.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply))
+# Handler for catching replies to the bot's messages, specifically replies to
+# get_the_mission
+bot.add_handler(
+    MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply)
+)
 bot.add_handler(conv_handler)
-bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, welcome))
+bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
 bot.add_handler(CommandHandler("setname", input_name))
 bot.add_handler(CommandHandler("regme", contact))
 bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))

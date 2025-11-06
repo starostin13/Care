@@ -3,9 +3,11 @@ using aiosqlite."""
 
 import datetime
 import aiosqlite
+import os
 
-DATABASE_PATH = (r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot"
-                 r"\db\database")
+# Use environment variable for database path, fallback to default
+DATABASE_PATH = os.environ.get('DATABASE_PATH', 
+    r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database")
 
 
 async def add_battle_participant(battle_id, participant):
@@ -79,6 +81,12 @@ async def get_next_hexes_filtered_by_patron(cell_id, alliance):
               AND m.patron = ?
         ''', (cell_id, alliance, cell_id, alliance)) as cursor:
             return await cursor.fetchall()
+
+async def get_nicknamane(telegram_id):
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            async with db.execute('SELECT nickname FROM warmasters WHERE telegram_id=?', (telegram_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else None
 
 async def get_number_of_safe_next_cells(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -206,7 +214,7 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
 async def get_settings(telegram_user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT nickname, registered_as FROM warmasters 
+            SELECT nickname, registered_as, language, notifications_enabled FROM warmasters 
             WHERE telegram_id=?
         ''', (telegram_user_id,)) as cursor:
             return await cursor.fetchone()
@@ -225,14 +233,29 @@ async def get_warehouses_of_warmaster(telegram_user_id):
             return await cursor.fetchall()
 
 
+async def get_players_for_game(rule, date):
+    """Get all players registered for a specific game by rule and date"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT DISTINCT warmasters.telegram_id, warmasters.nickname, warmasters.notifications_enabled
+            FROM warmasters
+            JOIN schedule ON warmasters.telegram_id = schedule.user_telegram
+            WHERE schedule.rules=?
+            AND schedule.date=?
+        ''', (rule, str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d")))
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def get_warmasters_opponents(against_alliance, rule, date):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT DISTINCT nickname, registered_as
+            SELECT DISTINCT warmasters.nickname, warmasters.registered_as
             FROM warmasters
-            JOIN schedule ON warmasters.alliance<>?
-            WHERE rules=?
-            AND date=?
+            JOIN schedule ON warmasters.telegram_id = schedule.user_telegram
+            WHERE warmasters.alliance <> ?
+            AND schedule.rules = ?
+            AND schedule.date = ?
         ''', (against_alliance[0], rule, 
               str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d")))
         ) as cursor:
@@ -324,9 +347,9 @@ async def save_mission(mission):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
-                                     mission_description, locked)
-            VALUES(?, ?, ?, ?, 1)
-        ''', (mission[0], mission[1], mission[2], mission[3]))
+                                     mission_description, winner_bonus, locked)
+            VALUES(?, ?, ?, ?, ?, 1)
+        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None))
         await db.commit()
 
 
@@ -336,6 +359,39 @@ async def set_nickname(user_telegram_id, nickname):
             UPDATE warmasters SET nickname=? WHERE telegram_id=?
         ''', (nickname, user_telegram_id))
         await db.commit()
+
+
+async def set_language(user_telegram_id, language):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # First, try to update existing record
+        cursor = await db.execute('''
+            UPDATE warmasters SET language=? WHERE telegram_id=?
+        ''', (language, user_telegram_id))
+        
+        # If no rows were affected, insert new record
+        if cursor.rowcount == 0:
+            await db.execute('''
+                INSERT OR IGNORE INTO warmasters (telegram_id, language) 
+                VALUES (?, ?)
+            ''', (user_telegram_id, language))
+        
+        await db.commit()
+
+
+async def toggle_notifications(user_telegram_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT notifications_enabled FROM warmasters WHERE telegram_id=?
+        ''', (user_telegram_id,)) as cursor:
+            result = await cursor.fetchone()
+            current_value = result[0] if result else 1
+        
+        new_value = 0 if current_value == 1 else 1
+        await db.execute('''
+            UPDATE warmasters SET notifications_enabled=? WHERE telegram_id=?
+        ''', (new_value, user_telegram_id))
+        await db.commit()
+        return new_value
 
 async def _update_alliance_resource(alliance_id, change_amount):
     """Helper function to update alliance resources.
@@ -449,6 +505,16 @@ async def get_mission_details(mission_id):
             return await cursor.fetchone()
 
 
+async def get_winner_bonus(mission_id):
+    """Get winner bonus for a mission by mission ID (secret until battle ends)."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT winner_bonus FROM mission_stack WHERE id = ?
+        ''', (mission_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def get_alliance_resources(alliance_id):
     """Get the current resource amount for an alliance.
     
@@ -464,3 +530,79 @@ async def get_alliance_resources(alliance_id):
         ''', (alliance_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else 0
+
+
+async def destroy_warehouse_by_alliance(alliance_id):
+    """Destroy one warehouse owned by the specified alliance.
+    
+    Args:
+        alliance_id: The ID of the alliance whose warehouse should be destroyed
+        
+    Returns:
+        True if a warehouse was destroyed, False if no warehouse was found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Find and delete one warehouse owned by the alliance
+        # Assuming there's a warehouses table with cell_id and alliance_id
+        async with db.execute('''
+            SELECT cell_id FROM warehouses 
+            WHERE alliance_id = ? 
+            LIMIT 1
+        ''', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            
+        if result:
+            cell_id = result[0]
+            await db.execute('''
+                DELETE FROM warehouses 
+                WHERE cell_id = ? AND alliance_id = ?
+            ''', (cell_id, alliance_id))
+            await db.commit()
+            return True
+        return False
+
+
+async def get_warehouse_count_by_alliance(alliance_id):
+    """Get the number of warehouses owned by an alliance.
+    
+    Args:
+        alliance_id: The ID of the alliance
+        
+    Returns:
+        The number of warehouses owned by the alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM warehouses WHERE alliance_id = ?
+        ''', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
+async def get_text_by_key(key, language='ru'):
+    """Get localized text by key and language."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT value FROM texts WHERE key = ? AND language = ?
+        ''', (key, language)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def add_or_update_text(key, language, value):
+    """Add or update a text entry."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            INSERT OR REPLACE INTO texts (key, language, value)
+            VALUES (?, ?, ?)
+        ''', (key, language, value))
+        await db.commit()
+
+
+async def get_all_texts_for_language(language='ru'):
+    """Get all texts for a specific language."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT key, value FROM texts WHERE language = ?
+        ''', (language,)) as cursor:
+            return await cursor.fetchall()
