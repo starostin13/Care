@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install Flask
+RUN pip install --no-cache-dir flask
+
+# Copy web interface
+COPY sqlite_web_interface.py .
+
+EXPOSE 8080
+
+CMD ["python", "sqlite_web_interface.py"]

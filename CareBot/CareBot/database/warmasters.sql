@@ -14,6 +14,8 @@ CREATE TABLE warmasters (
     nickname      TEXT,
     registered_as TEXT    UNIQUE,
     faction       TEXT,
+    language      TEXT    DEFAULT ('ru'),
+    notifications_enabled INTEGER DEFAULT (1),
     is_admin      INTEGER DEFAULT (0)
 );
 

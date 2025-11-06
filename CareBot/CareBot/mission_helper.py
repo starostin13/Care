@@ -30,7 +30,7 @@ def generate_new_one(rules):
         mission_name = random.choice(missions).split(":")[0]
         description = random.choice(missions)
 
-        return (mission_name, rules, 2, description)
+        return (mission_name, rules, 2, description, None)
 
     elif rules == "boarding_action":
         deploy_types = ["Breach Points", "Ship Interface", "Void Strike"]
@@ -61,25 +61,20 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Patrol forces must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        return (deploy, rules, 2, description)
+        return (deploy, rules, 2, description, None)
 
     elif rules == "wh40k":
-        deploy_types = ["Dawn of War",
-                        "Hammer and Anvil", "Search and Destroy"]
+        deploy_types = ["Total Domination"]
         missions = [
-            "No Mercy", "Vital Intelligence", "The Relic",
-            "Scorched Earth", "Retrieval Mission", "Cleanse and Capture"
+            'Начиная со второго раунда битвы, в конце фазы командования каждого игрока, игрок, чей ход сейчас, получает ПО следующим образом: За каждый контролируемый ими маркер цели на нейтральной полосе они получают 5 ПО. Если они контролируют маркер цели в зоне развертывания противника, они получают 10 ПО. В пятом раунде битвы игрок, у которого второй ход, получает ПО, как описано выше, но делает это в конце хода, а не в конце своей фазы командования. Каждый игрок может получить максимум 90 ПО за выполнение этой цели миссии.'
         ]
-        actions = [
-            'secure critical objectives',
-            'destroy enemy forces',
-            'hold strategic positions',
-            'capture enemy intelligence'
+        winner_bonuses = [
+            "Выбрать один юнит участвующий в битве. Этот юнит получает 3xp вместо 1xp за участие в битве.",
         ]
-        description = (f"{random.choice(missions)}: Armies must "
-                       f"{random.choice(actions)}")
+        description = random.choice(missions)
         deploy = random.choice(deploy_types)
-        return (deploy, rules, 2, description)
+        winner_bonus = random.choice(winner_bonuses)
+        return (deploy, rules, 2, description, winner_bonus)
 
     elif rules == "battlefleet":
         deploy_types = ["Convoy Pattern", "Battle Line", "Orbital Superiority"]
@@ -100,7 +95,7 @@ def generate_new_one(rules):
 
     else:
         # Default case if rules type is not recognized
-        return ('Only War', rules, 2, f'Generic mission for {rules}')
+        return ('Only War', rules, 2, f'Generic mission for {rules}', None)
 
 
 async def get_mission(rules: Optional[str]):
@@ -318,7 +313,7 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
                     "loser %s lost 1 resource",
                     winner_alliance_id, loser_alliance_id)
 
-        elif mission_type.lower() == "power surge" or mission_type.lower() == "coordinates":
+        elif mission_type.lower() == "power surge":
             # Loser loses resources equal to number of warehouses (minimum 1)
             if winner_alliance_id and loser_alliance_id:
                 warehouse_count = await (
@@ -333,11 +328,42 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
                     "(based on %s warehouses)",
                     loser_alliance_id, resource_loss, warehouse_count)
 
+        elif mission_type.lower() == "coordinates":
+            # Loser loses resources equal to number of warehouses (minimum 1)
+            # Winner destroys enemy warehouse
+            if winner_alliance_id and loser_alliance_id:
+                warehouse_count = await (
+                    sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
+                )
+                resource_loss = max(1, warehouse_count)
+                
+                await sqllite_helper.decrease_common_resource(
+                    loser_alliance_id, resource_loss)
+                
+                # Destroy one enemy warehouse if exists
+                await sqllite_helper.destroy_warehouse_by_alliance(loser_alliance_id)
+                
+                logger.info(
+                    "Coordinates mission: Loser %s lost %s resources and one warehouse",
+                    loser_alliance_id, resource_loss)
+
         # Add more mission types as needed
 
     elif rules == "wh40k":
-        # Process 40k missions - could have different reward mechanics
-        pass
+        # Process 40k missions - apply winner bonuses from database
+        if winner_alliance_id:
+            # Get winner bonus from database (secret until now)
+            winner_bonus = await sqllite_helper.get_winner_bonus(mission_id)
+            
+            # Возвращаем информацию о бонусе победителя для отправки в сообщении
+            return {
+                "battle_id": battle_id,
+                "mission_type": mission_type,
+                "rules": rules,
+                "winner_alliance_id": winner_alliance_id,
+                "winner_bonus": winner_bonus,
+                "rewards_applied": True
+            }
 
     # Return the summary of rewards for potential messaging to users
     return {
