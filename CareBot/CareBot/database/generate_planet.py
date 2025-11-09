@@ -1,19 +1,24 @@
+# -*- coding: utf-8 -*-
 import sqlite3
 import random
+import os
 from collections import Counter
 
-# Êîíñòàíòû
+# ĞšĞ¾Ğ½ÑÑ‚Ğ°Ğ½Ñ‚Ñ‹
 PLANET_ID = 1
 STATES = [
-    "ïóñòûíÿ",
-    "ëåñ",
-    "÷åğòà ãîğîäà",
-    "ñêàëû",
-    "òîêñè÷íàÿ çîíà",
-    "ğàçğóøåííûå ğóèíû",
-    "çàğàæ¸ííàÿ ÷àùà",
-    "îñòàíêè êîğàáëÿ",
-    "ìàãìà"
+    "Ğ›ĞµÑĞ°",
+    "Ğ¢ÑƒĞ½Ğ´Ñ€Ğ°/ÑĞ½ĞµĞ³",
+    "ĞŸÑƒÑÑ‚Ñ‹Ğ½Ñ",
+    "ĞÑ‚Ñ€Ğ°Ğ²Ğ»ĞµĞ½Ğ½Ñ‹Ğµ Ğ·ĞµĞ¼Ğ»Ğ¸",
+    "Ğ—Ğ°Ğ²Ğ¾Ğ´",
+    "Ğ“Ğ¾Ñ€Ğ¾Ğ´",
+    "Ğ Ğ°Ğ·Ñ€ÑƒÑˆĞµĞ½Ğ½Ñ‹Ğ¹ Ğ³Ğ¾Ñ€Ğ¾Ğ´",
+    "ĞŸĞ¾Ğ´Ğ·ĞµĞ¼Ğ½Ñ‹Ğµ ÑĞ¸ÑÑ‚ĞµĞ¼Ñ‹",
+    "ĞÑÑ‚Ğ°Ğ½ĞºĞ¸ ĞºĞ¾Ñ€Ğ°Ğ±Ğ»Ñ",
+    "Ğ¡Ğ²Ğ°Ğ»ĞºĞ°",
+    "Ğ¥Ñ€Ğ°Ğ¾Ğ²Ñ‹Ğ¹ ĞºĞ²Ğ°Ñ€Ñ‚Ğ°Ğ»",
+    "Ğ˜Ğ·Ğ¼ĞµĞ½Ñ‘Ğ½Ğ½Ğ¾Ğµ Ğ²Ğ°Ñ€Ğ¿Ğ¾Ğ¼ Ğ¿Ñ€Ğ¾ÑÑ‚Ñ€Ğ°Ğ½ÑÑ‚Ğ²Ğ¾"
 ]
 
 HEX_DIRECTIONS = [
@@ -43,19 +48,30 @@ def most_common_state(neighbor_coords, hex_map):
         return random.choice(STATES)
     return Counter(states).most_common(1)[0][0]
 
-def generate_map_and_edges(db_path='your_database.sqlite'):
+def generate_map_and_edges(db_path=None):
+    # ĞĞ¿Ñ€ĞµĞ´ĞµĞ»ÑĞµĞ¼ Ğ¿ÑƒÑ‚ÑŒ Ğº Ğ±Ğ°Ğ·Ğµ Ğ´Ğ°Ğ½Ğ½Ñ‹Ñ…
+    if db_path is None:
+        # Ğ•ÑĞ»Ğ¸ ÑĞºÑ€Ğ¸Ğ¿Ñ‚ Ğ·Ğ°Ğ¿ÑƒÑĞºĞ°ĞµÑ‚ÑÑ Ğ¸Ğ· ĞºĞ¾Ğ½Ñ‚ĞµĞ¹Ğ½ĞµÑ€Ğ°
+        if os.path.exists('/app/data/game_database.db'):
+            db_path = '/app/data/game_database.db'
+        # Ğ•ÑĞ»Ğ¸ Ğ·Ğ°Ğ¿ÑƒÑĞºĞ°ĞµÑ‚ÑÑ Ğ»Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ğ¾ Ğ¸Ğ· Ğ¿Ğ°Ğ¿ĞºĞ¸ database
+        elif os.path.exists('../db/game_database.db'):
+            db_path = '../db/game_database.db'
+        else:
+            db_path = 'game_database.db'
+    
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
 
-    # Ïîëó÷àåì êîëè÷åñòâî êîëåö ïî warmasters
+    # ĞŸĞ¾Ğ»ÑƒÑ‡Ğ°ĞµĞ¼ ĞºĞ¾Ğ»Ğ¸Ñ‡ĞµÑÑ‚Ğ²Ğ¾ ĞºĞ¾Ğ»ĞµÑ† Ğ¾Ñ‚ warmasters
     cur.execute("SELECT COUNT(*) FROM warmasters WHERE alliance != 0")
     ring_count = cur.fetchone()[0]
 
-    # Ïîëó÷àåì âñå patron id (èç alliances)
+    # ĞŸĞ¾Ğ»ÑƒÑ‡Ğ°ĞµĞ¼ Ğ²ÑĞµ patron id (Ğ¸Ğ· alliances)
     cur.execute("SELECT id FROM alliances")
     patron_ids = [row[0] for row in cur.fetchall()]
     if not patron_ids:
-        raise ValueError("Íåò çàïèñåé â òàáëèöå alliances")
+        raise ValueError("ĞĞµÑ‚ Ğ´Ğ°Ğ½Ğ½Ñ‹Ñ… Ğ² Ñ‚Ğ°Ğ±Ğ»Ğ¸Ñ†Ğµ alliances")
 
     hex_map = {}  # (q, r) -> {'id', 'state', ...}
     hex_id = 1
@@ -65,7 +81,7 @@ def generate_map_and_edges(db_path='your_database.sqlite'):
         for q, r in hex_ring(0, 0, radius):
             coord = (q, r)
 
-            # Âûáîğ state
+            # Ğ’Ñ‹Ğ±Ğ¾Ñ€ state
             if radius == 0:
                 state = random.choice(STATES)
             else:
@@ -78,7 +94,7 @@ def generate_map_and_edges(db_path='your_database.sqlite'):
             has_warehouse = 1 if random.random() < 0.1 else 0
             patron = random.choice(patron_ids)
 
-            # Âñòàâêà â map
+            # Ğ’ÑÑ‚Ğ°Ğ²ĞºĞ° Ğ² map
             cur.execute("""
                 INSERT INTO map (id, planet_id, state, patron, has_warehouse)
                 VALUES (?, ?, ?, ?, ?)
@@ -91,14 +107,14 @@ def generate_map_and_edges(db_path='your_database.sqlite'):
             }
             hex_id += 1
 
-    # Âñòàâêà ğåáåğ
+    # Ğ¡Ğ¾Ğ·Ğ´Ğ°Ñ‘Ğ¼ Ñ€Ñ‘Ğ±Ñ€Ğ°
     for (q, r), hex_data in hex_map.items():
         current_id = hex_data['id']
         for nq, nr in hex_neighbors(q, r):
             neighbor = hex_map.get((nq, nr))
             if neighbor:
                 neighbor_id = neighbor['id']
-                # Âñòàâëÿåì òîëüêî îäèí ğàç äëÿ êàæäîé ïàğû
+                # Ğ”Ğ¾Ğ±Ğ°Ğ²Ğ»ÑĞµĞ¼ Ñ‚Ğ¾Ğ»ÑŒĞºĞ¾ Ğ¾Ğ´Ğ½Ñƒ ÑĞ²ÑĞ·ÑŒ Ğ´Ğ»Ñ ĞºĞ°Ğ¶Ğ´Ğ¾Ğ¹ Ğ¿Ğ°Ñ€Ñ‹
                 if current_id < neighbor_id:
                     cur.execute("""
                         INSERT INTO edges (id, left_hexagon, right_hexagon, state)
@@ -108,5 +124,7 @@ def generate_map_and_edges(db_path='your_database.sqlite'):
 
     conn.commit()
     conn.close()
+    print(f"ĞšĞ°Ñ€Ñ‚Ğ° Ğ¿Ğ»Ğ°Ğ½ĞµÑ‚Ñ‹ ÑĞ³ĞµĞ½ĞµÑ€Ğ¸Ñ€Ğ¾Ğ²Ğ°Ğ½Ğ°: {hex_id-1} Ğ³ĞµĞºÑĞ¾Ğ², {edge_id-1} Ñ€Ñ‘Ğ±ĞµÑ€")
 
-generate_map_and_edges()
+if __name__ == "__main__":
+    generate_map_and_edges()
