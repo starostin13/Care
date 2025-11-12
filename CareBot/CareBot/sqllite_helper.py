@@ -606,3 +606,117 @@ async def get_all_texts_for_language(language='ru'):
             SELECT key, value FROM texts WHERE language = ?
         ''', (language,)) as cursor:
             return await cursor.fetchall()
+
+
+async def is_user_admin(user_telegram_id):
+    """Check if a user is an admin.
+    
+    Args:
+        user_telegram_id: Telegram user ID
+        
+    Returns:
+        bool: True if user is admin, False otherwise
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT is_admin FROM warmasters WHERE telegram_id = ?
+        ''', (user_telegram_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] == 1 if result else False
+
+
+async def make_user_admin(user_telegram_id):
+    """Make a user an admin.
+    
+    Args:
+        user_telegram_id: Telegram user ID
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE warmasters SET is_admin = 1 WHERE telegram_id = ?
+        ''', (user_telegram_id,))
+        await db.commit()
+
+
+async def ensure_first_user_is_admin():
+    """Ensure the first user in warmasters is an admin if no admin exists yet."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Check if any admin exists
+        async with db.execute('''
+            SELECT COUNT(*) FROM warmasters WHERE is_admin = 1
+        ''') as cursor:
+            result = await cursor.fetchone()
+            admin_count = result[0] if result else 0
+        
+        # If no admin exists, make the first user admin
+        if admin_count == 0:
+            async with db.execute('''
+                SELECT telegram_id FROM warmasters ORDER BY id LIMIT 1
+            ''') as cursor:
+                first_user = await cursor.fetchone()
+                if first_user:
+                    await db.execute('''
+                        UPDATE warmasters SET is_admin = 1 WHERE telegram_id = ?
+                    ''', (first_user[0],))
+                    await db.commit()
+                    return first_user[0]
+        return None
+
+
+async def get_warmasters_with_nicknames():
+    """Get all warmasters who have set nicknames.
+    
+    Returns:
+        List of tuples: [(telegram_id, nickname, alliance), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id, nickname, alliance FROM warmasters 
+            WHERE nickname IS NOT NULL AND nickname != ''
+            ORDER BY nickname
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_all_alliances():
+    """Get all alliances with their IDs and names.
+    
+    Returns:
+        List of tuples: [(id, name), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, name FROM alliances ORDER BY id
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_alliance_player_count(alliance_id):
+    """Get the number of players in an alliance.
+    
+    Args:
+        alliance_id: Alliance ID
+        
+    Returns:
+        int: Number of players in the alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM warmasters WHERE alliance = ?
+        ''', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
+async def set_warmaster_alliance(user_telegram_id, alliance_id):
+    """Set a warmaster's alliance.
+    
+    Args:
+        user_telegram_id: Telegram user ID
+        alliance_id: Alliance ID to assign
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
+        ''', (alliance_id, user_telegram_id))
+        await db.commit()
