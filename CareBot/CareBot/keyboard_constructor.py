@@ -4,6 +4,7 @@ from telegram import InlineKeyboardButton
 import settings_helper
 import schedule_helper
 import localization
+import sqllite_helper
 
 async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
     allready_scheduled_items = await schedule_helper.get_user_scheduled_games(user_telegram)
@@ -139,8 +140,7 @@ async def this_week(rule):
 
 async def today_schedule(user_id):
     today = dt.today()
-    # Временно используем пустой список, пока не реализуем функцию в schedule_helper
-    appointments = []  # await schedule_helper.get_schedule_with_warmasters(user_id, str(today.date()))
+    appointments = await sqllite_helper.get_schedule_with_warmasters(user_id, str(today.date()))
     buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}'),appointments)]
     
     return [list(buttons)]
