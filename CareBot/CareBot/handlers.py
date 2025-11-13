@@ -376,8 +376,8 @@ async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     markup = InlineKeyboardMarkup(menu)
     query = update.callback_query
 
-    appointments_text = await localization.get_text_for_user(user_id, "appointments_title")
-    await query.edit_message_text(appointments_text, reply_markup=markup)
+    missions_text = await localization.get_text_for_user(user_id, "missions_title")
+    await query.edit_message_text(missions_text, reply_markup=markup)
     return MISSIONS
 
 
