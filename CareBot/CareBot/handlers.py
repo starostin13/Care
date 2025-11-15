@@ -13,6 +13,7 @@ import map_helper
 import warmaster_helper
 import settings_helper
 import schedule_helper
+import sqllite_helper
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
 from datetime import datetime
@@ -151,6 +152,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     logger.info(f"hello function called by user {userId}")
 
     await players_helper.add_warmaster(userId)
+    
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
 
@@ -505,6 +507,90 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Welcome to the Crusade Bot! Please type /start to begin.")
 
 
+async def admin_assign_alliance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of players for admin to assign alliance."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Get keyboard with players
+    menu = await keyboard_constructor.admin_assign_alliance_players(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    admin_text = await localization.get_text_for_user(user_id, "admin_assign_alliance_title")
+    await query.edit_message_text(admin_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Admin selected a player, now show alliance list."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract player telegram ID from callback data
+    player_telegram_id = query.data.split(':')[1]
+    
+    # Get player nickname
+    nickname = await sqllite_helper.get_nicknamane(player_telegram_id)
+    
+    # Get keyboard with alliances
+    menu = await keyboard_constructor.admin_assign_alliance_list(user_id, player_telegram_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    select_alliance_text = await localization.get_text_for_user(
+        user_id, "admin_select_alliance_for_player", player_name=nickname
+    )
+    await query.edit_message_text(select_alliance_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_assign_alliance_to_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Admin assigned alliance to player."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract player telegram ID and alliance ID from callback data
+    parts = query.data.split(':')
+    player_telegram_id = parts[1]
+    alliance_id = int(parts[2])
+    
+    # Assign alliance
+    await sqllite_helper.set_warmaster_alliance(player_telegram_id, alliance_id)
+    
+    # Get player and alliance names for confirmation
+    nickname = await sqllite_helper.get_nicknamane(player_telegram_id)
+    alliances = await sqllite_helper.get_all_alliances()
+    alliance_name = ""
+    for a_id, a_name in alliances:
+        if a_id == alliance_id:
+            alliance_name = a_name
+            break
+    
+    # Show confirmation and return to main menu
+    success_text = await localization.get_text_for_user(
+        user_id, "admin_alliance_assigned", 
+        player_name=nickname, alliance_name=alliance_name
+    )
+    await query.edit_message_text(success_text)
+    
+    # Return to main menu after a moment
+    menu = await keyboard_constructor.get_main_menu(user_id)
+    menu_markup = InlineKeyboardMarkup(menu)
+    
+    greeting_text = await localization.get_text_for_user(
+        user_id, 'main_menu_greeting', name=update.effective_user.first_name or "User"
+    )
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=greeting_text,
+        reply_markup=menu_markup
+    )
+    
+    return MAIN_MENU
+
+
 async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Debug handler for unmatched callbacks"""
     query = update.callback_query
@@ -541,7 +627,11 @@ conv_handler = ConversationHandler(
             CallbackQueryHandler(toggle_notifications,
                                  pattern='^togglenotifications$'),
             CallbackQueryHandler(
-                back_to_settings, pattern='^back_to_settings$')
+                back_to_settings, pattern='^back_to_settings$'),
+            # Admin handlers
+            CallbackQueryHandler(admin_assign_alliance, pattern='^admin_assign_alliance$'),
+            CallbackQueryHandler(admin_select_player, pattern='^admin_player:'),
+            CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:')
         ],
         SETTINGS: [
             CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
