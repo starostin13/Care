@@ -245,7 +245,8 @@ async def end_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
-    when_markup = await keyboard_constructor.this_week(query.data)
+    user_id = update.effective_user.id
+    when_markup = await keyboard_constructor.this_week(query.data, user_id)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(
         text=f"Selected option: {query.data}", reply_markup=menu

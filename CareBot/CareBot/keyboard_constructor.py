@@ -117,7 +117,7 @@ async def setting(userId):
 async def missions_list(user_id):
     items = [[]]
     
-async def this_week(rule):
+async def this_week(rule, user_id=None):
     from datetime import timedelta
     
     # Получаем сегодняшнюю дату
@@ -128,22 +128,34 @@ async def this_week(rule):
     for i in range(7):
         date = today + timedelta(days=i)
         menu_values.append(date)
-
-    days = [
-        [
-            InlineKeyboardButton(menu_values[0].strftime("%A %d.%m"), callback_data=menu_values[0].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[1].strftime("%A %d.%m"), callback_data=menu_values[1].strftime("%c") + ',' + rule)
-        ],
-        [
-            InlineKeyboardButton(menu_values[2].strftime("%A %d.%m"), callback_data=menu_values[2].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[3].strftime("%A %d.%m"), callback_data=menu_values[3].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[4].strftime("%A %d.%m"), callback_data=menu_values[4].strftime("%c") + ',' + rule)
-        ],
-        [
-            InlineKeyboardButton(menu_values[5].strftime("%A %d.%m"), callback_data=menu_values[5].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[6].strftime("%A %d.%m"), callback_data=menu_values[6].strftime("%c") + ',' + rule)
-        ]
-    ]
+    
+    # Get user's existing schedule entries if user_id is provided
+    existing_dates = set()
+    if user_id:
+        user_schedule = await sqllite_helper.get_schedule_by_user(user_id)
+        for entry in user_schedule:
+            # entry format: (id, date, rules, user_telegram, date_week)
+            existing_dates.add(entry[1])  # date is at index 1
+    
+    # Filter out dates that already have entries
+    available_dates = []
+    for date in menu_values:
+        date_str = str(date.date())
+        if date_str not in existing_dates:
+            available_dates.append(date)
+    
+    # Build keyboard with only available dates
+    days = []
+    for date in available_dates:
+        button = InlineKeyboardButton(
+            date.strftime("%A %d.%m"), 
+            callback_data=date.strftime("%c") + ',' + rule
+        )
+        # Add buttons to rows (you can adjust layout as needed)
+        if not days or len(days[-1]) >= 2:
+            days.append([button])
+        else:
+            days[-1].append(button)
     
     return days
 
