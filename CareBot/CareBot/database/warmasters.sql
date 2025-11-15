@@ -1,5 +1,6 @@
 PRAGMA foreign_keys = 0;
 
+-- БЕЗОПАСНАЯ миграция: сохраняем ВСЕ данные при добавлении новых колонок
 CREATE TABLE sqlitestudio_temp_table AS SELECT *
                                           FROM warmasters;
 
@@ -19,19 +20,28 @@ CREATE TABLE warmasters (
     is_admin      INTEGER DEFAULT (0)
 );
 
+-- КРИТИЧНО: Восстанавливаем ВСЕ существующие данные с сохранением новых колонок
 INSERT INTO warmasters (
-                           id,
-                           telegram_id,
-                           alliance,
-                           nickname,
-                           registered_as
-                       )
-                       SELECT id,
-                              telegram_id,
-                              alliance,
-                              nickname,
-                              registered_as
-                         FROM sqlitestudio_temp_table;
+    id,
+    telegram_id,
+    alliance,
+    nickname,
+    registered_as,
+    faction,
+    language,
+    notifications_enabled,
+    is_admin
+) SELECT 
+    id,
+    telegram_id,
+    alliance,
+    nickname,
+    registered_as,
+    COALESCE(faction, NULL) as faction,
+    COALESCE(language, 'ru') as language,
+    COALESCE(notifications_enabled, 1) as notifications_enabled,
+    COALESCE(is_admin, 0) as is_admin
+FROM sqlitestudio_temp_table;
 
 DROP TABLE sqlitestudio_temp_table;
 

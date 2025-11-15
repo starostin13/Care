@@ -13,6 +13,8 @@ services:
       - ./data:/app/data
       # Логи (опционально)
       - ./logs:/app/logs
+      # Миграции как отдельный volume для чистоты архитектуры
+      - ./migrations:/app/CareBot/migrations
     environment:
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=5555
@@ -28,20 +30,25 @@ services:
       retries: 3
       start_period: 15s
 
-  # Мониторинг базы данных (опционально, включается профилем admin)
-  db-viewer:
-    image: sqlitebrowser/sqlitebrowser:latest
-    container_name: carebot_db_viewer
+  # SQLite веб-интерфейс для администрирования базы данных
+  sqlite-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlite-web
+    container_name: carebot_sqlite_web
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/data:ro
+      - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/game_database.db
     networks:
       - carebot-network
     profiles:
       - admin
     depends_on:
       - carebot-production
+    restart: unless-stopped
 
 networks:
   carebot-network:
