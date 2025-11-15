@@ -63,12 +63,14 @@ async def contact_callback(update, bot):
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # update.callback_query.data 'mission_sch_2'
+    query = update.callback_query
+    await query.answer()  # Acknowledge the callback query
+    
     mission_number = int(
-        update.callback_query.data.replace("mission_sch_", ""))
+        query.data.replace("mission_sch_", ""))
     rules = await schedule_helper.get_mission_rules(mission_number)
     # Получаем миссию из базы данных
     mission = await mission_helper.get_mission(rules=rules)
-    query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
     index_of_mission_id = 2
 
