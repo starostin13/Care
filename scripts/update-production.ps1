@@ -57,6 +57,7 @@ function Sync-Files {
         "CareBot/requirements.txt"
     )
     
+    # Синхронизируем основные файлы
     foreach ($file in $filesToSync) {
         if (Test-Path $file) {
             Write-Host "  Copying $file..."
@@ -70,6 +71,16 @@ function Sync-Files {
         } else {
             Write-Warning "File $file not found, skipping"
         }
+    }
+    
+    # Синхронизируем миграции в отдельную папку
+    Write-Info "Syncing migrations to separate directory..."
+    ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH/migrations"
+    
+    $migrationFiles = Get-ChildItem -Path "CareBot/CareBot/migrations/" -File -ErrorAction SilentlyContinue
+    foreach ($migration in $migrationFiles) {
+        Write-Host "  Copying migration: $($migration.Name)..."
+        scp "CareBot/CareBot/migrations/$($migration.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/migrations/$($migration.Name)"
     }
     
     Write-Success "File sync completed"
@@ -105,6 +116,16 @@ function Update-Production {
     
     if (-not (Test-Token)) { return $false }
     
+    # Create backup before update
+    if (-not $Force) {
+        $answer = Read-Host "Create backup before update? (Y/n)"
+        if ($answer -ne "n" -and $answer -ne "N") {
+            Create-Backup
+        }
+    } else {
+        Create-Backup
+    }
+    
     if (-not (Sync-Files)) { return $false }
     
     Write-Info "Restarting production service..."
@@ -118,6 +139,91 @@ function Update-Production {
     return $true
 }
 
+# Start admin mode with sqlite-web
+function Start-AdminMode {
+    Write-Info "Starting admin mode with SQLite web interface..."
+    
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml --profile admin up -d"
+    
+    Start-Sleep -Seconds 5
+    
+    Write-Success "Admin mode started!"
+    Write-Info "SQLite web interface: http://192.168.1.125:8080"
+    Write-Info "CareBot health: $HEALTH_URL"
+}
+
+# Stop admin mode
+function Stop-AdminMode {
+    Write-Info "Stopping admin mode..."
+    
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml --profile admin down"
+    
+    Write-Success "Admin mode stopped!"
+}
+
+# Start/Stop/Restart services
+function Start-Service {
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml up -d"
+    Write-Success "Service started"
+}
+
+function Stop-Service {
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml down"
+    Write-Success "Service stopped"
+}
+
+function Restart-Service {
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml restart"
+    Write-Success "Service restarted"
+}
+
+# Sync only migrations
+function Sync-Migrations {
+    Write-Info "Syncing only migration files..."
+    
+    # Создаем папку для миграций
+    ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH/migrations"
+    
+    $migrationFiles = Get-ChildItem -Path "CareBot/CareBot/migrations/" -File -ErrorAction SilentlyContinue
+    $migrationCount = 0
+    
+    foreach ($migration in $migrationFiles) {
+        Write-Host "  Copying migration: $($migration.Name)..."
+        scp "CareBot/CareBot/migrations/$($migration.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/migrations/$($migration.Name)"
+        $migrationCount++
+    }
+    
+    Write-Success "Synced $migrationCount migration files"
+    return $true
+}
+
+# Apply migrations manually
+function Apply-Migrations {
+    Write-Info "Applying migrations in production..."
+    
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH && docker exec carebot_production python /app/CareBot/migrate_db.py"
+    
+    Write-Success "Migrations applied"
+}
+
+# Check migration status
+function Check-MigrationStatus {
+    Write-Info "Checking migration status..."
+    
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH && docker exec carebot_production python /app/CareBot/migrate_db.py --status"
+}
+
+# Create backup
+function Create-Backup {
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $backupPath = "carebot-backup-$timestamp"
+    
+    Write-Info "Creating backup..."
+    ssh $SERVER_HOST "cd /home/ubuntu; cp -r carebot-production $backupPath"
+    
+    Write-Success "Backup created: $backupPath"
+}
+
 # Main script logic
 switch ($Action.ToLower()) {
     "update" {
@@ -129,6 +235,33 @@ switch ($Action.ToLower()) {
     "logs" {
         ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml logs --tail=20"
     }
+    "admin" {
+        Start-AdminMode
+    }
+    "stop-admin" {
+        Stop-AdminMode
+    }
+    "start" {
+        Start-Service
+    }
+    "stop" {
+        Stop-Service
+    }
+    "restart" {
+        Restart-Service
+    }
+    "migrations" {
+        Sync-Migrations
+    }
+    "apply-migrations" {
+        Apply-Migrations
+    }
+    "migration-status" {
+        Check-MigrationStatus
+    }
+    "backup" {
+        Create-Backup
+    }
     default {
         Write-Host ""
         Write-Host "CareBot Production Update Script" -ForegroundColor Yellow
@@ -136,12 +269,26 @@ switch ($Action.ToLower()) {
         Write-Host "Usage: .\scripts\update-production.ps1 [action]"
         Write-Host ""
         Write-Host "Actions:"
-        Write-Host "  update  - Update production (default)"
-        Write-Host "  status  - Check health"
-        Write-Host "  logs    - Show logs"
+        Write-Host "  update           - Update production (default)"
+        Write-Host "  status           - Check health"
+        Write-Host "  logs             - Show logs"
+        Write-Host "  admin            - Start admin mode with SQLite web interface"
+        Write-Host "  stop-admin       - Stop admin mode"
+        Write-Host "  start            - Start services"
+        Write-Host "  stop             - Stop services"
+        Write-Host "  restart          - Restart services"
+        Write-Host "  backup           - Create backup"
+        Write-Host "  migrations       - Sync only migration files"
+        Write-Host "  apply-migrations - Apply migrations manually"
+        Write-Host "  migration-status - Check migration status"
         Write-Host ""
         Write-Host "Options:"
         Write-Host "  -Force           - Skip confirmations"
         Write-Host "  -SkipHealthCheck - Skip health check"
+        Write-Host ""
+        Write-Host "Examples:"
+        Write-Host "  .\scripts\update-production.ps1 admin"
+        Write-Host "  .\scripts\update-production.ps1 migrations"
+        Write-Host "  .\scripts\update-production.ps1 update -Force"
     }
 }
