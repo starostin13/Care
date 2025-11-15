@@ -41,6 +41,15 @@ async def get_main_menu(userId):
                 callback_data="games")
         ])
 
+    # Check if user is admin and add admin button
+    is_admin = await sqllite_helper.is_user_admin(userId)
+    if is_admin:
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_admin"),
+                callback_data="admin_assign_alliance")
+        ])
+
     # Settings button is always available
     items.append([
         InlineKeyboardButton(
@@ -155,3 +164,77 @@ async def language_selection(userId):
             callback_data="back_to_settings")]
     ]
     return languages
+
+
+async def admin_assign_alliance_players(userId):
+    """Generate keyboard showing players with nicknames for alliance assignment.
+    
+    Args:
+        userId: User telegram ID (admin)
+        
+    Returns:
+        List of button rows for InlineKeyboardMarkup
+    """
+    players = await sqllite_helper.get_warmasters_with_nicknames()
+    buttons = []
+    
+    for player in players:
+        telegram_id, nickname, alliance = player
+        # Get alliance name if set
+        alliance_name = ""
+        if alliance:
+            alliances = await sqllite_helper.get_all_alliances()
+            for a_id, a_name in alliances:
+                if a_id == alliance:
+                    alliance_name = f" ({a_name})"
+                    break
+        
+        buttons.append([
+            InlineKeyboardButton(
+                f"{nickname}{alliance_name}",
+                callback_data=f"admin_player:{telegram_id}"
+            )
+        ])
+    
+    # Add back button
+    buttons.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="back_to_main"
+        )
+    ])
+    
+    return buttons
+
+
+async def admin_assign_alliance_list(userId, player_telegram_id):
+    """Generate keyboard showing alliances for assignment to a player.
+    
+    Args:
+        userId: User telegram ID (admin)
+        player_telegram_id: The player to assign alliance to
+        
+    Returns:
+        List of button rows for InlineKeyboardMarkup
+    """
+    alliances = await sqllite_helper.get_all_alliances()
+    buttons = []
+    
+    for alliance_id, alliance_name in alliances:
+        player_count = await sqllite_helper.get_alliance_player_count(alliance_id)
+        buttons.append([
+            InlineKeyboardButton(
+                f"{alliance_name} ({player_count} игроков)",
+                callback_data=f"admin_alliance:{player_telegram_id}:{alliance_id}"
+            )
+        ])
+    
+    # Add back button
+    buttons.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="admin_assign_alliance"
+        )
+    ])
+    
+    return buttons
