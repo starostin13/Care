@@ -143,7 +143,7 @@ async def today_schedule(user_id):
     appointments = await sqllite_helper.get_schedule_with_warmasters(user_id, str(today.date()))
     buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}'),appointments)]
     
-    return [list(buttons)]
+    return [[button] for button in buttons]
 
 
 async def language_selection(userId):
