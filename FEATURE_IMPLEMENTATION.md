@@ -14,13 +14,12 @@
 
 ### 1. Database Functions (`sqllite_helper.py`)
 
-Added 7 new functions:
+Added 6 new functions:
 
 ```python
 # Admin Management
 async def is_user_admin(user_telegram_id)
 async def make_user_admin(user_telegram_id)
-async def ensure_first_user_is_admin()
 
 # Data Retrieval
 async def get_warmasters_with_nicknames()
@@ -32,6 +31,12 @@ async def set_warmaster_alliance(user_telegram_id, alliance_id)
 ```
 
 **Note:** Uses existing `is_admin` column from migration `20251106_01_add_is_admin_to_warmasters.sql`
+
+### 1.1 Database Migrations
+
+Added migration `008_set_first_user_admin.py`:
+- Sets the first user (by ID) as admin if no admin exists
+- Runs automatically during database migration process
 
 ### 2. Keyboard Constructors (`keyboard_constructor.py`)
 
@@ -57,8 +62,8 @@ Added 3 new handler functions:
 
 ```python
 async def admin_assign_alliance(update, context)
-    # Entry point - checks admin status
-    # Shows player selection screen
+    # Entry point - shows player selection screen
+    # No explicit admin check (button only visible to admins)
     
 async def admin_select_player(update, context)
     # Handles player selection
@@ -69,17 +74,15 @@ async def admin_assign_alliance_to_player(update, context)
     # Shows confirmation and returns to menu
 ```
 
-Updated `hello()` function:
-- Calls `ensure_first_user_is_admin()` on bot start
-- Logs admin promotion events
-
 Updated conversation handler:
 - Added 3 callback handlers in MAIN_MENU state:
   - `admin_assign_alliance` pattern
   - `admin_player:` pattern
   - `admin_alliance:` pattern
 
-### 4. Localization (`migrations/007_add_admin_alliance_texts.py`)
+### 4. Localization
+
+**Migration `007_add_admin_alliance_texts.py`:**
 
 Added 8 new text entries (4 keys × 2 languages):
 

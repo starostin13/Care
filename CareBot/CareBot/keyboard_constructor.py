@@ -4,6 +4,7 @@ from telegram import InlineKeyboardButton
 import settings_helper
 import schedule_helper
 import localization
+import sqllite_helper
 
 async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
     allready_scheduled_items = await schedule_helper.get_user_scheduled_games(user_telegram)
@@ -21,8 +22,6 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
     return rules
 
 async def get_main_menu(userId):
-    import sqllite_helper
-    
     items = []
     
     # Check if user has a nickname set
@@ -177,8 +176,6 @@ async def admin_assign_alliance_players(userId):
     Returns:
         List of button rows for InlineKeyboardMarkup
     """
-    import sqllite_helper
-    
     players = await sqllite_helper.get_warmasters_with_nicknames()
     buttons = []
     
@@ -221,8 +218,6 @@ async def admin_assign_alliance_list(userId, player_telegram_id):
     Returns:
         List of button rows for InlineKeyboardMarkup
     """
-    import sqllite_helper
-    
     alliances = await sqllite_helper.get_all_alliances()
     buttons = []
     

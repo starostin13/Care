@@ -14,7 +14,7 @@ Admins can assign players to alliances (factions) in the game.
 
 ### Automatic Admin Assignment
 
-When the bot starts, if no admin exists, the **first user** in the `warmasters` table is automatically promoted to admin. This ensures that the first person who registered with the bot becomes the admin.
+When database migrations are applied, if no admin exists, the **first user** in the `warmasters` table is automatically set as admin via migration `008_set_first_user_admin.py`. This ensures that the first person who registered with the bot becomes the admin.
 
 ### Manual Admin Assignment
 
@@ -96,9 +96,9 @@ The feature uses the following callback data patterns:
 
 ### Security
 
-- Admin check is performed on every admin action
-- Non-admin users are denied access with a message "У вас нет прав администратора"
-- The first user is auto-promoted only once, on bot startup
+- Admin button is only visible to users with `is_admin = 1`
+- Admin check is performed at UI level (button visibility)
+- The first user is set as admin via database migration
 
 ## Troubleshooting
 

@@ -13,6 +13,7 @@ import map_helper
 import warmaster_helper
 import settings_helper
 import schedule_helper
+import sqllite_helper
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
 from datetime import datetime
@@ -151,12 +152,6 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     logger.info(f"hello function called by user {userId}")
 
     await players_helper.add_warmaster(userId)
-    
-    # Ensure first user is admin
-    import sqllite_helper
-    admin_id = await sqllite_helper.ensure_first_user_is_admin()
-    if admin_id:
-        logger.info(f"Made user {admin_id} an admin (first warmaster)")
     
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
@@ -518,13 +513,6 @@ async def admin_assign_alliance(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     
-    # Check if user is admin
-    import sqllite_helper
-    is_admin = await sqllite_helper.is_user_admin(user_id)
-    if not is_admin:
-        await query.edit_message_text("У вас нет прав администратора.")
-        return MAIN_MENU
-    
     # Get keyboard with players
     menu = await keyboard_constructor.admin_assign_alliance_players(user_id)
     markup = InlineKeyboardMarkup(menu)
@@ -544,7 +532,6 @@ async def admin_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE
     player_telegram_id = query.data.split(':')[1]
     
     # Get player nickname
-    import sqllite_helper
     nickname = await sqllite_helper.get_nicknamane(player_telegram_id)
     
     # Get keyboard with alliances
@@ -570,7 +557,6 @@ async def admin_assign_alliance_to_player(update: Update, context: ContextTypes.
     alliance_id = int(parts[2])
     
     # Assign alliance
-    import sqllite_helper
     await sqllite_helper.set_warmaster_alliance(player_telegram_id, alliance_id)
     
     # Get player and alliance names for confirmation
