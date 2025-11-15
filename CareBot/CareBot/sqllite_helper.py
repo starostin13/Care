@@ -638,31 +638,6 @@ async def make_user_admin(user_telegram_id):
         await db.commit()
 
 
-async def ensure_first_user_is_admin():
-    """Ensure the first user in warmasters is an admin if no admin exists yet."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        # Check if any admin exists
-        async with db.execute('''
-            SELECT COUNT(*) FROM warmasters WHERE is_admin = 1
-        ''') as cursor:
-            result = await cursor.fetchone()
-            admin_count = result[0] if result else 0
-        
-        # If no admin exists, make the first user admin
-        if admin_count == 0:
-            async with db.execute('''
-                SELECT telegram_id FROM warmasters ORDER BY id LIMIT 1
-            ''') as cursor:
-                first_user = await cursor.fetchone()
-                if first_user:
-                    await db.execute('''
-                        UPDATE warmasters SET is_admin = 1 WHERE telegram_id = ?
-                    ''', (first_user[0],))
-                    await db.commit()
-                    return first_user[0]
-        return None
-
-
 async def get_warmasters_with_nicknames():
     """Get all warmasters who have set nicknames.
     
