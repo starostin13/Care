@@ -4,7 +4,15 @@ from telegram import InlineKeyboardButton
 import settings_helper
 import schedule_helper
 import localization
-import sqllite_helper
+import config
+
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Keyboard Constructor using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Keyboard Constructor using REAL SQLite helper")
 
 async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
     allready_scheduled_items = await schedule_helper.get_user_scheduled_games(user_telegram)

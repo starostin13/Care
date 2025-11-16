@@ -17,6 +17,28 @@ function Write-Error($text) { Write-Host "ERROR: $text" -ForegroundColor Red }
 function Write-Info($text) { Write-Host "INFO: $text" -ForegroundColor Cyan }
 function Write-Warning($text) { Write-Host "WARNING: $text" -ForegroundColor Yellow }
 
+# Production safety check
+function Test-ProductionSafety {
+    Write-Info "Running production safety check..."
+    
+    try {
+        python scripts\check-production-safety.py
+        $exitCode = $LASTEXITCODE
+        
+        if ($exitCode -eq 0) {
+            Write-Success "Production safety check passed"
+            return $true
+        } else {
+            Write-Error "Production safety check FAILED!"
+            Write-Warning "Fix security issues before deploying to production"
+            return $false
+        }
+    } catch {
+        Write-Error "Failed to run safety check: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 # Check token
 function Test-Token {
     Write-Info "Checking Telegram token..."
@@ -113,6 +135,13 @@ function Test-Health {
 # Update production
 function Update-Production {
     Write-Host "Starting CareBot Production Update" -ForegroundColor Yellow
+    
+    # КРИТИЧЕСКАЯ проверка безопасности перед деплоем
+    if (-not (Test-ProductionSafety)) {
+        Write-Error "Production safety check FAILED! Deployment BLOCKED."
+        Write-Warning "Fix all security issues before deploying to production."
+        return $false
+    }
     
     if (-not (Test-Token)) { return $false }
     
@@ -262,6 +291,9 @@ switch ($Action.ToLower()) {
     "backup" {
         Create-Backup
     }
+    "safety-check" {
+        Test-ProductionSafety | Out-Null
+    }
     default {
         Write-Host ""
         Write-Host "CareBot Production Update Script" -ForegroundColor Yellow
@@ -281,6 +313,7 @@ switch ($Action.ToLower()) {
         Write-Host "  migrations       - Sync only migration files"
         Write-Host "  apply-migrations - Apply migrations manually"
         Write-Host "  migration-status - Check migration status"
+        Write-Host "  safety-check     - Run production safety validation"
         Write-Host ""
         Write-Host "Options:"
         Write-Host "  -Force           - Skip confirmations"

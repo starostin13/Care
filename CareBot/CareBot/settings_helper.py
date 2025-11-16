@@ -7,7 +7,15 @@ Helper module for user settings operations.
 Handles language preferences, notifications, and other user settings.
 """
 
-import sqllite_helper
+import config
+
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Settings Helper using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Settings Helper using REAL SQLite helper")
 import logging
 
 logger = logging.getLogger(__name__)

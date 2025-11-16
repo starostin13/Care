@@ -4,7 +4,15 @@
 from ast import Tuple
 from math import e, fabs
 from typing import Optional
-import sqllite_helper
+import config
+
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Map Helper using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Map Helper using REAL SQLite helper")
 import logging
 import random
 
