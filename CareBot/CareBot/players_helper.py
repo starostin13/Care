@@ -1,5 +1,13 @@
 from sqllite_helper import get_alliance_of_warmaster, get_warmasters_opponents
-import sqllite_helper
+import config
+
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Players Helper using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Players Helper using REAL SQLite helper")
 
 async def add_warmaster(user_id):
     await sqllite_helper.add_warmaster(user_id)

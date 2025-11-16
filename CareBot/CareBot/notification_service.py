@@ -3,7 +3,15 @@ Notification service for sending game notifications to players
 """
 import logging
 from telegram.ext import ContextTypes
-import sqllite_helper
+import config
+
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Notification Service using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Notification Service using REAL SQLite helper")
 import localization
 
 logger = logging.getLogger(__name__)

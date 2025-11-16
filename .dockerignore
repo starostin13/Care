@@ -45,6 +45,16 @@ Thumbs.db
 obj/
 .vs/
 
+# Test mode files (НЕ ДОЛЖНЫ попадать в production!)
+**/mock_sqlite_helper.py
+scripts/test-mode.ps1
+scripts/check-production-safety.py
+TEST_MODE_GUIDE.md
+VSCODE_QUICKSTART.md
+**/test_*.py
+test_storage/
+.vscode/
+
 # Local config
 config/local_config.py
 *.env
