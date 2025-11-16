@@ -611,76 +611,85 @@ async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     return ConversationHandler.END
 
-# Run database migrations before starting the bot
-print("🔄 Checking for pending database migrations...")
-migration_success = migrate_db.run_migrations()
-if not migration_success:
-    print("❌ Database migration failed! Bot cannot start.")
-    exit(1)
-print("✅ Database migrations completed successfully.")
+def start_bot():
+    """Initialize and start the Telegram bot."""
+    # Run database migrations before starting the bot
+    print("🔄 Checking for pending database migrations...")
+    migration_success = migrate_db.run_migrations()
+    if not migration_success:
+        print("❌ Database migration failed! Bot cannot start.")
+        return False
+    print("✅ Database migrations completed successfully.")
 
-bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
+    bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
 
-conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("start", hello),
-                  ],
-    states={
-        MAIN_MENU: [
-            CallbackQueryHandler(set_name, pattern='^requestsetname$'),
-            CallbackQueryHandler(setting, pattern='^setting$'),
-            CallbackQueryHandler(setting, pattern='^callsettings$'),
-            CallbackQueryHandler(appoint, pattern='^games$'),
-            CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
-            CallbackQueryHandler(show_missions, pattern='^missions$'),
-            CallbackQueryHandler(registration_call, pattern='^registration$'),
-            CallbackQueryHandler(show_missions, pattern='^callmissions$'),
-            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
-            CallbackQueryHandler(set_language, pattern='^lang:'),
-            CallbackQueryHandler(toggle_notifications,
-                                 pattern='^togglenotifications$'),
-            CallbackQueryHandler(
-                back_to_settings, pattern='^back_to_settings$'),
-            # Admin handlers
-            CallbackQueryHandler(admin_assign_alliance, pattern='^admin_assign_alliance$'),
-            CallbackQueryHandler(admin_select_player, pattern='^admin_player:'),
-            CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:')
-        ],
-        SETTINGS: [
-            CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
-            CallbackQueryHandler(back_to_main_menu, pattern='^start$'),
-            CallbackQueryHandler(set_name, pattern='^requestsetname$'),
-            CallbackQueryHandler(change_language, pattern='^changelanguage$'),
-            CallbackQueryHandler(set_language, pattern='^lang:'),
-            CallbackQueryHandler(toggle_notifications,
-                                 pattern='^togglenotifications$'),
-            CallbackQueryHandler(debug_callback)  # Catch all unmatched callbacks
-        ],
-        GAMES: [
-            CallbackQueryHandler(hello, pattern='^start$'),
-            CallbackQueryHandler(button, pattern='rule')
-        ],
-        SCHEDULE: [
-            CallbackQueryHandler(hello, pattern='^start$'),
-            # Matches date,rule:rulename format
-            CallbackQueryHandler(im_in, pattern=r'^.+,rule:.+$')
-        ],
-        MISSIONS: [
-            CallbackQueryHandler(hello, pattern='^start$'),
-            CallbackQueryHandler(get_the_mission)
-        ]
-    },
-    fallbacks=[CommandHandler("start", hello)],
-)
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", hello),
+                      ],
+        states={
+            MAIN_MENU: [
+                CallbackQueryHandler(set_name, pattern='^requestsetname$'),
+                CallbackQueryHandler(setting, pattern='^setting$'),
+                CallbackQueryHandler(setting, pattern='^callsettings$'),
+                CallbackQueryHandler(appoint, pattern='^games$'),
+                CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
+                CallbackQueryHandler(show_missions, pattern='^missions$'),
+                CallbackQueryHandler(registration_call, pattern='^registration$'),
+                CallbackQueryHandler(show_missions, pattern='^callmissions$'),
+                CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+                CallbackQueryHandler(set_language, pattern='^lang:'),
+                CallbackQueryHandler(toggle_notifications,
+                                     pattern='^togglenotifications$'),
+                CallbackQueryHandler(
+                    back_to_settings, pattern='^back_to_settings$'),
+                # Admin handlers
+                CallbackQueryHandler(admin_assign_alliance, pattern='^admin_assign_alliance$'),
+                CallbackQueryHandler(admin_select_player, pattern='^admin_player:'),
+                CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:')
+            ],
+            SETTINGS: [
+                CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
+                CallbackQueryHandler(back_to_main_menu, pattern='^start$'),
+                CallbackQueryHandler(set_name, pattern='^requestsetname$'),
+                CallbackQueryHandler(change_language, pattern='^changelanguage$'),
+                CallbackQueryHandler(set_language, pattern='^lang:'),
+                CallbackQueryHandler(toggle_notifications,
+                                     pattern='^togglenotifications$'),
+                CallbackQueryHandler(debug_callback)  # Catch all unmatched callbacks
+            ],
+            GAMES: [
+                CallbackQueryHandler(hello, pattern='^start$'),
+                CallbackQueryHandler(button, pattern='rule')
+            ],
+            SCHEDULE: [
+                CallbackQueryHandler(hello, pattern='^start$'),
+                # Matches date,rule:rulename format
+                CallbackQueryHandler(im_in, pattern=r'^.+,rule:.+$')
+            ],
+            MISSIONS: [
+                CallbackQueryHandler(hello, pattern='^start$'),
+                CallbackQueryHandler(get_the_mission)
+            ]
+        },
+        fallbacks=[CommandHandler("start", hello)],
+    )
 
-# Handler for catching replies to the bot's messages, specifically replies to
-# get_the_mission
-bot.add_handler(
-    MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply)
-)
-bot.add_handler(conv_handler)
-bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-bot.add_handler(CommandHandler("setname", input_name))
-bot.add_handler(CommandHandler("regme", contact))
-bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))
+    # Handler for catching replies to the bot's messages, specifically replies to
+    # get_the_mission
+    bot.add_handler(
+        MessageHandler(filters.REPLY & filters.TEXT, handle_mission_reply)
+    )
+    bot.add_handler(conv_handler)
+    bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    bot.add_handler(CommandHandler("setname", input_name))
+    bot.add_handler(CommandHandler("regme", contact))
+    bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))
 
-bot.run_polling()
+    print("🤖 Starting Telegram bot polling...")
+    bot.run_polling()
+    return True
+
+
+# Auto-start bot if this file is run directly (for backwards compatibility)
+if __name__ == "__main__":
+    start_bot()
