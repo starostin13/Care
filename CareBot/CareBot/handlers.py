@@ -13,7 +13,13 @@ import map_helper
 import warmaster_helper
 import settings_helper
 import schedule_helper
-import sqllite_helper
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Handlers using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Handlers using REAL SQLite helper")
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
 from datetime import datetime
