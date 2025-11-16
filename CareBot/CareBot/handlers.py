@@ -69,12 +69,14 @@ async def contact_callback(update, bot):
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # update.callback_query.data 'mission_sch_2'
+    query = update.callback_query
+    await query.answer()  # Acknowledge the callback query
+    
     mission_number = int(
-        update.callback_query.data.replace("mission_sch_", ""))
+        query.data.replace("mission_sch_", ""))
     rules = await schedule_helper.get_mission_rules(mission_number)
     # Получаем миссию из базы данных
     mission = await mission_helper.get_mission(rules=rules)
-    query = update.callback_query
     data = query.data  # Получаем данные из нажатой кнопки
     index_of_mission_id = 2
 
@@ -196,6 +198,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
     query = update.callback_query
+    await query.answer()
     rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
     menu = InlineKeyboardMarkup(rules)
     await query.edit_message_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
@@ -251,6 +254,7 @@ async def end_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
+    await query.answer()
     when_markup = await keyboard_constructor.this_week(query.data)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(
@@ -380,9 +384,11 @@ async def setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
     menu = await keyboard_constructor.today_schedule(user_id)
     markup = InlineKeyboardMarkup(menu)
-    query = update.callback_query
 
     missions_text = await localization.get_text_for_user(user_id, "missions_title")
     await query.edit_message_text(missions_text, reply_markup=markup)

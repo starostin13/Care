@@ -274,8 +274,13 @@ async def destroy_warehouse(cell_id):
     return True
 
 async def get_event_participants(eventId):
+    """
+    Mock реализация для получения участников события.
+    Возвращает список кортежей формата: [(user_telegram,), (user_telegram,)]
+    """
     print(f"🧪 Mock: get_event_participants({eventId})")
-    return [1, 2]  # Mock participant IDs
+    # Возвращаем двух тестовых пользователей как кортежи (как SQL fetchall())
+    return [('325313837',), ('123456789',)]
 
 async def get_faction_of_warmaster(user_telegram_id):
     print(f"🧪 Mock: get_faction_of_warmaster({user_telegram_id})")
@@ -283,21 +288,69 @@ async def get_faction_of_warmaster(user_telegram_id):
     return user.get('faction', 'Империум') if user else 'Империум'
 
 async def get_mission(rules):
+    """
+    Mock реализация для получения миссии по правилам.
+    Возвращает кортеж формата: (deploy, rules, cell, mission_description, id, locked)
+    Совместимо с реальной структурой таблицы mission_stack.
+    """
     print(f"🧪 Mock: get_mission({rules})")
-    return {
-        'id': random.randint(1, 100),
-        'name': f'Mock {rules} Mission',
-        'description': f'Test mission for {rules}',
-        'rules': rules
-    }
+    
+    # Генерируем тестовые данные в правильном формате
+    mission_id = random.randint(1, 100)
+    cell_id = random.randint(1, 50)  # Cell ID для карты
+    
+    # Формат: (deploy, rules, cell, mission_description, id, locked)
+    return (
+        f"Mock {rules} Deploy",    # deploy
+        rules,                     # rules
+        cell_id,                   # cell (это mission[2] которое ожидается)
+        f"Тестовая миссия для {rules}",  # mission_description
+        mission_id,               # id
+        0                         # locked (0 = unlocked, 1 = locked)
+    )
 
 async def get_schedule_by_user(user_telegram, date=None):
     print(f"🧪 Mock: get_schedule_by_user({user_telegram}, {date})")
     return []
 
 async def get_schedule_with_warmasters(user_telegram, date=None):
+    """
+    Mock реализация для получения расписания миссий на сегодня.
+    Возвращает список записей формата: (schedule_id, rules, nickname)
+    Генерирует миссии для всех игровых режимов с одним противником.
+    """
     print(f"🧪 Mock: get_schedule_with_warmasters({user_telegram}, {date})")
-    return []
+    
+    # Получаем текущего пользователя
+    current_user = await get_user_by_telegram_id(user_telegram)
+    if not current_user:
+        return []
+    
+    # Находим другого пользователя для противостояния
+    opponent = None
+    for user in MOCK_WARMASTERS.values():
+        if user['telegram_id'] != str(user_telegram):
+            opponent = user
+            break
+    
+    if not opponent:
+        print("🧪 Mock: Нет доступных противников для расписания")
+        return []
+    
+    # Генерируем расписание для всех игровых режимов
+    game_rules = ["killteam", "wh40k", "combat_patrol", "boarding_action", "battlefleet"]
+    
+    schedule_entries = []
+    for i, rules in enumerate(game_rules, start=1):
+        schedule_id = 1000 + i  # Уникальный ID для расписания
+        schedule_entries.append((
+            schedule_id,
+            rules, 
+            opponent['nickname']
+        ))
+    
+    print(f"🧪 Mock: Сгенерировано {len(schedule_entries)} записей расписания")
+    return schedule_entries
 
 async def get_settings(telegram_user_id):
     print(f"🧪 Mock: get_settings({telegram_user_id})")
@@ -325,9 +378,14 @@ async def get_warmasters_opponents(against_alliance, rule, date):
     return [w for w in MOCK_WARMASTERS.values() if w['alliance'] != against_alliance]
 
 async def get_alliance_of_warmaster(telegram_user_id):
+    """
+    Mock реализация для получения альянса игрока.
+    Возвращает кортеж формата: (alliance_id,)
+    """
     print(f"🧪 Mock: get_alliance_of_warmaster({telegram_user_id})")
     user = await get_user_by_telegram_id(telegram_user_id)
-    return user.get('alliance') if user else 1
+    alliance_id = user.get('alliance') if user else 1
+    return (alliance_id,)  # Возвращаем как кортеж для совместимости с SQL fetchone()
 
 async def insert_to_schedule(date, rules, user_telegram):
     print(f"🧪 Mock: insert_to_schedule({date}, {rules}, {user_telegram})")
@@ -500,9 +558,13 @@ async def get_rules_of_mission(number_of_mission):
     return 'wh40k'
 
 async def get_state(cell_id):
+    """
+    Mock реализация для получения состояния гекса.
+    Возвращает кортеж с одним элементом: (state,)
+    """
     print(f"🧪 Mock: get_state({cell_id})")
     states = ['Лес', 'Поле', 'Город', 'Горы', 'Болото']
-    return random.choice(states)
+    return (random.choice(states),)
 
 async def add_battle_result(mission_id, counts1, counts2):
     print(f"🧪 Mock: add_battle_result({mission_id}, {counts1}, {counts2})")
