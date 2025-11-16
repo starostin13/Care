@@ -47,9 +47,13 @@ def start_telegram_bot():
     logger.info("Starting Telegram bot...")
     
     try:
-        # Импортируем handlers - это автоматически запустит бота
-        from CareBot import handlers
-        logger.info("Telegram bot started successfully")
+        # Импортируем и запускаем бота
+        from CareBot.handlers import start_bot
+        success = start_bot()
+        if success:
+            logger.info("Telegram bot started successfully")
+        else:
+            logger.error("Telegram bot failed to start")
         
     except Exception as e:
         logger.error(f"Error starting Telegram bot: {e}")
