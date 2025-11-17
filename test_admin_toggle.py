@@ -8,10 +8,20 @@ import asyncio
 import sys
 import os
 
+# Set test mode before any imports
+os.environ['CAREBOT_TEST_MODE'] = 'true'
+
 # Add the CareBot directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'CareBot', 'CareBot'))
 
-import sqllite_helper
+# Import config to initialize TEST_MODE, then import the appropriate helper
+import config
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Test using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Test using REAL SQLite helper")
 
 
 async def test_admin_toggle():
@@ -103,35 +113,54 @@ async def test_admin_toggle():
             import traceback
             traceback.print_exc()
     
-    # Test 4: Test protection for user with id=0 (if exists)
+    # Test 4: Test protection for user with id=0 (using mock user with id=0)
     print("\n4. Testing id=0 protection...")
     try:
-        # Try to find user with id=0
-        import aiosqlite
-        DATABASE_PATH = os.environ.get('DATABASE_PATH', 
-            r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database")
-        
-        async with aiosqlite.connect(DATABASE_PATH) as db:
-            async with db.execute('SELECT telegram_id FROM warmasters WHERE id = 0') as cursor:
-                result = await cursor.fetchone()
-                
-                if result:
-                    user_id_0_telegram = result[0]
-                    print(f"   - Found user with id=0: telegram_id={user_id_0_telegram}")
+        if config.TEST_MODE:
+            # In mock mode, we have a user with id=0: SuperAdmin
+            user_id_0_telegram = '999999999'  # SuperAdmin from MOCK_WARMASTERS with id=0
+            print(f"   - Testing with mock user (telegram_id={user_id_0_telegram})")
+            
+            # Make sure they're admin first
+            await sqllite_helper.make_user_admin(user_id_0_telegram)
+            is_admin = await sqllite_helper.is_user_admin(user_id_0_telegram)
+            print(f"   - User is admin: {is_admin}")
+            
+            # Try to toggle (should be blocked for user with id=0)
+            success, new_status, message = await sqllite_helper.toggle_user_admin(user_id_0_telegram)
+            print(f"   - Toggle result: success={success}, new_status={new_status}, message='{message}'")
+            
+            if not success and "id=0" in message:
+                print(f"   ✓ Protection working: Cannot remove admin from id=0")
+            else:
+                print(f"   ✗ Protection failed: {message}")
+        else:
+            # In real DB mode, try to find actual user with id=0
+            import aiosqlite
+            DATABASE_PATH = os.environ.get('DATABASE_PATH', 
+                r"C:\Users\al-gerasimov\source\repos\Care\CareBot\CareBot\db\database")
+            
+            async with aiosqlite.connect(DATABASE_PATH) as db:
+                async with db.execute('SELECT telegram_id FROM warmasters WHERE id = 0') as cursor:
+                    result = await cursor.fetchone()
                     
-                    # Make sure they're admin first
-                    await sqllite_helper.make_user_admin(user_id_0_telegram)
-                    
-                    # Try to toggle (should be blocked)
-                    success, new_status, message = await sqllite_helper.toggle_user_admin(user_id_0_telegram)
-                    print(f"   - Toggle result: success={success}, new_status={new_status}, message='{message}'")
-                    
-                    if not success and "id=0" in message:
-                        print(f"   ✓ Protection working: Cannot remove admin from id=0")
+                    if result:
+                        user_id_0_telegram = result[0]
+                        print(f"   - Found user with id=0: telegram_id={user_id_0_telegram}")
+                        
+                        # Make sure they're admin first
+                        await sqllite_helper.make_user_admin(user_id_0_telegram)
+                        
+                        # Try to toggle (should be blocked)
+                        success, new_status, message = await sqllite_helper.toggle_user_admin(user_id_0_telegram)
+                        print(f"   - Toggle result: success={success}, new_status={new_status}, message='{message}'")
+                        
+                        if not success and "id=0" in message:
+                            print(f"   ✓ Protection working: Cannot remove admin from id=0")
+                        else:
+                            print(f"   ✗ Protection failed or user is not admin")
                     else:
-                        print(f"   ✗ Protection failed or user is not admin")
-                else:
-                    print("   - No user with id=0 exists (this is OK)")
+                        print("   - No user with id=0 exists (this is OK)")
                     
     except Exception as e:
         print(f"   ✗ Error: {e}")
