@@ -43,13 +43,6 @@ ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
 
 
-async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    userId = update.effective_user.id
-    rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
-    menu = InlineKeyboardMarkup(rules)
-    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
-
-
 async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     con_keyboard = KeyboardButton(text="send_contact", request_contact=True)
     custom_keyboard = [[con_keyboard]]
