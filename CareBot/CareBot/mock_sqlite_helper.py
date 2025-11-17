@@ -21,6 +21,17 @@ if os.getenv('CAREBOT_TEST_MODE', 'false').lower() != 'true':
 
 # Mock данные для тестирования
 MOCK_WARMASTERS = {
+    0: {
+        'id': 0,
+        'telegram_id': '999999999',
+        'alliance': 1,
+        'nickname': 'SuperAdmin',
+        'registered_as': '+79000000000',
+        'faction': 'Империум',
+        'language': 'ru',
+        'notifications_enabled': 1,
+        'is_admin': 1
+    },
     1: {
         'id': 1,
         'telegram_id': '325313837',
@@ -512,9 +523,10 @@ async def toggle_user_admin(user_telegram_id):
     print(f"🧪 Mock: toggle_user_admin({user_telegram_id})")
     for user_key, user in MOCK_WARMASTERS.items():
         if user['telegram_id'] == str(user_telegram_id):
-            # Check if user has id=0 (using the key)
-            if user_key == 'user1' and user.get('is_admin') == 1:
-                # Assuming user1 is id=0 for mock purposes
+            # Check if user has id=0 (check the 'id' field in the user dict)
+            user_id = user.get('id', -1)
+            if user_id == 0 and user.get('is_admin') == 1:
+                # Cannot remove admin from user with id=0
                 return (False, True, "Cannot remove admin rights from user with id=0")
             
             # Toggle admin status
@@ -529,7 +541,8 @@ async def toggle_user_admin(user_telegram_id):
 
 async def get_warmasters_with_nicknames():
     print("🧪 Mock: get_warmasters_with_nicknames()")
-    return list(MOCK_WARMASTERS.values())
+    # Return tuples of (telegram_id, nickname, alliance) to match real implementation
+    return [(w['telegram_id'], w['nickname'], w['alliance']) for w in MOCK_WARMASTERS.values()]
 
 async def get_alliance_player_count(alliance_id):
     print(f"🧪 Mock: get_alliance_player_count({alliance_id})")
