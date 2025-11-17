@@ -603,6 +603,59 @@ async def admin_assign_alliance_to_player(update: Update, context: ContextTypes.
     return MAIN_MENU
 
 
+async def admin_appoint_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of users for admin to appoint as administrator."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Get keyboard with users
+    menu = await keyboard_constructor.admin_appoint_admin_users(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    admin_text = await localization.get_text_for_user(user_id, "admin_appoint_title")
+    await query.edit_message_text(admin_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_make_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Admin appointed a user as administrator."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract user telegram ID from callback data
+    target_user_telegram_id = query.data.split(':')[1]
+    
+    # Make user admin
+    await sqllite_helper.make_user_admin(target_user_telegram_id)
+    
+    # Get user nickname for confirmation
+    nickname = await sqllite_helper.get_nicknamane(target_user_telegram_id)
+    
+    # Show confirmation and return to main menu
+    success_text = await localization.get_text_for_user(
+        user_id, "admin_appointed_success", 
+        user_name=nickname
+    )
+    await query.edit_message_text(success_text)
+    
+    # Return to main menu after a moment
+    menu = await keyboard_constructor.get_main_menu(user_id)
+    menu_markup = InlineKeyboardMarkup(menu)
+    
+    greeting_text = await localization.get_text_for_user(
+        user_id, 'main_menu_greeting', name=update.effective_user.first_name or "User"
+    )
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=greeting_text,
+        reply_markup=menu_markup
+    )
+    
+    return MAIN_MENU
+
+
 async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Debug handler for unmatched callbacks"""
     query = update.callback_query
@@ -645,7 +698,9 @@ def start_bot():
                 # Admin handlers
                 CallbackQueryHandler(admin_assign_alliance, pattern='^admin_assign_alliance$'),
                 CallbackQueryHandler(admin_select_player, pattern='^admin_player:'),
-                CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:')
+                CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:'),
+                CallbackQueryHandler(admin_appoint_admin, pattern='^admin_appoint_admin$'),
+                CallbackQueryHandler(admin_make_user_admin, pattern='^admin_make_admin:')
             ],
             SETTINGS: [
                 CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
