@@ -77,6 +77,7 @@ function Sync-Files {
         "CareBot/CareBot/notification_service.py",
         "CareBot/CareBot/migrate_db.py",
         "CareBot/CareBot/config.py",
+        "CareBot/run_hybrid.py",
         "CareBot/requirements.txt"
     )
     
