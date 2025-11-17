@@ -53,12 +53,7 @@ async def get_main_menu(userId):
         items.append([
             InlineKeyboardButton(
                 admin_button_text,
-                callback_data="admin_assign_alliance")
-        ])
-        items.append([
-            InlineKeyboardButton(
-                await localization.get_text_for_user(userId, "button_appoint_admin"),
-                callback_data="admin_appoint_admin")
+                callback_data="admin_menu")
         ])
 
     # Settings button is always available
@@ -285,3 +280,173 @@ async def admin_appoint_admin_users(userId):
     ])
     
     return buttons
+
+
+async def get_admin_menu(userId):
+    """Generate admin menu keyboard"""
+    items = []
+    
+    # Player alliance assignment (existing functionality)
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_admin_assign_alliance"),
+            callback_data="admin_assign_alliance")
+    ])
+    
+    # Admin appointment (existing functionality)
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_appoint_admin"),
+            callback_data="admin_appoint_admin")
+    ])
+    
+    # Alliance management (new functionality)
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_admin_alliance_management"),
+            callback_data="admin_alliance_management")
+    ])
+    
+    # Back to main menu
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="back_to_main")
+    ])
+    
+    return items
+
+
+async def get_alliance_management_menu(userId):
+    """Generate alliance management menu keyboard"""
+    items = []
+    
+    # Create new alliance
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_create_alliance"),
+            callback_data="admin_create_alliance")
+    ])
+    
+    # Edit existing alliances
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_edit_alliances"),
+            callback_data="admin_edit_alliances")
+    ])
+    
+    # Delete alliances
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_delete_alliances"),
+            callback_data="admin_delete_alliances")
+    ])
+    
+    # Back to admin menu
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="admin_menu")
+    ])
+    
+    return items
+
+
+async def get_alliance_list_for_edit(userId):
+    """Generate keyboard with list of alliances for editing"""
+    items = []
+    
+    alliances = await sqllite_helper.get_all_alliances()
+    for alliance in alliances:
+        alliance_id = alliance[0]
+        alliance_name = alliance[1]
+        # Show alliance name and player count
+        player_count = await sqllite_helper.get_alliance_player_count(alliance_id)
+        display_text = f"{alliance_name} ({player_count})"
+        
+        items.append([
+            InlineKeyboardButton(
+                display_text,
+                callback_data=f"admin_edit_alliance:{alliance_id}")
+        ])
+    
+    # Back button
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="admin_alliance_management")
+    ])
+    
+    return items
+
+
+async def get_alliance_list_for_delete(userId):
+    """Generate keyboard with list of alliances for deletion"""
+    items = []
+    
+    alliances = await sqllite_helper.get_all_alliances()
+    for alliance in alliances:
+        alliance_id = alliance[0]
+        alliance_name = alliance[1]
+        # Show alliance name and player count
+        player_count = await sqllite_helper.get_alliance_player_count(alliance_id)
+        display_text = f"{alliance_name} ({player_count})"
+        
+        items.append([
+            InlineKeyboardButton(
+                display_text,
+                callback_data=f"admin_delete_alliance:{alliance_id}")
+        ])
+    
+    # Back button
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="admin_alliance_management")
+    ])
+    
+    return items
+
+
+async def get_alliance_confirmation_keyboard(userId, action, alliance_id, alliance_name=""):
+    """Generate confirmation keyboard for alliance operations
+    
+    Args:
+        userId: User telegram ID
+        action: "delete" or "edit"
+        alliance_id: ID of alliance
+        alliance_name: Name of alliance (for display)
+    """
+    items = []
+    
+    if action == "delete":
+        # Confirm deletion
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_confirm_delete"),
+                callback_data=f"admin_confirm_delete:{alliance_id}")
+        ])
+        
+        # Cancel
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_cancel"),
+                callback_data="admin_delete_alliances")
+        ])
+    
+    elif action == "edit":
+        # Rename alliance
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_rename_alliance"),
+                callback_data=f"admin_rename_alliance:{alliance_id}")
+        ])
+        
+        # Back to edit list
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_back"),
+                callback_data="admin_edit_alliances")
+        ])
+    
+    return items

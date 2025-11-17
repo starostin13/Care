@@ -695,3 +695,267 @@ async def set_warmaster_alliance(user_telegram_id, alliance_id):
             UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
         ''', (alliance_id, user_telegram_id))
         await db.commit()
+
+
+async def create_alliance(name, initial_resources=0):
+    """Create a new alliance.
+    
+    Args:
+        name: Alliance name (max 50 characters)
+        initial_resources: Starting resources (default: 0)
+        
+    Returns:
+        int: ID of created alliance or None if name exists
+        
+    Raises:
+        ValueError: If name is invalid
+    """
+    import html
+    import re
+    
+    # Validate name
+    if not name or not isinstance(name, str):
+        raise ValueError("Alliance name must be a non-empty string")
+    
+    # Escape HTML and limit length
+    name = html.escape(name.strip())
+    if len(name) > 50:
+        raise ValueError("Alliance name must be 50 characters or less")
+    
+    # Check for valid characters (letters, numbers, spaces, basic punctuation)
+    if not re.match(r'^[a-zA-Zа-яА-Я0-9\s\-_\.\!\?]+$', name):
+        raise ValueError("Alliance name contains invalid characters")
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Check if name already exists
+        async with db.execute('''
+            SELECT id FROM alliances WHERE name = ?
+        ''', (name,)) as cursor:
+            if await cursor.fetchone():
+                return None  # Name already exists
+        
+        # Create alliance
+        await db.execute('''
+            INSERT INTO alliances (name, common_resource) VALUES (?, ?)
+        ''', (name, initial_resources))
+        await db.commit()
+        
+        # Return new alliance ID
+        async with db.execute('SELECT last_insert_rowid()') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def get_alliance_by_name(name):
+    """Get alliance by name.
+    
+    Args:
+        name: Alliance name
+        
+    Returns:
+        tuple: (id, name, common_resource) or None if not found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, name, common_resource FROM alliances WHERE name = ?
+        ''', (name,)) as cursor:
+            return await cursor.fetchone()
+
+
+async def get_alliance_by_id(alliance_id):
+    """Get alliance by ID.
+    
+    Args:
+        alliance_id: Alliance ID
+        
+    Returns:
+        tuple: (id, name, common_resource) or None if not found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, name, common_resource FROM alliances WHERE id = ?
+        ''', (alliance_id,)) as cursor:
+            return await cursor.fetchone()
+
+
+async def update_alliance_name(alliance_id, new_name):
+    """Update alliance name.
+    
+    Args:
+        alliance_id: Alliance ID
+        new_name: New alliance name (max 50 characters)
+        
+    Returns:
+        bool: True if updated, False if name exists or alliance not found
+        
+    Raises:
+        ValueError: If name is invalid
+    """
+    import html
+    import re
+    
+    # Validate name
+    if not new_name or not isinstance(new_name, str):
+        raise ValueError("Alliance name must be a non-empty string")
+    
+    # Escape HTML and limit length
+    new_name = html.escape(new_name.strip())
+    if len(new_name) > 50:
+        raise ValueError("Alliance name must be 50 characters or less")
+    
+    # Check for valid characters
+    if not re.match(r'^[a-zA-Zа-яА-Я0-9\s\-_\.\!\?]+$', new_name):
+        raise ValueError("Alliance name contains invalid characters")
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Check if new name already exists (excluding current alliance)
+        async with db.execute('''
+            SELECT id FROM alliances WHERE name = ? AND id != ?
+        ''', (new_name, alliance_id)) as cursor:
+            if await cursor.fetchone():
+                return False  # Name already exists
+        
+        # Check if alliance exists
+        async with db.execute('''
+            SELECT id FROM alliances WHERE id = ?
+        ''', (alliance_id,)) as cursor:
+            if not await cursor.fetchone():
+                return False  # Alliance not found
+        
+        # Update name
+        await db.execute('''
+            UPDATE alliances SET name = ? WHERE id = ?
+        ''', (new_name, alliance_id))
+        await db.commit()
+        return True
+
+
+async def redistribute_players_from_alliance(alliance_id):
+    """Redistribute players from alliance to remaining alliances evenly.
+    
+    Args:
+        alliance_id: Alliance ID to redistribute players from
+        
+    Returns:
+        int: Number of players redistributed
+    """
+    import random
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get players from the alliance to delete
+        async with db.execute('''
+            SELECT telegram_id FROM warmasters WHERE alliance = ?
+        ''', (alliance_id,)) as cursor:
+            player_rows = await cursor.fetchall()
+            players_to_move = [row[0] for row in player_rows]
+        
+        if not players_to_move:
+            return 0
+        
+        # Get remaining alliances with their player counts
+        async with db.execute('''
+            SELECT a.id, COUNT(w.telegram_id) as player_count
+            FROM alliances a
+            LEFT JOIN warmasters w ON a.id = w.alliance
+            WHERE a.id != ?
+            GROUP BY a.id
+            ORDER BY player_count ASC, a.id ASC
+        ''', (alliance_id,)) as cursor:
+            alliance_rows = await cursor.fetchall()
+            # Convert to list of tuples for manipulation
+            remaining_alliances = [(row[0], row[1]) for row in alliance_rows]
+        
+        if not remaining_alliances:
+            # No other alliances, set players to no alliance (0)
+            await db.execute('''
+                UPDATE warmasters SET alliance = 0 WHERE alliance = ?
+            ''', (alliance_id,))
+            await db.commit()
+            return len(players_to_move)
+        
+        # Redistribute players one by one to alliances with least players
+        for player_id in players_to_move:
+            # Find alliance with minimum players (random choice if tie)
+            min_count = remaining_alliances[0][1]
+            min_alliances = [alliance for alliance in remaining_alliances if alliance[1] == min_count]
+            target_alliance = random.choice(min_alliances)
+            
+            # Assign player to target alliance
+            await db.execute('''
+                UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
+            ''', (target_alliance[0], player_id))
+            
+            # Update counts in our tracking list
+            for i, alliance in enumerate(remaining_alliances):
+                if alliance[0] == target_alliance[0]:
+                    remaining_alliances[i] = (alliance[0], alliance[1] + 1)
+                    break
+            
+            # Re-sort by player count
+            remaining_alliances.sort(key=lambda x: (x[1], x[0]))
+        
+        await db.commit()
+        return len(players_to_move)
+
+
+async def delete_alliance(alliance_id):
+    """Delete an alliance and redistribute its players.
+    
+    Args:
+        alliance_id: Alliance ID to delete
+        
+    Returns:
+        dict: {
+            'success': bool,
+            'players_redistributed': int,
+            'message': str
+        }
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Check if alliance exists
+        async with db.execute('''
+            SELECT name FROM alliances WHERE id = ?
+        ''', (alliance_id,)) as cursor:
+            alliance = await cursor.fetchone()
+        
+        if not alliance:
+            return {
+                'success': False,
+                'players_redistributed': 0,
+                'message': 'Alliance not found'
+            }
+        
+        alliance_name = alliance[0]
+        
+        # Check if this is the last alliance
+        async with db.execute('SELECT COUNT(*) FROM alliances') as cursor:
+            count_result = await cursor.fetchone()
+            total_alliances = count_result[0] if count_result else 0
+        
+        if total_alliances <= 1:
+            return {
+                'success': False,
+                'players_redistributed': 0,
+                'message': 'Cannot delete the last alliance'
+            }
+        
+        # Redistribute players
+        players_moved = await redistribute_players_from_alliance(alliance_id)
+        
+        # Delete alliance
+        await db.execute('''
+            DELETE FROM alliances WHERE id = ?
+        ''', (alliance_id,))
+        
+        # Also clean up any map references to this alliance
+        await db.execute('''
+            UPDATE map SET patron = NULL WHERE patron = ?
+        ''', (alliance_id,))
+        
+        await db.commit()
+        
+        return {
+            'success': True,
+            'players_redistributed': players_moved,
+            'message': f'Alliance "{alliance_name}" deleted, {players_moved} players redistributed'
+        }
