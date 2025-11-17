@@ -14,12 +14,7 @@ else:
     import sqllite_helper
     print("✅ Keyboard Constructor using REAL SQLite helper")
 
-async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
-    allready_scheduled_items = await schedule_helper.get_user_scheduled_games(user_telegram)
-    
-    #for ruleName in rules:
-    #    data = ruleName.relace(' ', '_').lower()
-    
+async def get_keyboard_rules_keyboard_for_user(user_telegram: str):    
     rules = [
         [InlineKeyboardButton("Kill Team", callback_data="rule:killteam")],
         [InlineKeyboardButton("Boarding Action",callback_data="rule:boardingaction")],
@@ -51,10 +46,13 @@ async def get_main_menu(userId):
 
     # Check if user is admin and add admin button
     is_admin = await sqllite_helper.is_user_admin(userId)
+    print(f"DEBUG: User {userId} is_admin check: {is_admin}")  # Debug log
     if is_admin:
+        admin_button_text = await localization.get_text_for_user(userId, "button_admin")
+        print(f"DEBUG: Adding admin button with text: {admin_button_text}")  # Debug log
         items.append([
             InlineKeyboardButton(
-                await localization.get_text_for_user(userId, "button_admin"),
+                admin_button_text,
                 callback_data="admin_assign_alliance")
         ])
 

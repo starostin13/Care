@@ -89,7 +89,8 @@ async def get_alliance_by_id(alliance_id):
 
 async def get_all_alliances():
     print("🧪 Mock: get_all_alliances()")
-    return list(MOCK_ALLIANCES.values())
+    # Возвращаем (id, name) как ожидает keyboard_constructor
+    return [(alliance['id'], alliance['name']) for alliance in MOCK_ALLIANCES.values()]
 
 # User/Warmaster functions
 async def get_warmasters_by_alliance(alliance_id):
@@ -502,7 +503,12 @@ async def make_user_admin(user_telegram_id):
 
 async def get_warmasters_with_nicknames():
     print("🧪 Mock: get_warmasters_with_nicknames()")
-    return list(MOCK_WARMASTERS.values())
+    # Возвращаем только нужные поля: telegram_id, nickname, alliance
+    result = []
+    for user in MOCK_WARMASTERS.values():
+        if user.get('nickname'):  # Только пользователи с никнеймами
+            result.append((user['telegram_id'], user['nickname'], user['alliance']))
+    return result
 
 async def get_alliance_player_count(alliance_id):
     print(f"🧪 Mock: get_alliance_player_count({alliance_id})")

@@ -11,8 +11,6 @@ import sys
 # Добавляем путь к модулю CareBot
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'CareBot'))
 
-from CareBot import handlers
-
 def main():
     """Запуск Telegram бота"""
     logging.basicConfig(
@@ -24,10 +22,12 @@ def main():
     logger.info("Starting CareBot Telegram bot...")
     
     try:
-        # Запускаем поллинг бота
-        # handlers.py уже содержит bot.run_polling() в конце
-        # Поэтому просто импортируем handlers и он автоматически запустится
-        logger.info("Bot is running...")
+        # Импортируем и вызываем функцию start_bot
+        from CareBot.handlers import start_bot
+        success = start_bot()
+        if not success:
+            logger.error("Bot failed to start")
+            sys.exit(1)
         
     except Exception as e:
         logger.error(f"Error starting bot: {e}")
