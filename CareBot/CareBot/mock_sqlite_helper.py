@@ -500,6 +500,33 @@ async def make_user_admin(user_telegram_id):
             return True
     return False
 
+async def remove_user_admin(user_telegram_id):
+    print(f"🧪 Mock: remove_user_admin({user_telegram_id})")
+    for user in MOCK_WARMASTERS.values():
+        if user['telegram_id'] == str(user_telegram_id):
+            user['is_admin'] = 0
+            return True
+    return False
+
+async def toggle_user_admin(user_telegram_id):
+    print(f"🧪 Mock: toggle_user_admin({user_telegram_id})")
+    for user_key, user in MOCK_WARMASTERS.items():
+        if user['telegram_id'] == str(user_telegram_id):
+            # Check if user has id=0 (using the key)
+            if user_key == 'user1' and user.get('is_admin') == 1:
+                # Assuming user1 is id=0 for mock purposes
+                return (False, True, "Cannot remove admin rights from user with id=0")
+            
+            # Toggle admin status
+            current_status = user.get('is_admin', 0)
+            new_status = 0 if current_status == 1 else 1
+            user['is_admin'] = new_status
+            
+            action = "granted" if new_status == 1 else "revoked"
+            return (True, new_status == 1, f"Admin rights {action}")
+    
+    return (False, False, "User not found")
+
 async def get_warmasters_with_nicknames():
     print("🧪 Mock: get_warmasters_with_nicknames()")
     return list(MOCK_WARMASTERS.values())

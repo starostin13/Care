@@ -619,7 +619,7 @@ async def admin_appoint_admin(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def admin_make_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Admin appointed a user as administrator."""
+    """Toggle admin status for a user (grant or revoke admin rights)."""
     user_id = update.effective_user.id
     query = update.callback_query
     await query.answer()
@@ -627,17 +627,34 @@ async def admin_make_user_admin(update: Update, context: ContextTypes.DEFAULT_TY
     # Extract user telegram ID from callback data
     target_user_telegram_id = query.data.split(':')[1]
     
-    # Make user admin
-    await sqllite_helper.make_user_admin(target_user_telegram_id)
+    # Toggle user admin status
+    success, new_status, message = await sqllite_helper.toggle_user_admin(target_user_telegram_id)
     
     # Get user nickname for confirmation
     nickname = await sqllite_helper.get_nicknamane(target_user_telegram_id)
     
-    # Show confirmation and return to main menu
-    success_text = await localization.get_text_for_user(
-        user_id, "admin_appointed_success", 
-        user_name=nickname
-    )
+    # Show confirmation based on the result
+    if success:
+        if new_status:
+            # User was made admin
+            success_text = await localization.get_text_for_user(
+                user_id, "admin_appointed_success", 
+                user_name=nickname
+            )
+        else:
+            # Admin rights were revoked
+            success_text = await localization.get_text_for_user(
+                user_id, "admin_revoked_success", 
+                user_name=nickname
+            )
+    else:
+        # Operation failed (e.g., trying to remove admin from id=0)
+        success_text = await localization.get_text_for_user(
+            user_id, "admin_operation_failed",
+            user_name=nickname,
+            reason=message
+        )
+    
     await query.edit_message_text(success_text)
     
     # Return to main menu after a moment
