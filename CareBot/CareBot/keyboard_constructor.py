@@ -44,7 +44,7 @@ async def get_main_menu(userId):
                 callback_data="games")
         ])
 
-    # Check if user is admin and add admin button
+    # Check if user is admin and add admin buttons
     is_admin = await sqllite_helper.is_user_admin(userId)
     print(f"DEBUG: User {userId} is_admin check: {is_admin}")  # Debug log
     if is_admin:
@@ -54,6 +54,11 @@ async def get_main_menu(userId):
             InlineKeyboardButton(
                 admin_button_text,
                 callback_data="admin_assign_alliance")
+        ])
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_appoint_admin"),
+                callback_data="admin_appoint_admin")
         ])
 
     # Settings button is always available
@@ -240,6 +245,42 @@ async def admin_assign_alliance_list(userId, player_telegram_id):
         InlineKeyboardButton(
             await localization.get_text_for_user(userId, "button_back"),
             callback_data="admin_assign_alliance"
+        )
+    ])
+    
+    return buttons
+
+
+async def admin_appoint_admin_users(userId):
+    """Generate keyboard showing users with nicknames for admin appointment.
+    
+    Args:
+        userId: User telegram ID (admin)
+        
+    Returns:
+        List of button rows for InlineKeyboardMarkup
+    """
+    players = await sqllite_helper.get_warmasters_with_nicknames()
+    buttons = []
+    
+    for player in players:
+        telegram_id, nickname, alliance = player
+        # Check if user is already admin
+        is_admin = await sqllite_helper.is_user_admin(telegram_id)
+        admin_badge = " ⭐" if is_admin else ""
+        
+        buttons.append([
+            InlineKeyboardButton(
+                f"{nickname}{admin_badge}",
+                callback_data=f"admin_make_admin:{telegram_id}"
+            )
+        ])
+    
+    # Add back button
+    buttons.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="back_to_main"
         )
     ])
     
