@@ -650,6 +650,49 @@ async def admin_make_user_admin(update: Update, context: ContextTypes.DEFAULT_TY
     return MAIN_MENU
 
 
+async def admin_players_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle pagination for admin assign alliance players list."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract page number from callback data
+    page = int(query.data.split(':')[1])
+    
+    # Get keyboard with players for the requested page
+    menu = await keyboard_constructor.admin_assign_alliance_players(user_id, page)
+    markup = InlineKeyboardMarkup(menu)
+    
+    admin_text = await localization.get_text_for_user(user_id, "admin_assign_alliance_title")
+    await query.edit_message_text(admin_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_appoint_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle pagination for admin appoint admin users list."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract page number from callback data
+    page = int(query.data.split(':')[1])
+    
+    # Get keyboard with users for the requested page
+    menu = await keyboard_constructor.admin_appoint_admin_users(user_id, page)
+    markup = InlineKeyboardMarkup(menu)
+    
+    admin_text = await localization.get_text_for_user(user_id, "admin_appoint_title")
+    await query.edit_message_text(admin_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle no-op callbacks (like page indicator buttons)."""
+    query = update.callback_query
+    await query.answer()  # Just acknowledge the callback without any action
+    return MAIN_MENU
+
+
 # Alliance management handlers
 async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show admin menu with all admin options."""
@@ -974,10 +1017,14 @@ def start_bot():
                 # Admin handlers
                 CallbackQueryHandler(admin_menu, pattern='^admin_menu$'),
                 CallbackQueryHandler(admin_assign_alliance, pattern='^admin_assign_alliance$'),
+                CallbackQueryHandler(admin_players_page, pattern='^admin_players_page:'),
                 CallbackQueryHandler(admin_select_player, pattern='^admin_player:'),
                 CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:'),
                 CallbackQueryHandler(admin_appoint_admin, pattern='^admin_appoint_admin$'),
+                CallbackQueryHandler(admin_appoint_page, pattern='^admin_appoint_page:'),
                 CallbackQueryHandler(admin_make_user_admin, pattern='^admin_make_admin:'),
+                # No-op handler for page indicators
+                CallbackQueryHandler(noop_callback, pattern='^noop$'),
                 # Alliance management handlers
                 CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
                 CallbackQueryHandler(admin_create_alliance, pattern='^admin_create_alliance$'),
