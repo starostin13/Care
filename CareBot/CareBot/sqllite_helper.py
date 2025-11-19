@@ -638,6 +638,59 @@ async def make_user_admin(user_telegram_id):
         await db.commit()
 
 
+async def remove_user_admin(user_telegram_id):
+    """Remove admin rights from a user.
+    
+    Args:
+        user_telegram_id: Telegram user ID
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE warmasters SET is_admin = 0 WHERE telegram_id = ?
+        ''', (user_telegram_id,))
+        await db.commit()
+
+
+async def toggle_user_admin(user_telegram_id):
+    """Toggle admin status for a user. Cannot remove admin from user with id=0.
+    
+    Args:
+        user_telegram_id: Telegram user ID
+        
+    Returns:
+        tuple: (success: bool, new_status: bool, message: str)
+               - success: True if operation was successful
+               - new_status: True if user is now admin, False otherwise
+               - message: Description of the operation result
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get current user info (id and admin status)
+        async with db.execute('''
+            SELECT id, is_admin FROM warmasters WHERE telegram_id = ?
+        ''', (user_telegram_id,)) as cursor:
+            result = await cursor.fetchone()
+            
+            if not result:
+                return (False, False, "User not found")
+            
+            user_id, is_admin = result
+            
+            # Protect user with id=0 from losing admin rights
+            if user_id == 0 and is_admin == 1:
+                return (False, True, "Cannot remove admin rights from user with id=0")
+            
+            # Toggle admin status
+            new_status = 0 if is_admin == 1 else 1
+            
+            await db.execute('''
+                UPDATE warmasters SET is_admin = ? WHERE telegram_id = ?
+            ''', (new_status, user_telegram_id))
+            await db.commit()
+            
+            action = "granted" if new_status == 1 else "revoked"
+            return (True, new_status == 1, f"Admin rights {action}")
+
+
 async def get_warmasters_with_nicknames():
     """Get all warmasters who have set nicknames.
     
