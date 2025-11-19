@@ -76,6 +76,8 @@ function Sync-Files {
         "CareBot/CareBot/localization.py",
         "CareBot/CareBot/notification_service.py",
         "CareBot/CareBot/migrate_db.py",
+        "CareBot/CareBot/config.py",
+        "CareBot/run_hybrid.py",
         "CareBot/requirements.txt"
     )
     
@@ -157,8 +159,8 @@ function Update-Production {
     
     if (-not (Sync-Files)) { return $false }
     
-    Write-Info "Restarting production service..."
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml restart"
+    Write-Info "Rebuilding and restarting production service..."
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml build --no-cache && docker compose -f docker-compose.production.yml up -d"
     
     if (-not $SkipHealthCheck) {
         Test-Health
@@ -172,7 +174,7 @@ function Update-Production {
 function Start-AdminMode {
     Write-Info "Starting admin mode with SQLite web interface..."
     
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml --profile admin up -d"
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml --profile admin up -d"
     
     Start-Sleep -Seconds 5
     
@@ -185,25 +187,26 @@ function Start-AdminMode {
 function Stop-AdminMode {
     Write-Info "Stopping admin mode..."
     
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml --profile admin down"
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml --profile admin down"
     
     Write-Success "Admin mode stopped!"
 }
 
 # Start/Stop/Restart services
 function Start-Service {
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml up -d"
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d"
     Write-Success "Service started"
 }
 
 function Stop-Service {
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml down"
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml down"
     Write-Success "Service stopped"
 }
 
 function Restart-Service {
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml restart"
-    Write-Success "Service restarted"
+    Write-Info "Rebuilding Docker image and restarting service..."
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml build --no-cache && docker compose -f docker-compose.production.yml up -d"
+    Write-Success "Service rebuilt and restarted"
 }
 
 # Sync only migrations
@@ -262,7 +265,7 @@ switch ($Action.ToLower()) {
         Test-Health
     }
     "logs" {
-        ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker-compose -f docker-compose.production.yml logs --tail=20"
+        ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml logs --tail=20"
     }
     "admin" {
         Start-AdminMode

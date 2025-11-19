@@ -100,7 +100,176 @@ async def get_alliance_by_id(alliance_id):
 
 async def get_all_alliances():
     print("🧪 Mock: get_all_alliances()")
-    return list(MOCK_ALLIANCES.values())
+    # Возвращаем (id, name) как ожидает keyboard_constructor
+    return [(alliance['id'], alliance['name']) for alliance in MOCK_ALLIANCES.values()]
+
+
+async def create_alliance(name, initial_resources=0):
+    """Create a new alliance (mock version)."""
+    print(f"🧪 Mock: create_alliance({name}, {initial_resources})")
+    import html
+    import re
+    
+    # Validate name
+    if not name or not isinstance(name, str):
+        raise ValueError("Alliance name must be a non-empty string")
+    
+    # Escape HTML and limit length
+    name = html.escape(name.strip())
+    if len(name) > 50:
+        raise ValueError("Alliance name must be 50 characters or less")
+    
+    # Check for valid characters
+    if not re.match(r'^[a-zA-Zа-яА-Я0-9\s\-_\.\!\?]+$', name):
+        raise ValueError("Alliance name contains invalid characters")
+    
+    # Check if name already exists
+    for alliance in MOCK_ALLIANCES.values():
+        if alliance['name'] == name:
+            return None  # Name already exists
+    
+    # Create alliance
+    new_id = max(MOCK_ALLIANCES.keys()) + 1
+    MOCK_ALLIANCES[new_id] = {
+        'id': new_id,
+        'name': name,
+        'common_resource': initial_resources
+    }
+    
+    return new_id
+
+
+async def get_alliance_by_name(name):
+    """Get alliance by name (mock version)."""
+    print(f"🧪 Mock: get_alliance_by_name({name})")
+    for alliance in MOCK_ALLIANCES.values():
+        if alliance['name'] == name:
+            return (alliance['id'], alliance['name'], alliance['common_resource'])
+    return None
+
+
+async def update_alliance_name(alliance_id, new_name):
+    """Update alliance name (mock version)."""
+    print(f"🧪 Mock: update_alliance_name({alliance_id}, {new_name})")
+    import html
+    import re
+    
+    # Validate name
+    if not new_name or not isinstance(new_name, str):
+        raise ValueError("Alliance name must be a non-empty string")
+    
+    # Escape HTML and limit length
+    new_name = html.escape(new_name.strip())
+    if len(new_name) > 50:
+        raise ValueError("Alliance name must be 50 characters or less")
+    
+    # Check for valid characters
+    if not re.match(r'^[a-zA-Zа-яА-Я0-9\s\-_\.\!\?]+$', new_name):
+        raise ValueError("Alliance name contains invalid characters")
+    
+    # Check if new name already exists (excluding current alliance)
+    for aid, alliance in MOCK_ALLIANCES.items():
+        if aid != alliance_id and alliance['name'] == new_name:
+            return False  # Name already exists
+    
+    # Check if alliance exists
+    if alliance_id not in MOCK_ALLIANCES:
+        return False  # Alliance not found
+    
+    # Update name
+    MOCK_ALLIANCES[alliance_id]['name'] = new_name
+    return True
+
+
+async def redistribute_players_from_alliance(alliance_id):
+    """Redistribute players from alliance (mock version)."""
+    print(f"🧪 Mock: redistribute_players_from_alliance({alliance_id})")
+    import random
+    
+    # Get players from the alliance to delete
+    players_to_move = []
+    for user in MOCK_WARMASTERS.values():
+        if user['alliance'] == alliance_id:
+            players_to_move.append(user['telegram_id'])
+    
+    if not players_to_move:
+        return 0
+    
+    # Get remaining alliances with their player counts
+    remaining_alliances = []
+    for aid, alliance in MOCK_ALLIANCES.items():
+        if aid != alliance_id:
+            player_count = len([u for u in MOCK_WARMASTERS.values() if u['alliance'] == aid])
+            remaining_alliances.append((aid, player_count))
+    
+    if not remaining_alliances:
+        # No other alliances, set players to no alliance (0)
+        for user in MOCK_WARMASTERS.values():
+            if user['alliance'] == alliance_id:
+                user['alliance'] = 0
+        return len(players_to_move)
+    
+    # Redistribute players one by one to alliances with least players
+    remaining_alliances.sort(key=lambda x: (x[1], x[0]))  # Sort by player count, then ID
+    
+    for player_id in players_to_move:
+        # Find alliance with minimum players (random choice if tie)
+        min_count = remaining_alliances[0][1]
+        min_alliances = [alliance for alliance in remaining_alliances if alliance[1] == min_count]
+        target_alliance = random.choice(min_alliances)
+        
+        # Assign player to target alliance
+        for user in MOCK_WARMASTERS.values():
+            if user['telegram_id'] == player_id:
+                user['alliance'] = target_alliance[0]
+                break
+        
+        # Update counts in our tracking list
+        for i, alliance in enumerate(remaining_alliances):
+            if alliance[0] == target_alliance[0]:
+                remaining_alliances[i] = (alliance[0], alliance[1] + 1)
+                break
+        
+        # Re-sort by player count
+        remaining_alliances.sort(key=lambda x: (x[1], x[0]))
+    
+    return len(players_to_move)
+
+
+async def delete_alliance(alliance_id):
+    """Delete an alliance and redistribute its players (mock version)."""
+    print(f"🧪 Mock: delete_alliance({alliance_id})")
+    
+    # Check if alliance exists
+    if alliance_id not in MOCK_ALLIANCES:
+        return {
+            'success': False,
+            'players_redistributed': 0,
+            'message': 'Alliance not found'
+        }
+    
+    alliance_name = MOCK_ALLIANCES[alliance_id]['name']
+    
+    # Check if this is the last alliance
+    if len(MOCK_ALLIANCES) <= 1:
+        return {
+            'success': False,
+            'players_redistributed': 0,
+            'message': 'Cannot delete the last alliance'
+        }
+    
+    # Redistribute players
+    players_moved = await redistribute_players_from_alliance(alliance_id)
+    
+    # Delete alliance
+    del MOCK_ALLIANCES[alliance_id]
+    
+    return {
+        'success': True,
+        'players_redistributed': players_moved,
+        'message': f'Alliance "{alliance_name}" deleted, {players_moved} players redistributed'
+    }
+
 
 # User/Warmaster functions
 async def get_warmasters_by_alliance(alliance_id):

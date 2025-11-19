@@ -37,17 +37,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS = range(5)
+MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS, ALLIANCE_INPUT = range(6)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
-
-
-async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    userId = update.effective_user.id
-    rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
-    menu = InlineKeyboardMarkup(rules)
-    await update.message.reply_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
 
 
 async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -131,6 +124,7 @@ async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     logger.info(f"back_to_main_menu called by user {userId}")
 
     query = update.callback_query
+    logger.info(f"Callback data received: '{query.data}'")
     await query.answer()
 
     menu = await keyboard_constructor.get_main_menu(userId)
@@ -673,12 +667,294 @@ async def admin_make_user_admin(update: Update, context: ContextTypes.DEFAULT_TY
     return MAIN_MENU
 
 
+# Alliance management handlers
+async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show admin menu with all admin options."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    menu = await keyboard_constructor.get_admin_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    admin_title = await localization.get_text_for_user(user_id, "admin_menu_title")
+    await query.edit_message_text(admin_title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_alliance_management(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show alliance management menu."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    menu = await keyboard_constructor.get_alliance_management_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    title = await localization.get_text_for_user(user_id, "admin_alliance_management_title")
+    await query.edit_message_text(title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_create_alliance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start alliance creation process - prompt for name."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Ask for alliance name
+    prompt_text = await localization.get_text_for_user(user_id, "admin_create_alliance_prompt")
+    cancel_button = await localization.get_text_for_user(user_id, "button_cancel")
+    
+    cancel_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton(cancel_button, callback_data="admin_alliance_management")]
+    ])
+    
+    await query.edit_message_text(prompt_text, reply_markup=cancel_markup)
+    return ALLIANCE_INPUT
+
+
+async def handle_alliance_name_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle alliance name input and create alliance."""
+    user_id = update.effective_user.id
+    alliance_name = update.message.text.strip()
+    
+    try:
+        # Create alliance
+        alliance_id = await sqllite_helper.create_alliance(alliance_name)
+        
+        if alliance_id:
+            # Success
+            success_text = await localization.get_text_for_user(
+                user_id, "admin_alliance_created_success", alliance_name=alliance_name
+            )
+        else:
+            # Name already exists
+            success_text = await localization.get_text_for_user(
+                user_id, "admin_alliance_name_exists", alliance_name=alliance_name
+            )
+        
+    except ValueError as e:
+        # Validation error
+        error_text = await localization.get_text_for_user(user_id, "admin_alliance_creation_error")
+        success_text = f"{error_text}\n{str(e)}"
+    
+    # Return to alliance management menu
+    menu = await keyboard_constructor.get_alliance_management_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    await update.message.reply_text(success_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_edit_alliances(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of alliances for editing."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    menu = await keyboard_constructor.get_alliance_list_for_edit(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    title = await localization.get_text_for_user(user_id, "admin_edit_alliances_title")
+    await query.edit_message_text(title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_edit_alliance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show options for editing specific alliance."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract alliance ID
+    alliance_id = int(query.data.split(':')[1])
+    
+    # Get alliance info
+    alliance = await sqllite_helper.get_alliance_by_id(alliance_id)
+    if not alliance:
+        error_text = await localization.get_text_for_user(user_id, "admin_alliance_not_found")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+    
+    alliance_name = alliance[1]
+    
+    # Show edit options
+    menu = await keyboard_constructor.get_alliance_confirmation_keyboard(
+        user_id, "edit", alliance_id, alliance_name
+    )
+    markup = InlineKeyboardMarkup(menu)
+    
+    edit_text = await localization.get_text_for_user(
+        user_id, "admin_edit_alliance_title", alliance_name=alliance_name
+    )
+    await query.edit_message_text(edit_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_rename_alliance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start alliance renaming process - prompt for new name."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract alliance ID and store in context
+    alliance_id = int(query.data.split(':')[1])
+    context.user_data['renaming_alliance_id'] = alliance_id
+    
+    # Get current alliance name
+    alliance = await sqllite_helper.get_alliance_by_id(alliance_id)
+    alliance_name = alliance[1] if alliance else "Unknown"
+    
+    # Ask for new name
+    prompt_text = await localization.get_text_for_user(
+        user_id, "admin_rename_alliance_prompt", alliance_name=alliance_name
+    )
+    cancel_button = await localization.get_text_for_user(user_id, "button_cancel")
+    
+    cancel_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton(cancel_button, callback_data="admin_edit_alliances")]
+    ])
+    
+    await query.edit_message_text(prompt_text, reply_markup=cancel_markup)
+    return ALLIANCE_INPUT
+
+
+async def handle_alliance_rename_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle alliance rename input."""
+    user_id = update.effective_user.id
+    new_name = update.message.text.strip()
+    alliance_id = context.user_data.get('renaming_alliance_id')
+    
+    if not alliance_id:
+        error_text = await localization.get_text_for_user(user_id, "admin_alliance_rename_error")
+        await update.message.reply_text(error_text)
+        return MAIN_MENU
+    
+    try:
+        # Update alliance name
+        success = await sqllite_helper.update_alliance_name(alliance_id, new_name)
+        
+        if success:
+            success_text = await localization.get_text_for_user(
+                user_id, "admin_alliance_renamed_success", alliance_name=new_name
+            )
+        else:
+            success_text = await localization.get_text_for_user(
+                user_id, "admin_alliance_name_exists", alliance_name=new_name
+            )
+        
+    except ValueError as e:
+        error_text = await localization.get_text_for_user(user_id, "admin_alliance_rename_error")
+        success_text = f"{error_text}\n{str(e)}"
+    
+    # Clean up context
+    context.user_data.pop('renaming_alliance_id', None)
+    
+    # Return to edit menu
+    menu = await keyboard_constructor.get_alliance_list_for_edit(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    await update.message.reply_text(success_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_delete_alliances(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of alliances for deletion."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    menu = await keyboard_constructor.get_alliance_list_for_delete(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    title = await localization.get_text_for_user(user_id, "admin_delete_alliances_title")
+    await query.edit_message_text(title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_delete_alliance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show confirmation for alliance deletion."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract alliance ID
+    alliance_id = int(query.data.split(':')[1])
+    
+    # Get alliance info
+    alliance = await sqllite_helper.get_alliance_by_id(alliance_id)
+    if not alliance:
+        error_text = await localization.get_text_for_user(user_id, "admin_alliance_not_found")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+    
+    alliance_name = alliance[1]
+    player_count = await sqllite_helper.get_alliance_player_count(alliance_id)
+    
+    # Show confirmation
+    menu = await keyboard_constructor.get_alliance_confirmation_keyboard(
+        user_id, "delete", alliance_id, alliance_name
+    )
+    markup = InlineKeyboardMarkup(menu)
+    
+    confirm_text = await localization.get_text_for_user(
+        user_id, "admin_delete_alliance_confirm", 
+        alliance_name=alliance_name, player_count=player_count
+    )
+    await query.edit_message_text(confirm_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Confirm and execute alliance deletion."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract alliance ID
+    alliance_id = int(query.data.split(':')[1])
+    
+    # Delete alliance
+    result = await sqllite_helper.delete_alliance(alliance_id)
+    
+    if result['success']:
+        success_text = await localization.get_text_for_user(
+            user_id, "admin_alliance_deleted_success",
+            alliance_name=result.get('message', 'Unknown'),
+            players_redistributed=result['players_redistributed']
+        )
+    else:
+        error_text = await localization.get_text_for_user(user_id, "admin_alliance_deletion_error")
+        success_text = f"{error_text}\n{result['message']}"
+    
+    # Return to alliance management
+    menu = await keyboard_constructor.get_alliance_management_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    await query.edit_message_text(success_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def handle_alliance_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Route text input to appropriate alliance handler based on context."""
+    user_id = update.effective_user.id
+    
+    # Check if we're in a renaming operation
+    if 'renaming_alliance_id' in context.user_data:
+        return await handle_alliance_rename_input(update, context)
+    else:
+        # Assume we're creating a new alliance
+        return await handle_alliance_name_input(update, context)
+
+
 async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Debug handler for unmatched callbacks"""
     query = update.callback_query
     user_id = update.effective_user.id
-    logger.warning(f"Unmatched callback from user {user_id}: '{query.data}'")
-    await query.answer()
+    logger.warning(f"Unmatched callback from user {user_id}: '{query.data}' in current state")
+    logger.warning(f"Current conversation state: {context.user_data}")
+    await query.answer(f"Debug: Callback '{query.data}' not handled")
     return ConversationHandler.END
 
 def start_bot():
@@ -713,11 +989,23 @@ def start_bot():
                 CallbackQueryHandler(
                     back_to_settings, pattern='^back_to_settings$'),
                 # Admin handlers
+                CallbackQueryHandler(admin_menu, pattern='^admin_menu$'),
                 CallbackQueryHandler(admin_assign_alliance, pattern='^admin_assign_alliance$'),
                 CallbackQueryHandler(admin_select_player, pattern='^admin_player:'),
                 CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:'),
                 CallbackQueryHandler(admin_appoint_admin, pattern='^admin_appoint_admin$'),
-                CallbackQueryHandler(admin_make_user_admin, pattern='^admin_make_admin:')
+                CallbackQueryHandler(admin_make_user_admin, pattern='^admin_make_admin:'),
+                # Alliance management handlers
+                CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
+                CallbackQueryHandler(admin_create_alliance, pattern='^admin_create_alliance$'),
+                CallbackQueryHandler(admin_edit_alliances, pattern='^admin_edit_alliances$'),
+                CallbackQueryHandler(admin_edit_alliance, pattern='^admin_edit_alliance:'),
+                CallbackQueryHandler(admin_rename_alliance, pattern='^admin_rename_alliance:'),
+                CallbackQueryHandler(admin_delete_alliances, pattern='^admin_delete_alliances$'),
+                CallbackQueryHandler(admin_delete_alliance, pattern='^admin_delete_alliance:'),
+                CallbackQueryHandler(admin_confirm_delete, pattern='^admin_confirm_delete:'),
+                # Back to main menu handler
+                CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$')
             ],
             SETTINGS: [
                 CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$'),
@@ -741,6 +1029,11 @@ def start_bot():
             MISSIONS: [
                 CallbackQueryHandler(hello, pattern='^start$'),
                 CallbackQueryHandler(get_the_mission)
+            ],
+            ALLIANCE_INPUT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_alliance_text_input),
+                CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
+                CallbackQueryHandler(admin_edit_alliances, pattern='^admin_edit_alliances$')
             ]
         },
         fallbacks=[CommandHandler("start", hello)],
