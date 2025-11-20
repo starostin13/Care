@@ -199,6 +199,21 @@ async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return GAMES
 
 
+async def back_to_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 'Back' button from day selection"""
+    userId = update.effective_user.id
+    logger.info(f"back_to_games called by user {userId}")
+
+    query = update.callback_query
+    await query.answer()
+
+    rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
+    menu = InlineKeyboardMarkup(rules)
+    await query.edit_message_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
+    logger.info("Successfully returned to games menu")
+    return GAMES
+
+
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     data = query.data
@@ -249,7 +264,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
     await query.answer()
-    when_markup = await keyboard_constructor.this_week(query.data)
+    user_id = update.effective_user.id
+    when_markup = await keyboard_constructor.this_week(query.data, user_id)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(
         text=f"Selected option: {query.data}", reply_markup=menu
@@ -1023,6 +1039,7 @@ def start_bot():
             ],
             SCHEDULE: [
                 CallbackQueryHandler(hello, pattern='^start$'),
+                CallbackQueryHandler(back_to_games, pattern='^back_to_games$'),
                 # Matches date,rule:rulename format
                 CallbackQueryHandler(im_in, pattern=r'^.+,rule:.+$')
             ],

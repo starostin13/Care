@@ -123,7 +123,7 @@ async def setting(userId):
 async def missions_list(user_id):
     items = [[]]
     
-async def this_week(rule):
+async def this_week(rule, user_id):
     from datetime import timedelta
     
     # Получаем сегодняшнюю дату
@@ -148,6 +148,11 @@ async def this_week(rule):
         [
             InlineKeyboardButton(menu_values[5].strftime("%A %d.%m"), callback_data=menu_values[5].strftime("%c") + ',' + rule),
             InlineKeyboardButton(menu_values[6].strftime("%A %d.%m"), callback_data=menu_values[6].strftime("%c") + ',' + rule)
+        ],
+        [
+            InlineKeyboardButton(
+                await localization.get_text_for_user(user_id, "button_back"),
+                callback_data="back_to_games")
         ]
     ]
     
