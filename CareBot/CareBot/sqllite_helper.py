@@ -4,6 +4,7 @@ using aiosqlite."""
 import datetime
 import aiosqlite
 import os
+import random
 
 # Use environment variable for database path, fallback to default
 DATABASE_PATH = os.environ.get('DATABASE_PATH', 
@@ -892,8 +893,6 @@ async def redistribute_territories_from_alliance(alliance_id):
     Returns:
         int: Number of territories redistributed
     """
-    import random
-    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Get territories from the alliance to delete
         async with db.execute('''
@@ -926,19 +925,17 @@ async def redistribute_territories_from_alliance(alliance_id):
             await db.commit()
             return len(territories_to_redistribute)
         
-        # Redistribute territories one by one to alliances with least territories
+        # Build assignment map for batch update
+        territory_assignments = []
         for territory_id in territories_to_redistribute:
             # Find alliance with minimum territories (random choice if tie)
             min_count = remaining_alliances[0][1]
             min_alliances = [alliance for alliance in remaining_alliances if alliance[1] == min_count]
             target_alliance = random.choice(min_alliances)
             
-            # Assign territory to target alliance
-            await db.execute('''
-                UPDATE map SET patron = ? WHERE id = ?
-            ''', (target_alliance[0], territory_id))
+            territory_assignments.append((target_alliance[0], territory_id))
             
-            # Update counts in our tracking list
+            # Update counts in tracking list
             for i, alliance in enumerate(remaining_alliances):
                 if alliance[0] == target_alliance[0]:
                     remaining_alliances[i] = (alliance[0], alliance[1] + 1)
@@ -946,6 +943,11 @@ async def redistribute_territories_from_alliance(alliance_id):
             
             # Re-sort by territory count
             remaining_alliances.sort(key=lambda x: (x[1], x[0]))
+        
+        # Batch update all territories
+        await db.executemany('''
+            UPDATE map SET patron = ? WHERE id = ?
+        ''', territory_assignments)
         
         await db.commit()
         return len(territories_to_redistribute)
@@ -960,8 +962,6 @@ async def redistribute_players_from_alliance(alliance_id):
     Returns:
         int: Number of players redistributed
     """
-    import random
-    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Get players from the alliance to delete
         async with db.execute('''
@@ -994,19 +994,17 @@ async def redistribute_players_from_alliance(alliance_id):
             await db.commit()
             return len(players_to_move)
         
-        # Redistribute players one by one to alliances with least players
+        # Build assignment map for batch update
+        player_assignments = []
         for player_id in players_to_move:
             # Find alliance with minimum players (random choice if tie)
             min_count = remaining_alliances[0][1]
             min_alliances = [alliance for alliance in remaining_alliances if alliance[1] == min_count]
             target_alliance = random.choice(min_alliances)
             
-            # Assign player to target alliance
-            await db.execute('''
-                UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
-            ''', (target_alliance[0], player_id))
+            player_assignments.append((target_alliance[0], player_id))
             
-            # Update counts in our tracking list
+            # Update counts in tracking list
             for i, alliance in enumerate(remaining_alliances):
                 if alliance[0] == target_alliance[0]:
                     remaining_alliances[i] = (alliance[0], alliance[1] + 1)
@@ -1014,6 +1012,11 @@ async def redistribute_players_from_alliance(alliance_id):
             
             # Re-sort by player count
             remaining_alliances.sort(key=lambda x: (x[1], x[0]))
+        
+        # Batch update all players
+        await db.executemany('''
+            UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
+        ''', player_assignments)
         
         await db.commit()
         return len(players_to_move)
@@ -1063,7 +1066,7 @@ async def delete_alliance(alliance_id):
                 'message': 'Cannot delete the last alliance'
             }
         
-        # Redistribute territories first (before players so territories go to alliances that still have them)
+        # Redistribute territories first to ensure they go to alliances that currently exist
         territories_moved = await redistribute_territories_from_alliance(alliance_id)
         
         # Redistribute players
