@@ -236,8 +236,15 @@ async def redistribute_players_from_alliance(alliance_id):
     return len(players_to_move)
 
 
+async def redistribute_territories_from_alliance(alliance_id):
+    """Redistribute territories from alliance (mock version)."""
+    print(f"🧪 Mock: redistribute_territories_from_alliance({alliance_id})")
+    # In mock, we don't track territories, so just return 0
+    return 0
+
+
 async def delete_alliance(alliance_id):
-    """Delete an alliance and redistribute its players (mock version)."""
+    """Delete an alliance and redistribute its players and territories (mock version)."""
     print(f"🧪 Mock: delete_alliance({alliance_id})")
     
     # Check if alliance exists
@@ -245,6 +252,7 @@ async def delete_alliance(alliance_id):
         return {
             'success': False,
             'players_redistributed': 0,
+            'territories_redistributed': 0,
             'message': 'Alliance not found'
         }
     
@@ -255,8 +263,12 @@ async def delete_alliance(alliance_id):
         return {
             'success': False,
             'players_redistributed': 0,
+            'territories_redistributed': 0,
             'message': 'Cannot delete the last alliance'
         }
+    
+    # Redistribute territories (mock returns 0)
+    territories_moved = await redistribute_territories_from_alliance(alliance_id)
     
     # Redistribute players
     players_moved = await redistribute_players_from_alliance(alliance_id)
@@ -267,8 +279,32 @@ async def delete_alliance(alliance_id):
     return {
         'success': True,
         'players_redistributed': players_moved,
-        'message': f'Alliance "{alliance_name}" deleted, {players_moved} players redistributed'
+        'territories_redistributed': territories_moved,
+        'message': f'Alliance "{alliance_name}" deleted, {players_moved} players and {territories_moved} territories redistributed'
     }
+
+
+async def check_and_clean_empty_alliances():
+    """Check for empty alliances and delete them (mock version)."""
+    print(f"🧪 Mock: check_and_clean_empty_alliances()")
+    
+    # Find alliances with 0 members
+    empty_alliances = []
+    for alliance_id, alliance_data in MOCK_ALLIANCES.items():
+        member_count = sum(1 for w in MOCK_WARMASTERS.values() if w['alliance'] == alliance_id)
+        if member_count == 0:
+            empty_alliances.append((alliance_id, alliance_data['name']))
+    
+    results = []
+    for alliance_id, alliance_name in empty_alliances:
+        result = await delete_alliance(alliance_id)
+        results.append({
+            'alliance_id': alliance_id,
+            'alliance_name': alliance_name,
+            'result': result
+        })
+    
+    return results
 
 
 # User/Warmaster functions

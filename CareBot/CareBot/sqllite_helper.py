@@ -883,6 +883,74 @@ async def update_alliance_name(alliance_id, new_name):
         return True
 
 
+async def redistribute_territories_from_alliance(alliance_id):
+    """Redistribute territories (map hexes) from alliance to remaining alliances evenly.
+    
+    Args:
+        alliance_id: Alliance ID to redistribute territories from
+        
+    Returns:
+        int: Number of territories redistributed
+    """
+    import random
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get territories from the alliance to delete
+        async with db.execute('''
+            SELECT id FROM map WHERE patron = ?
+        ''', (alliance_id,)) as cursor:
+            territory_rows = await cursor.fetchall()
+            territories_to_redistribute = [row[0] for row in territory_rows]
+        
+        if not territories_to_redistribute:
+            return 0
+        
+        # Get remaining alliances with their territory counts
+        async with db.execute('''
+            SELECT a.id, COUNT(m.id) as territory_count
+            FROM alliances a
+            LEFT JOIN map m ON a.id = m.patron
+            WHERE a.id != ?
+            GROUP BY a.id
+            ORDER BY territory_count ASC, a.id ASC
+        ''', (alliance_id,)) as cursor:
+            alliance_rows = await cursor.fetchall()
+            # Convert to list of tuples for manipulation
+            remaining_alliances = [(row[0], row[1]) for row in alliance_rows]
+        
+        if not remaining_alliances:
+            # No other alliances, set territories to no patron (NULL)
+            await db.execute('''
+                UPDATE map SET patron = NULL WHERE patron = ?
+            ''', (alliance_id,))
+            await db.commit()
+            return len(territories_to_redistribute)
+        
+        # Redistribute territories one by one to alliances with least territories
+        for territory_id in territories_to_redistribute:
+            # Find alliance with minimum territories (random choice if tie)
+            min_count = remaining_alliances[0][1]
+            min_alliances = [alliance for alliance in remaining_alliances if alliance[1] == min_count]
+            target_alliance = random.choice(min_alliances)
+            
+            # Assign territory to target alliance
+            await db.execute('''
+                UPDATE map SET patron = ? WHERE id = ?
+            ''', (target_alliance[0], territory_id))
+            
+            # Update counts in our tracking list
+            for i, alliance in enumerate(remaining_alliances):
+                if alliance[0] == target_alliance[0]:
+                    remaining_alliances[i] = (alliance[0], alliance[1] + 1)
+                    break
+            
+            # Re-sort by territory count
+            remaining_alliances.sort(key=lambda x: (x[1], x[0]))
+        
+        await db.commit()
+        return len(territories_to_redistribute)
+
+
 async def redistribute_players_from_alliance(alliance_id):
     """Redistribute players from alliance to remaining alliances evenly.
     
@@ -952,7 +1020,7 @@ async def redistribute_players_from_alliance(alliance_id):
 
 
 async def delete_alliance(alliance_id):
-    """Delete an alliance and redistribute its players.
+    """Delete an alliance and redistribute its players and territories.
     
     Args:
         alliance_id: Alliance ID to delete
@@ -961,6 +1029,7 @@ async def delete_alliance(alliance_id):
         dict: {
             'success': bool,
             'players_redistributed': int,
+            'territories_redistributed': int,
             'message': str
         }
     """
@@ -975,6 +1044,7 @@ async def delete_alliance(alliance_id):
             return {
                 'success': False,
                 'players_redistributed': 0,
+                'territories_redistributed': 0,
                 'message': 'Alliance not found'
             }
         
@@ -989,8 +1059,12 @@ async def delete_alliance(alliance_id):
             return {
                 'success': False,
                 'players_redistributed': 0,
+                'territories_redistributed': 0,
                 'message': 'Cannot delete the last alliance'
             }
+        
+        # Redistribute territories first (before players so territories go to alliances that still have them)
+        territories_moved = await redistribute_territories_from_alliance(alliance_id)
         
         # Redistribute players
         players_moved = await redistribute_players_from_alliance(alliance_id)
@@ -1000,15 +1074,43 @@ async def delete_alliance(alliance_id):
             DELETE FROM alliances WHERE id = ?
         ''', (alliance_id,))
         
-        # Also clean up any map references to this alliance
-        await db.execute('''
-            UPDATE map SET patron = NULL WHERE patron = ?
-        ''', (alliance_id,))
-        
         await db.commit()
         
         return {
             'success': True,
             'players_redistributed': players_moved,
-            'message': f'Alliance "{alliance_name}" deleted, {players_moved} players redistributed'
+            'territories_redistributed': territories_moved,
+            'message': f'Alliance "{alliance_name}" deleted, {players_moved} players and {territories_moved} territories redistributed'
         }
+
+
+async def check_and_clean_empty_alliances():
+    """Check for alliances with 0 members and automatically delete them.
+    
+    This function finds all alliances that have no members and deletes them,
+    redistributing their territories to remaining alliances.
+    
+    Returns:
+        list: List of deletion results for each empty alliance deleted
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Find alliances with 0 members
+        async with db.execute('''
+            SELECT a.id, a.name, COUNT(w.telegram_id) as member_count
+            FROM alliances a
+            LEFT JOIN warmasters w ON a.id = w.alliance
+            GROUP BY a.id, a.name
+            HAVING member_count = 0
+        ''') as cursor:
+            empty_alliances = await cursor.fetchall()
+    
+    results = []
+    for alliance_id, alliance_name, _ in empty_alliances:
+        result = await delete_alliance(alliance_id)
+        results.append({
+            'alliance_id': alliance_id,
+            'alliance_name': alliance_name,
+            'result': result
+        })
+    
+    return results
