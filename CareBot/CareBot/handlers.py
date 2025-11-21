@@ -121,10 +121,10 @@ async def back_to_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle 'Back' button from settings menu"""
     userId = update.effective_user.id
-    logger.info(f"back_to_main_menu called by user {userId}")
+    logger.info(f"🔧 back_to_main_menu called by user {userId}")
 
     query = update.callback_query
-    logger.info(f"Callback data received: '{query.data}'")
+    logger.info(f"🔧 Callback data received: '{query.data}'")
     await query.answer()
 
     menu = await keyboard_constructor.get_main_menu(userId)
@@ -144,8 +144,9 @@ async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             userId, 'main_menu_nickname_required', name=user_name
         )
 
+    logger.info(f"🔧 Sending main menu to user {userId}")
     await query.edit_message_text(greeting_text, reply_markup=menu_markup)
-    logger.info("Successfully returned to main menu")
+    logger.info(f"🔧 Successfully returned to main menu for user {userId}")
     return MAIN_MENU
 
 
@@ -657,10 +658,23 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     
+    logger.info(f"🔧 admin_menu called by user {user_id}")
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    logger.info(f"🔧 User {user_id} is_admin: {is_admin}")
+    
+    if not is_admin:
+        logger.warning(f"🚫 Non-admin user {user_id} tried to access admin menu")
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin") or "У вас нет прав администратора"
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+    
     menu = await keyboard_constructor.get_admin_menu(user_id)
     markup = InlineKeyboardMarkup(menu)
     
     admin_title = await localization.get_text_for_user(user_id, "admin_menu_title")
+    logger.info(f"🔧 Showing admin menu to user {user_id} with title: {admin_title}")
     await query.edit_message_text(admin_title, reply_markup=markup)
     return MAIN_MENU
 
