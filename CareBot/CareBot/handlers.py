@@ -925,7 +925,8 @@ async def admin_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYP
         success_text = await localization.get_text_for_user(
             user_id, "admin_alliance_deleted_success",
             alliance_name=result.get('message', 'Unknown'),
-            players_redistributed=result['players_redistributed']
+            players_redistributed=result['players_redistributed'],
+            territories_redistributed=result['territories_redistributed']
         )
     else:
         error_text = await localization.get_text_for_user(user_id, "admin_alliance_deletion_error")
