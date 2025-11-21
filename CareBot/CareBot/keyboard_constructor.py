@@ -172,28 +172,42 @@ async def language_selection(userId):
     return languages
 
 
-async def admin_assign_alliance_players(userId):
+async def admin_assign_alliance_players(userId, page=0):
     """Generate keyboard showing players with nicknames for alliance assignment.
     
     Args:
         userId: User telegram ID (admin)
+        page: Current page number (default: 0)
         
     Returns:
         List of button rows for InlineKeyboardMarkup
     """
+    PAGE_SIZE = 20  # Limit to 20 players per page to stay well under Telegram's 100 button limit
+    
     players = await sqllite_helper.get_warmasters_with_nicknames()
+    total_players = len(players)
+    total_pages = (total_players + PAGE_SIZE - 1) // PAGE_SIZE  # Ceiling division
+    
+    # Ensure page is within bounds
+    page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
+    
+    # Get players for current page
+    start_idx = page * PAGE_SIZE
+    end_idx = min(start_idx + PAGE_SIZE, total_players)
+    page_players = players[start_idx:end_idx]
+    
     buttons = []
     
-    for player in players:
+    # Cache alliances to avoid repeated queries
+    alliances = await sqllite_helper.get_all_alliances()
+    alliance_dict = {a_id: a_name for a_id, a_name in alliances}
+    
+    for player in page_players:
         telegram_id, nickname, alliance = player
         # Get alliance name if set
         alliance_name = ""
-        if alliance:
-            alliances = await sqllite_helper.get_all_alliances()
-            for a_id, a_name in alliances:
-                if a_id == alliance:
-                    alliance_name = f" ({a_name})"
-                    break
+        if alliance and alliance in alliance_dict:
+            alliance_name = f" ({alliance_dict[alliance]})"
         
         buttons.append([
             InlineKeyboardButton(
@@ -201,6 +215,29 @@ async def admin_assign_alliance_players(userId):
                 callback_data=f"admin_player:{telegram_id}"
             )
         ])
+    
+    # Add pagination controls if needed
+    if total_pages > 1:
+        pagination_buttons = []
+        
+        # Previous button
+        if page > 0:
+            pagination_buttons.append(
+                InlineKeyboardButton("◀️ Назад", callback_data=f"admin_players_page:{page-1}")
+            )
+        
+        # Page indicator
+        pagination_buttons.append(
+            InlineKeyboardButton(f"📄 {page+1}/{total_pages}", callback_data="noop")
+        )
+        
+        # Next button
+        if page < total_pages - 1:
+            pagination_buttons.append(
+                InlineKeyboardButton("Вперёд ▶️", callback_data=f"admin_players_page:{page+1}")
+            )
+        
+        buttons.append(pagination_buttons)
     
     # Add back button
     buttons.append([
@@ -246,19 +283,33 @@ async def admin_assign_alliance_list(userId, player_telegram_id):
     return buttons
 
 
-async def admin_appoint_admin_users(userId):
+async def admin_appoint_admin_users(userId, page=0):
     """Generate keyboard showing users with nicknames for admin appointment.
     
     Args:
         userId: User telegram ID (admin)
+        page: Current page number (default: 0)
         
     Returns:
         List of button rows for InlineKeyboardMarkup
     """
+    PAGE_SIZE = 20  # Limit to 20 players per page to stay well under Telegram's 100 button limit
+    
     players = await sqllite_helper.get_warmasters_with_nicknames()
+    total_players = len(players)
+    total_pages = (total_players + PAGE_SIZE - 1) // PAGE_SIZE  # Ceiling division
+    
+    # Ensure page is within bounds
+    page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
+    
+    # Get players for current page
+    start_idx = page * PAGE_SIZE
+    end_idx = min(start_idx + PAGE_SIZE, total_players)
+    page_players = players[start_idx:end_idx]
+    
     buttons = []
     
-    for player in players:
+    for player in page_players:
         telegram_id, nickname, alliance = player
         # Check if user is already admin
         is_admin = await sqllite_helper.is_user_admin(telegram_id)
@@ -270,6 +321,29 @@ async def admin_appoint_admin_users(userId):
                 callback_data=f"admin_make_admin:{telegram_id}"
             )
         ])
+    
+    # Add pagination controls if needed
+    if total_pages > 1:
+        pagination_buttons = []
+        
+        # Previous button
+        if page > 0:
+            pagination_buttons.append(
+                InlineKeyboardButton("◀️ Назад", callback_data=f"admin_appoint_page:{page-1}")
+            )
+        
+        # Page indicator
+        pagination_buttons.append(
+            InlineKeyboardButton(f"📄 {page+1}/{total_pages}", callback_data="noop")
+        )
+        
+        # Next button
+        if page < total_pages - 1:
+            pagination_buttons.append(
+                InlineKeyboardButton("Вперёд ▶️", callback_data=f"admin_appoint_page:{page+1}")
+            )
+        
+        buttons.append(pagination_buttons)
     
     # Add back button
     buttons.append([
