@@ -566,6 +566,9 @@ async def admin_assign_alliance_to_player(update: Update, context: ContextTypes.
     # Assign alliance
     await sqllite_helper.set_warmaster_alliance(player_telegram_id, alliance_id)
     
+    # Check and clean any empty alliances
+    await sqllite_helper.check_and_clean_empty_alliances()
+    
     # Get player and alliance names for confirmation
     nickname = await sqllite_helper.get_nicknamane(player_telegram_id)
     alliances = await sqllite_helper.get_all_alliances()
@@ -919,7 +922,8 @@ async def admin_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYP
         success_text = await localization.get_text_for_user(
             user_id, "admin_alliance_deleted_success",
             alliance_name=result.get('message', 'Unknown'),
-            players_redistributed=result['players_redistributed']
+            players_redistributed=result['players_redistributed'],
+            territories_redistributed=result['territories_redistributed']
         )
     else:
         error_text = await localization.get_text_for_user(user_id, "admin_alliance_deletion_error")
