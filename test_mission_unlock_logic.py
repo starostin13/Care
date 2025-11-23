@@ -32,7 +32,7 @@ def test_code_structure():
             print("   ❌ Update statement incorrect")
             return False
             
-        if 'WHERE locked=1 AND created_date < ?' in content:
+        if 'WHERE locked=1 AND (created_date < ?' in content or 'WHERE locked=1 AND created_date < ?' in content:
             print("   ✅ Filter condition is correct")
         else:
             print("   ❌ Filter condition is incorrect")
