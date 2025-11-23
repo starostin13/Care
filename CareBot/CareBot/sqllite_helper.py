@@ -182,7 +182,32 @@ async def get_faction_of_warmaster(user_telegram_id):
         ''', (str(user_telegram_id),)) as cursor:
             return await cursor.fetchone()
 
+async def unlock_expired_missions():
+    """Unlock all missions with past dates that are still locked.
+    
+    This function updates all missions where:
+    - locked = 1 (mission is locked)
+    - created_date is before today (mission is from a past date)
+    - created_date is NULL (old missions without date - also unlocked for safety)
+    
+    Returns:
+        int: Number of missions unlocked
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        today = datetime.date.today().isoformat()
+        cursor = await db.execute('''
+            UPDATE mission_stack 
+            SET locked=0 
+            WHERE locked=1 AND (created_date < ? OR created_date IS NULL)
+        ''', (today,))
+        await db.commit()
+        return cursor.rowcount
+
+
 async def get_mission(rules):
+    # Unlock any expired missions before fetching
+    await unlock_expired_missions()
+    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT * FROM mission_stack
@@ -346,11 +371,12 @@ async def register_warmaster(user_telegram_id, phone):
 
 async def save_mission(mission):
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        today = datetime.date.today().isoformat()
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
-                                     mission_description, winner_bonus, locked)
-            VALUES(?, ?, ?, ?, ?, 1)
-        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None))
+                                     mission_description, winner_bonus, locked, created_date)
+            VALUES(?, ?, ?, ?, ?, 1, ?)
+        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None, today))
         await db.commit()
 
 
