@@ -343,10 +343,22 @@ async def update_user_nickname(telegram_id, nickname):
     return False
 
 # Mission functions  
+async def unlock_expired_missions():
+    """Mock: Unlock all missions with past dates that are still locked."""
+    print(f"🧪 Mock: unlock_expired_missions()")
+    # В mock-режиме просто возвращаем 0 разблокированных миссий
+    return 0
+
 async def save_mission(mission_data):
     print(f"🧪 Mock: save_mission({mission_data})")
     mission_id = len(MOCK_MISSIONS) + 1
-    MOCK_MISSIONS[mission_id] = {**mission_data, 'id': mission_id}
+    today = datetime.date.today().isoformat()
+    MOCK_MISSIONS[mission_id] = {
+        **mission_data, 
+        'id': mission_id,
+        'created_date': today,
+        'locked': 1
+    }
     return mission_id
 
 async def get_mission_by_id(mission_id):
@@ -495,23 +507,28 @@ async def get_faction_of_warmaster(user_telegram_id):
 async def get_mission(rules):
     """
     Mock реализация для получения миссии по правилам.
-    Возвращает кортеж формата: (deploy, rules, cell, mission_description, id, locked)
+    Возвращает кортеж формата: (deploy, rules, cell, mission_description, id, locked, created_date)
     Совместимо с реальной структурой таблицы mission_stack.
     """
     print(f"🧪 Mock: get_mission({rules})")
     
+    # Разблокируем просроченные миссии перед получением
+    await unlock_expired_missions()
+    
     # Генерируем тестовые данные в правильном формате
     mission_id = random.randint(1, 100)
     cell_id = random.randint(1, 50)  # Cell ID для карты
+    today = datetime.date.today().isoformat()
     
-    # Формат: (deploy, rules, cell, mission_description, id, locked)
+    # Формат: (deploy, rules, cell, mission_description, id, locked, created_date)
     return (
         f"Mock {rules} Deploy",    # deploy
         rules,                     # rules
         cell_id,                   # cell (это mission[2] которое ожидается)
         f"Тестовая миссия для {rules}",  # mission_description
         mission_id,               # id
-        0                         # locked (0 = unlocked, 1 = locked)
+        0,                        # locked (0 = unlocked, 1 = locked)
+        today                     # created_date
     )
 
 async def get_schedule_by_user(user_telegram, date=None):
