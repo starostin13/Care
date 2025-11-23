@@ -188,6 +188,7 @@ async def unlock_expired_missions():
     This function updates all missions where:
     - locked = 1 (mission is locked)
     - created_date is before today (mission is from a past date)
+    - created_date is NULL (old missions without date - also unlocked for safety)
     
     Returns:
         int: Number of missions unlocked
@@ -197,7 +198,7 @@ async def unlock_expired_missions():
         cursor = await db.execute('''
             UPDATE mission_stack 
             SET locked=0 
-            WHERE locked=1 AND created_date < ?
+            WHERE locked=1 AND (created_date < ? OR created_date IS NULL)
         ''', (today,))
         await db.commit()
         return cursor.rowcount
