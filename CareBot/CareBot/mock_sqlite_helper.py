@@ -630,6 +630,11 @@ async def lock_mission(mission_id):
     print(f"🧪 Mock: lock_mission({mission_id})")
     return True
 
+async def set_mission_score_submitted(mission_id):
+    """Set mission locked status to 2 when battle score is submitted."""
+    print(f"🧪 Mock: set_mission_score_submitted({mission_id})")
+    return True
+
 async def register_warmaster(user_telegram_id, phone):
     print(f"🧪 Mock: register_warmaster({user_telegram_id}, {phone})")
     return True
