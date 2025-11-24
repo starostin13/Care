@@ -361,6 +361,15 @@ async def lock_mission(mission_id):
         await db.commit()
 
 
+async def set_mission_score_submitted(mission_id):
+    """Set mission locked status to 2 when battle score is submitted."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE mission_stack SET locked=2 WHERE id=?
+        ''', (mission_id,))
+        await db.commit()
+
+
 async def register_warmaster(user_telegram_id, phone):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
