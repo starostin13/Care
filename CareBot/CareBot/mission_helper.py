@@ -176,8 +176,12 @@ async def write_battle_result(battle_id, user_reply):
     
     # Set mission locked status to 2 when score is submitted
     mission_id = await sqllite_helper.get_mission_id_by_battle_id(battle_id)
-    if mission_id:
-        await sqllite_helper.set_mission_score_submitted(mission_id)
+    if mission_id is not None:
+        success = await sqllite_helper.set_mission_score_submitted(mission_id)
+        if not success:
+            logger.warning(
+                "Failed to update mission locked status for mission_id=%s",
+                mission_id)
 
 
 async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
