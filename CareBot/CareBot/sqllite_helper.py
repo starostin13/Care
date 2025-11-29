@@ -4,6 +4,7 @@ using aiosqlite."""
 import datetime
 import aiosqlite
 import os
+import random
 
 # Use environment variable for database path, fallback to default
 DATABASE_PATH = os.environ.get('DATABASE_PATH', 
@@ -181,7 +182,32 @@ async def get_faction_of_warmaster(user_telegram_id):
         ''', (str(user_telegram_id),)) as cursor:
             return await cursor.fetchone()
 
+async def unlock_expired_missions():
+    """Unlock all missions with past dates that are still locked.
+    
+    This function updates all missions where:
+    - locked = 1 (mission is locked)
+    - created_date is before today (mission is from a past date)
+    - created_date is NULL (old missions without date - also unlocked for safety)
+    
+    Returns:
+        int: Number of missions unlocked
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        today = datetime.date.today().isoformat()
+        cursor = await db.execute('''
+            UPDATE mission_stack 
+            SET locked=0 
+            WHERE locked=1 AND (created_date < ? OR created_date IS NULL)
+        ''', (today,))
+        await db.commit()
+        return cursor.rowcount
+
+
 async def get_mission(rules):
+    # Unlock any expired missions before fetching
+    await unlock_expired_missions()
+    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT * FROM mission_stack
@@ -335,6 +361,23 @@ async def lock_mission(mission_id):
         await db.commit()
 
 
+async def set_mission_score_submitted(mission_id):
+    """Set mission locked status to 2 when battle score is submitted.
+    
+    Args:
+        mission_id: The ID of the mission to update
+        
+    Returns:
+        bool: True if the update was successful, False otherwise
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute('''
+            UPDATE mission_stack SET locked=2 WHERE id=?
+        ''', (mission_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
 async def register_warmaster(user_telegram_id, phone):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
@@ -345,11 +388,12 @@ async def register_warmaster(user_telegram_id, phone):
 
 async def save_mission(mission):
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        today = datetime.date.today().isoformat()
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
-                                     mission_description, winner_bonus, locked)
-            VALUES(?, ?, ?, ?, ?, 1)
-        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None))
+                                     mission_description, winner_bonus, locked, created_date)
+            VALUES(?, ?, ?, ?, ?, 1, ?)
+        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None, today))
         await db.commit()
 
 
@@ -638,59 +682,6 @@ async def make_user_admin(user_telegram_id):
         await db.commit()
 
 
-async def remove_user_admin(user_telegram_id):
-    """Remove admin rights from a user.
-    
-    Args:
-        user_telegram_id: Telegram user ID
-    """
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute('''
-            UPDATE warmasters SET is_admin = 0 WHERE telegram_id = ?
-        ''', (user_telegram_id,))
-        await db.commit()
-
-
-async def toggle_user_admin(user_telegram_id):
-    """Toggle admin status for a user. Cannot remove admin from user with id=0.
-    
-    Args:
-        user_telegram_id: Telegram user ID
-        
-    Returns:
-        tuple: (success: bool, new_status: bool, message: str)
-               - success: True if operation was successful
-               - new_status: True if user is now admin, False otherwise
-               - message: Description of the operation result
-    """
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        # Get current user info (id and admin status)
-        async with db.execute('''
-            SELECT id, is_admin FROM warmasters WHERE telegram_id = ?
-        ''', (user_telegram_id,)) as cursor:
-            result = await cursor.fetchone()
-            
-            if not result:
-                return (False, False, "User not found")
-            
-            user_id, is_admin = result
-            
-            # Protect user with id=0 from losing admin rights
-            if user_id == 0 and is_admin == 1:
-                return (False, True, "Cannot remove admin rights from user with id=0")
-            
-            # Toggle admin status
-            new_status = 0 if is_admin == 1 else 1
-            
-            await db.execute('''
-                UPDATE warmasters SET is_admin = ? WHERE telegram_id = ?
-            ''', (new_status, user_telegram_id))
-            await db.commit()
-            
-            action = "granted" if new_status == 1 else "revoked"
-            return (True, new_status == 1, f"Admin rights {action}")
-
-
 async def get_warmasters_with_nicknames():
     """Get all warmasters who have set nicknames.
     
@@ -883,6 +874,75 @@ async def update_alliance_name(alliance_id, new_name):
         return True
 
 
+async def redistribute_territories_from_alliance(alliance_id):
+    """Redistribute territories (map hexes) from alliance to remaining alliances evenly.
+    
+    Args:
+        alliance_id: Alliance ID to redistribute territories from
+        
+    Returns:
+        int: Number of territories redistributed
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get territories from the alliance to delete
+        async with db.execute('''
+            SELECT id FROM map WHERE patron = ?
+        ''', (alliance_id,)) as cursor:
+            territory_rows = await cursor.fetchall()
+            territories_to_redistribute = [row[0] for row in territory_rows]
+        
+        if not territories_to_redistribute:
+            return 0
+        
+        # Get remaining alliances with their territory counts
+        async with db.execute('''
+            SELECT a.id, COUNT(m.id) as territory_count
+            FROM alliances a
+            LEFT JOIN map m ON a.id = m.patron
+            WHERE a.id != ?
+            GROUP BY a.id
+            ORDER BY territory_count ASC, a.id ASC
+        ''', (alliance_id,)) as cursor:
+            alliance_rows = await cursor.fetchall()
+            # Convert to list of tuples for manipulation
+            remaining_alliances = [(row[0], row[1]) for row in alliance_rows]
+        
+        if not remaining_alliances:
+            # No other alliances, set territories to no patron (NULL)
+            await db.execute('''
+                UPDATE map SET patron = NULL WHERE patron = ?
+            ''', (alliance_id,))
+            await db.commit()
+            return len(territories_to_redistribute)
+        
+        # Build assignment map for batch update
+        territory_assignments = []
+        for territory_id in territories_to_redistribute:
+            # Find alliance with minimum territories (random choice if tie)
+            min_count = remaining_alliances[0][1]
+            min_alliances = [alliance for alliance in remaining_alliances if alliance[1] == min_count]
+            target_alliance = random.choice(min_alliances)
+            
+            territory_assignments.append((target_alliance[0], territory_id))
+            
+            # Update counts in tracking list
+            for i, alliance in enumerate(remaining_alliances):
+                if alliance[0] == target_alliance[0]:
+                    remaining_alliances[i] = (alliance[0], alliance[1] + 1)
+                    break
+            
+            # Re-sort by territory count
+            remaining_alliances.sort(key=lambda x: (x[1], x[0]))
+        
+        # Batch update all territories
+        await db.executemany('''
+            UPDATE map SET patron = ? WHERE id = ?
+        ''', territory_assignments)
+        
+        await db.commit()
+        return len(territories_to_redistribute)
+
+
 async def redistribute_players_from_alliance(alliance_id):
     """Redistribute players from alliance to remaining alliances evenly.
     
@@ -892,8 +952,6 @@ async def redistribute_players_from_alliance(alliance_id):
     Returns:
         int: Number of players redistributed
     """
-    import random
-    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Get players from the alliance to delete
         async with db.execute('''
@@ -926,19 +984,17 @@ async def redistribute_players_from_alliance(alliance_id):
             await db.commit()
             return len(players_to_move)
         
-        # Redistribute players one by one to alliances with least players
+        # Build assignment map for batch update
+        player_assignments = []
         for player_id in players_to_move:
             # Find alliance with minimum players (random choice if tie)
             min_count = remaining_alliances[0][1]
             min_alliances = [alliance for alliance in remaining_alliances if alliance[1] == min_count]
             target_alliance = random.choice(min_alliances)
             
-            # Assign player to target alliance
-            await db.execute('''
-                UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
-            ''', (target_alliance[0], player_id))
+            player_assignments.append((target_alliance[0], player_id))
             
-            # Update counts in our tracking list
+            # Update counts in tracking list
             for i, alliance in enumerate(remaining_alliances):
                 if alliance[0] == target_alliance[0]:
                     remaining_alliances[i] = (alliance[0], alliance[1] + 1)
@@ -947,12 +1003,17 @@ async def redistribute_players_from_alliance(alliance_id):
             # Re-sort by player count
             remaining_alliances.sort(key=lambda x: (x[1], x[0]))
         
+        # Batch update all players
+        await db.executemany('''
+            UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
+        ''', player_assignments)
+        
         await db.commit()
         return len(players_to_move)
 
 
 async def delete_alliance(alliance_id):
-    """Delete an alliance and redistribute its players.
+    """Delete an alliance and redistribute its players and territories.
     
     Args:
         alliance_id: Alliance ID to delete
@@ -961,6 +1022,7 @@ async def delete_alliance(alliance_id):
         dict: {
             'success': bool,
             'players_redistributed': int,
+            'territories_redistributed': int,
             'message': str
         }
     """
@@ -975,6 +1037,7 @@ async def delete_alliance(alliance_id):
             return {
                 'success': False,
                 'players_redistributed': 0,
+                'territories_redistributed': 0,
                 'message': 'Alliance not found'
             }
         
@@ -989,8 +1052,12 @@ async def delete_alliance(alliance_id):
             return {
                 'success': False,
                 'players_redistributed': 0,
+                'territories_redistributed': 0,
                 'message': 'Cannot delete the last alliance'
             }
+        
+        # Redistribute territories first to ensure they go to alliances that currently exist
+        territories_moved = await redistribute_territories_from_alliance(alliance_id)
         
         # Redistribute players
         players_moved = await redistribute_players_from_alliance(alliance_id)
@@ -1000,15 +1067,43 @@ async def delete_alliance(alliance_id):
             DELETE FROM alliances WHERE id = ?
         ''', (alliance_id,))
         
-        # Also clean up any map references to this alliance
-        await db.execute('''
-            UPDATE map SET patron = NULL WHERE patron = ?
-        ''', (alliance_id,))
-        
         await db.commit()
         
         return {
             'success': True,
             'players_redistributed': players_moved,
-            'message': f'Alliance "{alliance_name}" deleted, {players_moved} players redistributed'
+            'territories_redistributed': territories_moved,
+            'message': f'Alliance "{alliance_name}" deleted, {players_moved} players and {territories_moved} territories redistributed'
         }
+
+
+async def check_and_clean_empty_alliances():
+    """Check for alliances with 0 members and automatically delete them.
+    
+    This function finds all alliances that have no members and deletes them,
+    redistributing their territories to remaining alliances.
+    
+    Returns:
+        list: List of deletion results for each empty alliance deleted
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Find alliances with 0 members
+        async with db.execute('''
+            SELECT a.id, a.name, COUNT(w.telegram_id) as member_count
+            FROM alliances a
+            LEFT JOIN warmasters w ON a.id = w.alliance
+            GROUP BY a.id, a.name
+            HAVING member_count = 0
+        ''') as cursor:
+            empty_alliances = await cursor.fetchall()
+    
+    results = []
+    for alliance_id, alliance_name, _ in empty_alliances:
+        result = await delete_alliance(alliance_id)
+        results.append({
+            'alliance_id': alliance_id,
+            'alliance_name': alliance_name,
+            'result': result
+        })
+    
+    return results

@@ -21,17 +21,6 @@ if os.getenv('CAREBOT_TEST_MODE', 'false').lower() != 'true':
 
 # Mock данные для тестирования
 MOCK_WARMASTERS = {
-    0: {
-        'id': 0,
-        'telegram_id': '999999999',
-        'alliance': 1,
-        'nickname': 'SuperAdmin',
-        'registered_as': '+79000000000',
-        'faction': 'Империум',
-        'language': 'ru',
-        'notifications_enabled': 1,
-        'is_admin': 1
-    },
     1: {
         'id': 1,
         'telegram_id': '325313837',
@@ -236,8 +225,15 @@ async def redistribute_players_from_alliance(alliance_id):
     return len(players_to_move)
 
 
+async def redistribute_territories_from_alliance(alliance_id):
+    """Redistribute territories from alliance (mock version)."""
+    print(f"🧪 Mock: redistribute_territories_from_alliance({alliance_id})")
+    # In mock, we don't track territories, so just return 0
+    return 0
+
+
 async def delete_alliance(alliance_id):
-    """Delete an alliance and redistribute its players (mock version)."""
+    """Delete an alliance and redistribute its players and territories (mock version)."""
     print(f"🧪 Mock: delete_alliance({alliance_id})")
     
     # Check if alliance exists
@@ -245,6 +241,7 @@ async def delete_alliance(alliance_id):
         return {
             'success': False,
             'players_redistributed': 0,
+            'territories_redistributed': 0,
             'message': 'Alliance not found'
         }
     
@@ -255,8 +252,12 @@ async def delete_alliance(alliance_id):
         return {
             'success': False,
             'players_redistributed': 0,
+            'territories_redistributed': 0,
             'message': 'Cannot delete the last alliance'
         }
+    
+    # Redistribute territories (mock returns 0)
+    territories_moved = await redistribute_territories_from_alliance(alliance_id)
     
     # Redistribute players
     players_moved = await redistribute_players_from_alliance(alliance_id)
@@ -267,8 +268,32 @@ async def delete_alliance(alliance_id):
     return {
         'success': True,
         'players_redistributed': players_moved,
-        'message': f'Alliance "{alliance_name}" deleted, {players_moved} players redistributed'
+        'territories_redistributed': territories_moved,
+        'message': f'Alliance "{alliance_name}" deleted, {players_moved} players and {territories_moved} territories redistributed'
     }
+
+
+async def check_and_clean_empty_alliances():
+    """Check for empty alliances and delete them (mock version)."""
+    print(f"🧪 Mock: check_and_clean_empty_alliances()")
+    
+    # Find alliances with 0 members
+    empty_alliances = []
+    for alliance_id, alliance_data in MOCK_ALLIANCES.items():
+        member_count = sum(1 for w in MOCK_WARMASTERS.values() if w['alliance'] == alliance_id)
+        if member_count == 0:
+            empty_alliances.append((alliance_id, alliance_data['name']))
+    
+    results = []
+    for alliance_id, alliance_name in empty_alliances:
+        result = await delete_alliance(alliance_id)
+        results.append({
+            'alliance_id': alliance_id,
+            'alliance_name': alliance_name,
+            'result': result
+        })
+    
+    return results
 
 
 # User/Warmaster functions
@@ -318,10 +343,22 @@ async def update_user_nickname(telegram_id, nickname):
     return False
 
 # Mission functions  
+async def unlock_expired_missions():
+    """Mock: Unlock all missions with past dates that are still locked."""
+    print(f"🧪 Mock: unlock_expired_missions()")
+    # В mock-режиме просто возвращаем 0 разблокированных миссий
+    return 0
+
 async def save_mission(mission_data):
     print(f"🧪 Mock: save_mission({mission_data})")
     mission_id = len(MOCK_MISSIONS) + 1
-    MOCK_MISSIONS[mission_id] = {**mission_data, 'id': mission_id}
+    today = datetime.date.today().isoformat()
+    MOCK_MISSIONS[mission_id] = {
+        **mission_data, 
+        'id': mission_id,
+        'created_date': today,
+        'locked': 1
+    }
     return mission_id
 
 async def get_mission_by_id(mission_id):
@@ -470,23 +507,28 @@ async def get_faction_of_warmaster(user_telegram_id):
 async def get_mission(rules):
     """
     Mock реализация для получения миссии по правилам.
-    Возвращает кортеж формата: (deploy, rules, cell, mission_description, id, locked)
+    Возвращает кортеж формата: (deploy, rules, cell, mission_description, id, locked, created_date)
     Совместимо с реальной структурой таблицы mission_stack.
     """
     print(f"🧪 Mock: get_mission({rules})")
     
+    # Разблокируем просроченные миссии перед получением
+    await unlock_expired_missions()
+    
     # Генерируем тестовые данные в правильном формате
     mission_id = random.randint(1, 100)
     cell_id = random.randint(1, 50)  # Cell ID для карты
+    today = datetime.date.today().isoformat()
     
-    # Формат: (deploy, rules, cell, mission_description, id, locked)
+    # Формат: (deploy, rules, cell, mission_description, id, locked, created_date)
     return (
         f"Mock {rules} Deploy",    # deploy
         rules,                     # rules
         cell_id,                   # cell (это mission[2] которое ожидается)
         f"Тестовая миссия для {rules}",  # mission_description
         mission_id,               # id
-        0                         # locked (0 = unlocked, 1 = locked)
+        0,                        # locked (0 = unlocked, 1 = locked)
+        today                     # created_date
     )
 
 async def get_schedule_by_user(user_telegram, date=None):
@@ -588,6 +630,11 @@ async def lock_mission(mission_id):
     print(f"🧪 Mock: lock_mission({mission_id})")
     return True
 
+async def set_mission_score_submitted(mission_id):
+    """Set mission locked status to 2 when battle score is submitted."""
+    print(f"🧪 Mock: set_mission_score_submitted({mission_id})")
+    return True
+
 async def register_warmaster(user_telegram_id, phone):
     print(f"🧪 Mock: register_warmaster({user_telegram_id}, {phone})")
     return True
@@ -680,38 +727,14 @@ async def make_user_admin(user_telegram_id):
             return True
     return False
 
-async def remove_user_admin(user_telegram_id):
-    print(f"🧪 Mock: remove_user_admin({user_telegram_id})")
-    for user in MOCK_WARMASTERS.values():
-        if user['telegram_id'] == str(user_telegram_id):
-            user['is_admin'] = 0
-            return True
-    return False
-
-async def toggle_user_admin(user_telegram_id):
-    print(f"🧪 Mock: toggle_user_admin({user_telegram_id})")
-    for user_key, user in MOCK_WARMASTERS.items():
-        if user['telegram_id'] == str(user_telegram_id):
-            # Check if user has id=0 (check the 'id' field in the user dict)
-            user_id = user.get('id', -1)
-            if user_id == 0 and user.get('is_admin') == 1:
-                # Cannot remove admin from user with id=0
-                return (False, True, "Cannot remove admin rights from user with id=0")
-            
-            # Toggle admin status
-            current_status = user.get('is_admin', 0)
-            new_status = 0 if current_status == 1 else 1
-            user['is_admin'] = new_status
-            
-            action = "granted" if new_status == 1 else "revoked"
-            return (True, new_status == 1, f"Admin rights {action}")
-    
-    return (False, False, "User not found")
-
 async def get_warmasters_with_nicknames():
     print("🧪 Mock: get_warmasters_with_nicknames()")
-    # Return tuples of (telegram_id, nickname, alliance) to match real implementation
-    return [(w['telegram_id'], w['nickname'], w['alliance']) for w in MOCK_WARMASTERS.values()]
+    # Возвращаем только нужные поля: telegram_id, nickname, alliance
+    result = []
+    for user in MOCK_WARMASTERS.values():
+        if user.get('nickname'):  # Только пользователи с никнеймами
+            result.append((user['telegram_id'], user['nickname'], user['alliance']))
+    return result
 
 async def get_alliance_player_count(alliance_id):
     print(f"🧪 Mock: get_alliance_player_count({alliance_id})")

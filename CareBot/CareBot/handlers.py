@@ -121,10 +121,10 @@ async def back_to_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle 'Back' button from settings menu"""
     userId = update.effective_user.id
-    logger.info(f"back_to_main_menu called by user {userId}")
+    logger.info(f"🔧 back_to_main_menu called by user {userId}")
 
     query = update.callback_query
-    logger.info(f"Callback data received: '{query.data}'")
+    logger.info(f"🔧 Callback data received: '{query.data}'")
     await query.answer()
 
     menu = await keyboard_constructor.get_main_menu(userId)
@@ -144,8 +144,9 @@ async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             userId, 'main_menu_nickname_required', name=user_name
         )
 
+    logger.info(f"🔧 Sending main menu to user {userId}")
     await query.edit_message_text(greeting_text, reply_markup=menu_markup)
-    logger.info("Successfully returned to main menu")
+    logger.info(f"🔧 Successfully returned to main menu for user {userId}")
     return MAIN_MENU
 
 
@@ -199,6 +200,21 @@ async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return GAMES
 
 
+async def back_to_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 'Back' button from day selection"""
+    userId = update.effective_user.id
+    logger.info(f"back_to_games called by user {userId}")
+
+    query = update.callback_query
+    await query.answer()
+
+    rules = await keyboard_constructor.get_keyboard_rules_keyboard_for_user(userId)
+    menu = InlineKeyboardMarkup(rules)
+    await query.edit_message_text(f'Choose the rules {update.effective_user.first_name}', reply_markup=menu)
+    logger.info("Successfully returned to games menu")
+    return GAMES
+
+
 async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     data = query.data
@@ -249,7 +265,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
     await query.answer()
-    when_markup = await keyboard_constructor.this_week(query.data)
+    user_id = update.effective_user.id
+    when_markup = await keyboard_constructor.this_week(query.data, user_id)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(
         text=f"Selected option: {query.data}", reply_markup=menu
@@ -565,6 +582,9 @@ async def admin_assign_alliance_to_player(update: Update, context: ContextTypes.
     # Assign alliance
     await sqllite_helper.set_warmaster_alliance(player_telegram_id, alliance_id)
     
+    # Check and clean any empty alliances
+    await sqllite_helper.check_and_clean_empty_alliances()
+    
     # Get player and alliance names for confirmation
     nickname = await sqllite_helper.get_nicknamane(player_telegram_id)
     alliances = await sqllite_helper.get_all_alliances()
@@ -613,7 +633,7 @@ async def admin_appoint_admin(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def admin_make_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Toggle admin status for a user (grant or revoke admin rights)."""
+    """Admin appointed a user as administrator."""
     user_id = update.effective_user.id
     query = update.callback_query
     await query.answer()
@@ -621,34 +641,17 @@ async def admin_make_user_admin(update: Update, context: ContextTypes.DEFAULT_TY
     # Extract user telegram ID from callback data
     target_user_telegram_id = query.data.split(':')[1]
     
-    # Toggle user admin status
-    success, new_status, message = await sqllite_helper.toggle_user_admin(target_user_telegram_id)
+    # Make user admin
+    await sqllite_helper.make_user_admin(target_user_telegram_id)
     
     # Get user nickname for confirmation
     nickname = await sqllite_helper.get_nicknamane(target_user_telegram_id)
     
-    # Show confirmation based on the result
-    if success:
-        if new_status:
-            # User was made admin
-            success_text = await localization.get_text_for_user(
-                user_id, "admin_appointed_success", 
-                user_name=nickname
-            )
-        else:
-            # Admin rights were revoked
-            success_text = await localization.get_text_for_user(
-                user_id, "admin_revoked_success", 
-                user_name=nickname
-            )
-    else:
-        # Operation failed (e.g., trying to remove admin from id=0)
-        success_text = await localization.get_text_for_user(
-            user_id, "admin_operation_failed",
-            user_name=nickname,
-            reason=message
-        )
-    
+    # Show confirmation and return to main menu
+    success_text = await localization.get_text_for_user(
+        user_id, "admin_appointed_success", 
+        user_name=nickname
+    )
     await query.edit_message_text(success_text)
     
     # Return to main menu after a moment
@@ -674,10 +677,23 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     
+    logger.info(f"🔧 admin_menu called by user {user_id}")
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    logger.info(f"🔧 User {user_id} is_admin: {is_admin}")
+    
+    if not is_admin:
+        logger.warning(f"🚫 Non-admin user {user_id} tried to access admin menu")
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin") or "У вас нет прав администратора"
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+    
     menu = await keyboard_constructor.get_admin_menu(user_id)
     markup = InlineKeyboardMarkup(menu)
     
     admin_title = await localization.get_text_for_user(user_id, "admin_menu_title")
+    logger.info(f"🔧 Showing admin menu to user {user_id} with title: {admin_title}")
     await query.edit_message_text(admin_title, reply_markup=markup)
     return MAIN_MENU
 
@@ -922,7 +938,8 @@ async def admin_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYP
         success_text = await localization.get_text_for_user(
             user_id, "admin_alliance_deleted_success",
             alliance_name=result.get('message', 'Unknown'),
-            players_redistributed=result['players_redistributed']
+            players_redistributed=result['players_redistributed'],
+            territories_redistributed=result['territories_redistributed']
         )
     else:
         error_text = await localization.get_text_for_user(user_id, "admin_alliance_deletion_error")
@@ -1023,6 +1040,7 @@ def start_bot():
             ],
             SCHEDULE: [
                 CallbackQueryHandler(hello, pattern='^start$'),
+                CallbackQueryHandler(back_to_games, pattern='^back_to_games$'),
                 # Matches date,rule:rulename format
                 CallbackQueryHandler(im_in, pattern=r'^.+,rule:.+$')
             ],

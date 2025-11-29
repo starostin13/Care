@@ -123,7 +123,7 @@ async def setting(userId):
 async def missions_list(user_id):
     items = [[]]
     
-async def this_week(rule):
+async def this_week(rule, user_id):
     from datetime import timedelta
     
     # Получаем сегодняшнюю дату
@@ -177,6 +177,10 @@ async def this_week(rule):
         else:
             days.append(weekday_buttons[i:i+2])
             i += 2
+    
+    days.append(InlineKeyboardButton(
+                await localization.get_text_for_user(user_id, "button_back"),
+                callback_data="back_to_games"))
     
     return days
 
