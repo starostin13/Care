@@ -3,17 +3,9 @@
 from typing import Optional
 import random
 import logging
-import config
-
-# Автоматическое переключение на mock версию в тестовом режиме
-if config.TEST_MODE:
-    import mock_sqlite_helper as sqllite_helper
-    print("🧪 Mission Helper using MOCK SQLite helper")
-else:
-    import sqllite_helper
-    print("✅ Mission Helper using REAL SQLite helper")
-
+import sqllite_helper
 import map_helper
+import notification_service
 from database.killzone_manager import get_killzone_for_mission
 
 logger = logging.getLogger(__name__)
@@ -173,15 +165,6 @@ async def write_battle_result(battle_id, user_reply):
     await sqllite_helper.get_rules_of_mission(battle_id)
     await sqllite_helper.add_battle_result(
         int(battle_id), counts[0], counts[1])
-    
-    # Set mission locked status to 2 when score is submitted
-    mission_id = await sqllite_helper.get_mission_id_by_battle_id(battle_id)
-    if mission_id is not None:
-        success = await sqllite_helper.set_mission_score_submitted(mission_id)
-        if not success:
-            logger.warning(
-                "Failed to update mission locked status for mission_id=%s",
-                mission_id)
 
 
 async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
@@ -318,6 +301,15 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         elif mission_type.lower() == "sabotage":
             # No resource changes for sabotage missions
             logger.info("Sabotage mission: No resource changes")
+            
+        elif mission_type.lower() == "resource collection":
+            # Winner gets 1 resource from eliminated alliance reserves
+            if winner_alliance_id:
+                await sqllite_helper.increase_common_resource(
+                    winner_alliance_id, 1)
+                logger.info(
+                    f"Resource Collection mission: Winner "
+                    f"{winner_alliance_id} gained 1 resource")
 
         elif mission_type.lower() == "extraction":
             # Winner gets 1 resource, loser loses 1 resource
@@ -367,13 +359,23 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
 
         # Add more mission types as needed
 
+    # Check if loser alliance has any hexes remaining after battle
+    if loser_alliance_id:
+        remaining_hexes = await sqllite_helper.get_hexes_by_alliance(
+            loser_alliance_id)
+        if len(remaining_hexes) == 0:
+            logger.info(
+                "Alliance %s eliminated - no hexes remaining",
+                loser_alliance_id)
+            await handle_alliance_elimination(loser_alliance_id)
+
     elif rules == "wh40k":
         # Process 40k missions - apply winner bonuses from database
         if winner_alliance_id:
             # Get winner bonus from database (secret until now)
             winner_bonus = await sqllite_helper.get_winner_bonus(mission_id)
             
-            # Возвращаем информацию о бонусе победителя для отправки в сообщении
+            # Возвращаем информацию о бонусе победителя для сообщения
             return {
                 "battle_id": battle_id,
                 "mission_type": mission_type,
@@ -391,6 +393,51 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         "winner_alliance_id": winner_alliance_id,
         "rewards_applied": True
     }
+
+
+async def handle_alliance_elimination(eliminated_alliance_id, context=None):
+    """Handle alliance elimination by redistributing resources as missions."""
+    logger.info("Processing elimination of alliance %s", eliminated_alliance_id)
+    
+    # Get eliminated alliance resources
+    alliance_resources = await sqllite_helper.get_alliance_resources(
+        eliminated_alliance_id)
+    
+    # Get count of remaining active alliances (excluding the eliminated one)
+    active_alliances_count = await sqllite_helper.get_active_alliances_count()
+    remaining_alliances = active_alliances_count - 1
+    
+    total_missions = 0
+    if remaining_alliances > 0 and alliance_resources > 0:
+        # Calculate missions to create (integer division, remainder ignored)
+        missions_per_alliance = alliance_resources // remaining_alliances
+        total_missions = missions_per_alliance * remaining_alliances
+        
+        logger.info(
+            "Creating %s resource collection missions "
+            "from %s resources", total_missions, alliance_resources)
+        
+        # Create resource collection missions
+        for i in range(total_missions):
+            mission_data = (
+                "Resource Collection",  # deploy
+                "resource_collection",  # rules
+                None,  # cell (NULL)
+                "Collect resources from eliminated alliance reserves.",
+                None,  # winner_bonus
+            )
+            await sqllite_helper.save_mission(mission_data)
+    
+    # Send notifications if context is provided
+    if context:
+        await notification_service.notify_alliance_elimination(
+            context, eliminated_alliance_id)
+    
+    # Clear alliance members and delete alliance
+    await sqllite_helper.clear_alliance_members(eliminated_alliance_id)
+    await sqllite_helper.delete_alliance(eliminated_alliance_id)
+    
+    logger.info("Alliance %s eliminated and cleaned up", eliminated_alliance_id)
 
 
 async def start_battle(mission_id, participants):
