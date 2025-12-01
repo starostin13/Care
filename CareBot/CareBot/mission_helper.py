@@ -203,6 +203,10 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         battle_id, user_telegram_id)
     if isinstance(opponent_telegram_id, tuple):
         opponent_telegram_id = opponent_telegram_id[0]
+    
+    # Ensure IDs are strings for database consistency
+    user_telegram_id = str(user_telegram_id)
+    opponent_telegram_id = str(opponent_telegram_id)
 
     # Get the mission details
     mission_id = await sqllite_helper.get_mission_id_by_battle_id(battle_id)
@@ -217,11 +221,19 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
     mission_type = mission_details[0]
     rules = mission_details[1]
 
-    # Get alliance IDs for both players
+    # Get alliance IDs for both players 
+    # (IDs are already converted to strings above)
     user_alliance_id = await sqllite_helper.get_alliance_of_warmaster(
         user_telegram_id)
     opponent_alliance_id = await sqllite_helper.get_alliance_of_warmaster(
         opponent_telegram_id)
+    
+    # Check if both players have alliances
+    if user_alliance_id is None or opponent_alliance_id is None:
+        logger.error(
+            "Cannot apply mission rewards: user_alliance=%s, opponent_alliance=%s",
+            user_alliance_id, opponent_alliance_id)
+        return None
 
     # Determine winner
     if user_score > opponent_score:
