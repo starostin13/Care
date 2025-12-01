@@ -1107,3 +1107,42 @@ async def check_and_clean_empty_alliances():
         })
     
     return results
+
+
+async def get_active_alliances_count():
+    """Get the count of active alliances."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM alliances
+        ''') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
+async def clear_alliance_members(alliance_id):
+    """Clear alliance membership for all players in the alliance."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE warmasters SET alliance = 0 WHERE alliance = ?
+        ''', (alliance_id,))
+        await db.commit()
+
+
+async def get_players_by_alliance(alliance_id):
+    """Get all players in a specific alliance."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id, nickname, alliance FROM warmasters 
+            WHERE alliance = ?
+        ''', (alliance_id,)) as cursor:
+            return await cursor.fetchall()
+
+
+async def get_all_players():
+    """Get all registered players."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id, nickname, alliance FROM warmasters
+        ''') as cursor:
+            return await cursor.fetchall()
+

@@ -148,3 +148,79 @@ async def notify_game_cancellation(context: ContextTypes.DEFAULT_TYPE,
                 
     except Exception as e:
         logger.error(f"Error in notify_game_cancellation: {e}")
+
+
+async def notify_alliance_elimination(context: ContextTypes.DEFAULT_TYPE,
+                                      eliminated_alliance_id: int):
+    """
+    Notify all players about alliance elimination and resource missions
+    
+    Args:
+        context: Telegram bot context
+        eliminated_alliance_id: ID of the eliminated alliance
+    """
+    try:
+        # Get all players from eliminated alliance
+        eliminated_players = await sqllite_helper.get_players_by_alliance(
+            eliminated_alliance_id)
+        
+        # Get alliance name
+        alliance_info = await sqllite_helper.get_alliance_by_id(
+            eliminated_alliance_id)
+        alliance_name = (alliance_info[1] if alliance_info
+                         else "Unknown Alliance")
+        
+        # Notify eliminated alliance players
+        for player in eliminated_players:
+            player_id = player[0]
+            try:
+                elimination_text = await localization.get_text_for_user(
+                    player_id, "alliance_eliminated_player")
+                elimination_text = elimination_text.format(
+                    alliance_name=alliance_name)
+                
+                await context.bot.send_message(
+                    chat_id=player_id,
+                    text=elimination_text
+                )
+                
+                logger.info(
+                    "Elimination notification sent to player %s", player_id)
+                
+            except Exception as e:
+                logger.error(
+                    "Failed to send elimination notification to "
+                    "player %s: %s", player_id, e)
+        
+        # Notify all other players about resource missions
+        all_players = await sqllite_helper.get_all_players()
+        for player in all_players:
+            player_id = player[0]
+            player_alliance = player[2] if len(player) > 2 else 0
+            
+            # Skip players from eliminated alliance (already notified)
+            if player_alliance == eliminated_alliance_id:
+                continue
+                
+            try:
+                missions_text = await localization.get_text_for_user(
+                    player_id, "resource_missions_created")
+                missions_text = missions_text.format(
+                    alliance_name=alliance_name)
+                
+                await context.bot.send_message(
+                    chat_id=player_id,
+                    text=missions_text
+                )
+                
+                logger.info(
+                    "Resource missions notification sent to player %s",
+                    player_id)
+                
+            except Exception as e:
+                logger.error(
+                    "Failed to send missions notification to "
+                    "player %s: %s", player_id, e)
+                
+    except Exception as e:
+        logger.error("Error in notify_alliance_elimination: %s", e)
