@@ -135,26 +135,52 @@ async def this_week(rule, user_id):
         date = today + timedelta(days=i)
         menu_values.append(date)
 
-    days = [
-        [
-            InlineKeyboardButton(menu_values[0].strftime("%A %d.%m"), callback_data=menu_values[0].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[1].strftime("%A %d.%m"), callback_data=menu_values[1].strftime("%c") + ',' + rule)
-        ],
-        [
-            InlineKeyboardButton(menu_values[2].strftime("%A %d.%m"), callback_data=menu_values[2].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[3].strftime("%A %d.%m"), callback_data=menu_values[3].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[4].strftime("%A %d.%m"), callback_data=menu_values[4].strftime("%c") + ',' + rule)
-        ],
-        [
-            InlineKeyboardButton(menu_values[5].strftime("%A %d.%m"), callback_data=menu_values[5].strftime("%c") + ',' + rule),
-            InlineKeyboardButton(menu_values[6].strftime("%A %d.%m"), callback_data=menu_values[6].strftime("%c") + ',' + rule)
-        ],
-        [
-            InlineKeyboardButton(
+    # Разделяем дни на выходные (суббота=5, воскресенье=6) и будни
+    weekend_days = []
+    weekdays = []
+    
+    for date in menu_values:
+        if date.weekday() in [5, 6]:  # Saturday=5, Sunday=6
+            weekend_days.append(date)
+        else:
+            weekdays.append(date)
+    
+    # Создаем кнопки для дней
+    days = []
+    
+    # Первый ряд: выходные дни (всегда первыми с выделением)
+    if weekend_days:
+        weekend_row = []
+        for date in weekend_days:
+            # Добавляем эмодзи 🔵 для выделения выходных
+            button_text = f"🔵 {date.strftime('%A %d.%m')}"
+            weekend_row.append(
+                InlineKeyboardButton(button_text, callback_data=date.strftime("%c") + ',' + rule)
+            )
+        days.append(weekend_row)
+    
+    # Остальные ряды: будни (по 2-3 кнопки в ряду)
+    weekday_buttons = []
+    for date in weekdays:
+        weekday_buttons.append(
+            InlineKeyboardButton(date.strftime("%A %d.%m"), callback_data=date.strftime("%c") + ',' + rule)
+        )
+    
+    # Распределяем будни по рядам (по 2-3 кнопки)
+    i = 0
+    while i < len(weekday_buttons):
+        # Если осталось 3 или меньше кнопок, размещаем их в одном ряду
+        if len(weekday_buttons) - i <= 3:
+            days.append(weekday_buttons[i:])
+            break
+        # Иначе размещаем по 2 кнопки в ряду
+        else:
+            days.append(weekday_buttons[i:i+2])
+            i += 2
+    
+    days.append(InlineKeyboardButton(
                 await localization.get_text_for_user(user_id, "button_back"),
-                callback_data="back_to_games")
-        ]
-    ]
+                callback_data="back_to_games"))
     
     return days
 
