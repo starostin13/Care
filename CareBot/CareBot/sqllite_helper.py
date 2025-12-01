@@ -107,13 +107,66 @@ async def get_number_of_safe_next_cells(cell_id):
 
 async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        # First try the new battle_attenders table
         async with db.execute('''
             SELECT attender_id
             FROM battle_attenders
             WHERE battle_id = ?
             AND attender_id != ?
         ''', (battle_id, current_user_telegram_id)) as cursor:
-            return await cursor.fetchone()
+            result = await cursor.fetchone()
+            if result:
+                return result
+        
+        # Fallback to old battles table structure for legacy battles
+        async with db.execute('''
+            SELECT fstplayer, sndplayer
+            FROM battles
+            WHERE id = ?
+        ''', (battle_id,)) as cursor:
+            battle_result = await cursor.fetchone()
+            if battle_result and battle_result[0] and battle_result[1]:
+                # If current user is fstplayer, return sndplayer, and vice versa
+                if str(battle_result[0]) == str(current_user_telegram_id):
+                    return (battle_result[1],)
+                elif str(battle_result[1]) == str(current_user_telegram_id):
+                    return (battle_result[0],)
+        
+        return None
+
+
+async def get_active_battle_id_for_mission(mission_id, user_telegram_id):
+    """Get the active battle_id for a mission where user participates.
+    
+    Args:
+        mission_id: The ID of the mission
+        user_telegram_id: Telegram ID of the user
+        
+    Returns:
+        int: Battle ID if found, None otherwise
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # First try to find battle with participants in battle_attenders
+        async with db.execute('''
+            SELECT b.id FROM battles b
+            INNER JOIN battle_attenders ba ON b.id = ba.battle_id
+            WHERE b.mission_id = ? AND ba.attender_id = ?
+            ORDER BY b.id DESC
+            LIMIT 1
+        ''', (mission_id, user_telegram_id)) as cursor:
+            result = await cursor.fetchone()
+            if result:
+                return result[0]
+        
+        # Fallback: find latest battle for this mission (for legacy support)
+        async with db.execute('''
+            SELECT id FROM battles
+            WHERE mission_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+        ''', (mission_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
 
 
 async def get_rules_of_mission(number_of_mission):

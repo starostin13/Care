@@ -290,15 +290,33 @@ async def handle_mission_reply(
     lines = original_message.splitlines()
 
     # Ищем строку, начинающуюся с '#'
-    battle_id_line = next(
+    mission_id_line = next(
         (line for line in lines if line.startswith('#')), None)
-    if battle_id_line:
-        # Извлекаем значение после решётки и преобразуем его в число
-        battle_id = int(battle_id_line[1:])
+    if mission_id_line:
+        # Извлекаем значение после решётки - это mission_id, а не battle_id
+        mission_id = int(mission_id_line[1:])
+        
+        # Находим активный battle_id для этой миссии и пользователя
+        battle_id = await sqllite_helper.get_active_battle_id_for_mission(
+            mission_id, update.effective_user.id)
+        
+        if not battle_id:
+            logger.error(f"No active battle found for mission {mission_id} and user {update.effective_user.id}")
+            await update.message.reply_text("Не найден активный бой для этой миссии.")
+            return MAIN_MENU
+            
+        logger.info(f"Found battle_id {battle_id} for mission_id {mission_id}")
         await mission_helper.write_battle_result(battle_id, user_reply)
 
         # Apply mission-specific rewards
         rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
+        
+        if rewards is None:
+            # Handle case where rewards couldn't be applied (e.g., no alliances)
+            logger.warning("Could not apply mission rewards for battle %s", battle_id)
+            await update.message.reply_text("Результат битвы записан, но награды не могли быть применены (проверьте альянсы игроков).")
+            return MAIN_MENU
+            
         scenario_line = next(
             (line for line in lines if line.startswith('📜')), None)
         scenario_name_regexp_result = re.search(
