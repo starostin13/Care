@@ -71,19 +71,24 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Получаем миссию из базы данных
     mission = await mission_helper.get_mission(rules=rules)
     data = query.data  # Получаем данные из нажатой кнопки
-    index_of_mission_id = 2
-
+    # mission_stack schema: [0:deploy, 1:rules, 2:cell, 3:description, 4:id, ...]
+    
     # Получаем список всех участников события
     participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
 
-    battle_id = await mission_helper.start_battle(mission[index_of_mission_id], participants)
+    # Извлекаем правильный mission_id из кортежа миссии (он на позиции 4)
+    mission_id = mission[4]
+    logger.info(f"Mission ID from database: {mission_id}")
+    
+    # Создаем бой с правильным mission_id
+    battle_id = await mission_helper.start_battle(mission_id, participants)
     situation = await mission_helper.get_situation(battle_id, participants)
 
-    # Преобразуем миссию в текст
-    text = '\n'.join(
-        f'#{mission[i]}' if i == index_of_mission_id else str(item or '')
-        for i, item in enumerate(mission)
-    )
+    # Формируем текст для пользователя
+    mission_description = mission[3] or ''
+    mission_rules = mission[1] or ''
+    text = f"📜{mission_description}: {mission_rules}\n#{mission_id}"
+    logger.info(f"Composed mission text for user: {text}")
 
     # Отправляем текст миссии текущему пользователю
     await query.edit_message_text(f"{text}\n{situation}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
@@ -279,12 +284,20 @@ async def handle_mission_reply(
 ):
     """Handler to process the reply to the message from show_missions"""
     # Retrieve the original message's text and user's reply
-    original_message = update.message.reply_to_message.text
+    original_message = (
+        update.message.reply_to_message.text
+        if update.message.reply_to_message else None
+    )
     user_reply = update.message.text
 
     logger.info(
-        "User %s replied to '%s' with '%s'",
-        update.effective_user.id, original_message, user_reply)
+        "User %s replied with '%s' to original '%s'",
+        update.effective_user.id, user_reply, original_message)
+
+    if original_message is None:
+        logger.error("Reply has no original message context (reply_to_message is None)")
+        await update.message.reply_text("Ответ должен быть на сообщение с миссией. Пожалуйста, нажмите 'Ответить' на сообщение миссии и укажите счёт в формате '20 0'.")
+        return MAIN_MENU
 
     # Разделяем текст на строки
     lines = original_message.splitlines()
@@ -293,7 +306,7 @@ async def handle_mission_reply(
     mission_id_line = next(
         (line for line in lines if line.startswith('#')), None)
     if mission_id_line:
-        # Извлекаем значение после решётки - это mission_id, а не battle_id
+        # Извлекаем значение после решётки - это реальный mission_id из базы
         mission_id = int(mission_id_line[1:])
         
         # Находим активный battle_id для этой миссии и пользователя
@@ -333,7 +346,15 @@ async def handle_mission_reply(
             scenario
         )
 
+        # Mark mission score as submitted to prevent replays (locked=2)
+        updated = await sqllite_helper.set_mission_score_submitted(mission_id)
+        if not updated:
+            logger.warning(f"Failed to update mission status to 2 for mission_id {mission_id}")
+        else:
+            logger.info(f"Mission {mission_id} status set to 2 (score submitted)")
+
     # Respond to the user's reply
+    logger.info("Reply processed for user %s, sending confirmation", update.effective_user.id)
     await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
 
 

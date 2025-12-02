@@ -178,9 +178,10 @@ async def this_week(rule, user_id):
             days.append(weekday_buttons[i:i+2])
             i += 2
     
-    days.append(InlineKeyboardButton(
+    # Добавляем кнопку "Назад" как отдельный ряд
+    days.append([InlineKeyboardButton(
                 await localization.get_text_for_user(user_id, "button_back"),
-                callback_data="back_to_games"))
+                callback_data="back_to_games")])
     
     return days
 
