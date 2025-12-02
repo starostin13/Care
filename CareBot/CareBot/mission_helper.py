@@ -149,11 +149,15 @@ async def get_situation(battle_id, telegram_ids):
     result = []
 
     for particpant_telegram in telegram_ids:
+        # Extract telegram_id from tuple (telegram_ids is list of tuples like [('123456',), ('789012',)])
+        telegram_id = particpant_telegram[0] if isinstance(particpant_telegram, tuple) else particpant_telegram
         has_route_to_warehouse = await map_helper.has_route_to_warehouse(
-            cell_id, particpant_telegram)
+            cell_id, telegram_id)
         if has_route_to_warehouse is False:
+            nickname = await sqllite_helper.get_nicknamane(telegram_id)
+            display_name = nickname or str(telegram_id)
             result.append(
-                f"{particpant_telegram} не получает CP. Вместо этого "
+                f"{display_name} не получает CP. Вместо этого "
                 f"использует колоду со страгеммами.")
 
     return result
