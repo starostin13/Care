@@ -601,6 +601,28 @@ async def get_hexes_by_alliance(alliance_id):
             return await cursor.fetchall()
 
 
+async def get_adjacent_hexes_between_alliances(alliance1_id, alliance2_id):
+    """Find hexes of alliance2 that are adjacent to alliance1 hexes."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT DISTINCT m2.id
+            FROM map m1
+            JOIN edges e ON (m1.id = e.left_hexagon OR m1.id = e.right_hexagon)
+            JOIN map m2 ON (m2.id = e.left_hexagon OR m2.id = e.right_hexagon)
+            WHERE m1.patron = ? AND m2.patron = ? AND m1.id != m2.id
+        ''', (alliance1_id, alliance2_id)) as cursor:
+            return await cursor.fetchall()
+
+
+async def update_mission_cell(mission_id, cell_id):
+    """Update the cell field for a mission."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE mission_stack SET cell=? WHERE id=?
+        ''', (cell_id, mission_id))
+        await db.commit()
+
+
 async def get_warehouse_count_by_alliance(alliance_id):
     """Get the number of warehouses owned by an alliance.
 

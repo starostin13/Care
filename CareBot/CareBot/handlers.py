@@ -68,13 +68,23 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission_number = int(
         query.data.replace("mission_sch_", ""))
     rules = await schedule_helper.get_mission_rules(mission_number)
-    # Получаем миссию из базы данных
-    mission = await mission_helper.get_mission(rules=rules)
     data = query.data  # Получаем данные из нажатой кнопки
-    # mission_stack schema: [0:deploy, 1:rules, 2:cell, 3:description, 4:id, ...]
     
     # Получаем список всех участников события
     participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
+    
+    # Определяем атакующего (кто нажал) и защищающегося (оппонент)
+    attacker_id = str(update.effective_user.id)
+    defender_id = None
+    if participants:
+        for participant in participants:
+            if participant[0] != attacker_id:
+                defender_id = participant[0]
+                break
+    
+    # Получаем миссию из базы данных с определением cell на основе участников
+    mission = await mission_helper.get_mission(rules=rules, attacker_id=attacker_id, defender_id=defender_id)
+    # mission_stack schema: [0:deploy, 1:rules, 2:cell, 3:description, 4:id, ...]
 
     # Извлекаем правильный mission_id из кортежа миссии (он на позиции 4)
     mission_id = mission[4]
