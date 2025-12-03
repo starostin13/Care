@@ -31,7 +31,8 @@ def generate_new_one(rules):
         mission_name = random.choice(missions).split(":")[0]
         description = random.choice(missions)
 
-        return (mission_name, rules, 2, description, None)
+        # cell should be None when generating, assigned later when mission is selected
+        return (mission_name, rules, None, description, None)
 
     elif rules == "boarding_action":
         deploy_types = ["Breach Points", "Ship Interface", "Void Strike"]
@@ -45,7 +46,8 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Forces must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        return (deploy, rules, 2, description)
+        # Return tuple with cell=None, no winner_bonus for boarding_action
+        return (deploy, rules, None, description, None)
 
     elif rules == "combat_patrol":
         deploy_types = ["Strategic Reserves",
@@ -62,7 +64,8 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Patrol forces must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        return (deploy, rules, 2, description, None)
+        # Return tuple with cell=None for consistency
+        return (deploy, rules, None, description, None)
 
     elif rules == "wh40k":
         deploy_types = ["Total Domination"]
@@ -75,7 +78,8 @@ def generate_new_one(rules):
         description = random.choice(missions)
         deploy = random.choice(deploy_types)
         winner_bonus = random.choice(winner_bonuses)
-        return (deploy, rules, 2, description, winner_bonus)
+        # Return tuple with cell=None, winner_bonus included for wh40k
+        return (deploy, rules, None, description, winner_bonus)
 
     elif rules == "battlefleet":
         deploy_types = ["Convoy Pattern", "Battle Line", "Orbital Superiority"]
@@ -92,15 +96,23 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Fleet must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        return (deploy, rules, 2, description)
+        # Return tuple with cell=None, no winner_bonus for battlefleet
+        return (deploy, rules, None, description, None)
 
     else:
         # Default case if rules type is not recognized
-        return ('Only War', rules, 2, f'Generic mission for {rules}', None)
+        # Return tuple with cell=None for consistency
+        return ('Only War', rules, None, f'Generic mission for {rules}', None)
 
 
-async def get_mission(rules: Optional[str]):
-    """Fetches an existing mission or generates a new one if none exists."""
+async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, defender_id: Optional[str] = None):
+    """Fetches an existing mission or generates a new one if none exists.
+    
+    Args:
+        rules: Mission ruleset (killteam, wh40k, etc.)
+        attacker_id: Telegram ID of the attacker (who clicked the mission)
+        defender_id: Telegram ID of the defender (opponent)
+    """
     mission = await sqllite_helper.get_mission(rules)
 
     if not mission:
@@ -108,35 +120,77 @@ async def get_mission(rules: Optional[str]):
         mission = generate_new_one(rules)
         await sqllite_helper.save_mission(mission)
 
+    # Determine cell_id based on participants
+    cell_id = mission[2]  # May be None for newly generated missions
+    
+    if attacker_id and defender_id and cell_id is None:
+        attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
+        defender_alliance = await sqllite_helper.get_alliance_of_warmaster(defender_id)
+        
+        if attacker_alliance and defender_alliance:
+            attacker_alliance_id = attacker_alliance[0]
+            defender_alliance_id = defender_alliance[0]
+            
+            # Find defender's hexes adjacent to attacker's territory
+            adjacent_hexes = await sqllite_helper.get_adjacent_hexes_between_alliances(
+                attacker_alliance_id, defender_alliance_id
+            )
+            adjacent_hexes_list = list(adjacent_hexes) if adjacent_hexes else []
+            
+            if adjacent_hexes_list:
+                # Use first adjacent hex as battle location
+                cell_id = adjacent_hexes_list[0][0]
+                logger.info(f"Battle cell determined: {cell_id} (adjacent hex of defender)")
+            else:
+                # No adjacent hexes, use random defender hex
+                defender_hexes = await sqllite_helper.get_hexes_by_alliance(defender_alliance_id)
+                defender_hexes_list = list(defender_hexes) if defender_hexes else []
+                if defender_hexes_list:
+                    cell_id = random.choice(defender_hexes_list)[0]
+                    logger.info(f"Battle cell determined: {cell_id} (random defender hex, no adjacency)")
+        
+        # Update mission tuple with determined cell_id
+        if cell_id is not None:
+            mission = list(mission)
+            mission[2] = cell_id
+            mission = tuple(mission)
+            # Update mission in database with the cell
+            await sqllite_helper.update_mission_cell(mission[4], cell_id)
+
     if rules == "killteam":
-        cell_id = mission[2]
-        await sqllite_helper.lock_mission(cell_id)
-        state = await sqllite_helper.get_state(cell_id)
+        if cell_id is not None:
+            await sqllite_helper.lock_mission(mission[4])  # Lock by mission id, not cell
+            state = await sqllite_helper.get_state(cell_id)
 
-        # Получаем killzone для данного state гекса (или None)
-        hex_state = state[0] if state is not None else None
-        killzone = get_killzone_for_mission(hex_state)
-        mission = mission + (f"Killzone: {killzone}",)
+            # Получаем killzone для данного state гекса (или None)
+            hex_state = state[0] if state is not None else None
+            killzone = get_killzone_for_mission(hex_state)
+            mission = mission + (f"Killzone: {killzone}",)
 
-        if state is not None:
-            mission = mission + (state[0],)
+            if state is not None:
+                mission = mission + (state[0],)
 
-        history = await sqllite_helper.get_cell_history(cell_id)
-        for point in history:
-            mission = mission + point
+            history = await sqllite_helper.get_cell_history(cell_id)
+            for point in history:
+                mission = mission + point
+        else:
+            # For killteam without cell, just lock the mission
+            await sqllite_helper.lock_mission(mission[4])
 
     elif rules == "wh40k":
-        cell_id = mission[2]
-        await sqllite_helper.lock_mission(cell_id)
-        number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
-        mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
-        history = await sqllite_helper.get_cell_history(cell_id)
-        state = await sqllite_helper.get_state(cell_id)
-        if state is not None:
-            mission = mission + (state[0],)
+        # Lock mission by id (mission[4])
+        await sqllite_helper.lock_mission(mission[4])
+        if cell_id is not None:
+            # If cell is assigned, add extra info
+            number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
+            mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
+            history = await sqllite_helper.get_cell_history(cell_id)
+            state = await sqllite_helper.get_state(cell_id)
+            if state is not None:
+                mission = mission + (state[0],)
 
-        for point in history:
-            mission = mission + point
+            for point in history:
+                mission = mission + point
 
     return mission
 
