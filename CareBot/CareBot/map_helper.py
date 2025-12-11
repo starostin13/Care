@@ -79,7 +79,7 @@ async def update_map(battle_id, battle_result, user_telegram_id, scenario: Optio
                 # Import locally to avoid circular dependency
                 import mission_helper
                 await mission_helper.handle_alliance_elimination(loser_alliance_id[0])
-    if rules == "killteam":
+    elif rules == "killteam":
         # Определяем победителя
         if user_score > opponent_score:
             winner_telegram_id = user_telegram_id
