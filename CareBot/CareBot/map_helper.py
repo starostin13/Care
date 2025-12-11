@@ -15,6 +15,7 @@ else:
     print("✅ Map Helper using REAL SQLite helper")
 import logging
 import random
+import mission_helper
 
 # Enable logging
 logging.basicConfig(
@@ -76,8 +77,6 @@ async def update_map(battle_id, battle_result, user_telegram_id, scenario: Optio
             if len(remaining_hexes) == 0:
                 logger.info(
                     f"Alliance {loser_alliance_id[0]} eliminated - no hexes remaining after map update")
-                # Import locally to avoid circular dependency
-                import mission_helper
                 await mission_helper.handle_alliance_elimination(loser_alliance_id[0])
     elif rules == "killteam":
         # Определяем победителя
