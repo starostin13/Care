@@ -33,7 +33,7 @@ async def update_map(battle_id, battle_result, user_telegram_id, scenario: Optio
 
     # Если ничья, то ничего не делаем
     if user_score == opponent_score:
-        logger("Draw in battle")
+        logger.info("Draw in battle")
         return
 
     rules = await sqllite_helper.get_rules_of_mission(battle_id)
@@ -42,18 +42,24 @@ async def update_map(battle_id, battle_result, user_telegram_id, scenario: Optio
         cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
         logger.info(f"Cell id: {cell_id}")
 
-        # Определяем победителя
+        # Определяем победителя и проигравшего
         if user_score > opponent_score:
             winner_telegram_id = user_telegram_id
+            loser_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
         else:
             winner_telegram_id = await sqllite_helper.get_opponent_telegram_id(battle_id, user_telegram_id)
+            loser_telegram_id = user_telegram_id
         logger.info(f"Winner: {winner_telegram_id}")
 
         if isinstance(winner_telegram_id, tuple):
             winner_telegram_id = winner_telegram_id[0]
+            
+        if isinstance(loser_telegram_id, tuple):
+            loser_telegram_id = loser_telegram_id[0]
 
-        # Получаем alliance id победителя
+        # Получаем alliance id победителя и проигравшего
         winner_alliance_id = await sqllite_helper.get_alliance_of_warmaster(winner_telegram_id)
+        loser_alliance_id = await sqllite_helper.get_alliance_of_warmaster(loser_telegram_id)
         logger.info(f"Winner alliance id: {winner_alliance_id}")
 
         # Обновляем базу данных - устанавливаем победителя как патрона клетки
@@ -61,6 +67,18 @@ async def update_map(battle_id, battle_result, user_telegram_id, scenario: Optio
 
         new_patron_faction = await sqllite_helper.get_faction_of_warmaster(winner_telegram_id)
         await sqllite_helper.add_to_story(cell_id, f"Находилась под контролем {new_patron_faction[0]}")
+        
+        # Проверяем, остались ли у проигравшего альянса гексы после изменения карты
+        if loser_alliance_id and loser_alliance_id[0] != 0:
+            remaining_hexes = await sqllite_helper.get_hexes_by_alliance(loser_alliance_id[0])
+            logger.info(
+                f"Alliance {loser_alliance_id[0]} has {len(remaining_hexes)} hexes remaining after map update")
+            if len(remaining_hexes) == 0:
+                logger.info(
+                    f"Alliance {loser_alliance_id[0]} eliminated - no hexes remaining after map update")
+                # Import locally to avoid circular dependency
+                import mission_helper
+                await mission_helper.handle_alliance_elimination(loser_alliance_id[0])
     if rules == "killteam":
         # Определяем победителя
         if user_score > opponent_score:
