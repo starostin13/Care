@@ -358,9 +358,19 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
 
     # Update last_active timestamp for both players
     logger.info("Updating last_active timestamp for players")
-    await sqllite_helper.update_last_active(user_telegram_id)
-    await sqllite_helper.update_last_active(opponent_telegram_id)
-    logger.info("Updated last_active for users: %s, %s", user_telegram_id, opponent_telegram_id)
+    try:
+        user_updated = await sqllite_helper.update_last_active(user_telegram_id)
+        opponent_updated = await sqllite_helper.update_last_active(opponent_telegram_id)
+        
+        if user_updated and opponent_updated:
+            logger.info("Updated last_active for users: %s, %s", user_telegram_id, opponent_telegram_id)
+        else:
+            if not user_updated:
+                logger.warning("Failed to update last_active for user: %s", user_telegram_id)
+            if not opponent_updated:
+                logger.warning("Failed to update last_active for opponent: %s", opponent_telegram_id)
+    except Exception as e:
+        logger.error("Error updating last_active timestamps: %s", e)
 
     # Apply rewards based on mission type and rules
     logger.info("Processing rewards for rules: %s", rules)

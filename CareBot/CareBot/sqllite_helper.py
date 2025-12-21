@@ -1273,13 +1273,19 @@ async def update_last_active(telegram_id):
     
     Args:
         telegram_id: Telegram ID of the player
+        
+    Returns:
+        bool: True if update was successful, False otherwise
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute('''
+        cursor = await db.execute('''
             UPDATE warmasters SET last_active = CURRENT_TIMESTAMP 
             WHERE telegram_id = ?
         ''', (telegram_id,))
         await db.commit()
+        
+        # Check if any rows were affected
+        return cursor.rowcount > 0
 
 
 async def get_alliance_average_inactivity_days(alliance_id):
