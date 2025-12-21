@@ -356,6 +356,12 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         loser_score = opponent_score
         logger.info("Draw - no winner")
 
+    # Update last_active timestamp for both players
+    logger.info("Updating last_active timestamp for players")
+    await sqllite_helper.update_last_active(user_telegram_id)
+    await sqllite_helper.update_last_active(opponent_telegram_id)
+    logger.info("Updated last_active for users: %s, %s", user_telegram_id, opponent_telegram_id)
+
     # Apply rewards based on mission type and rules
     logger.info("Processing rewards for rules: %s", rules)
     if rules == "killteam":

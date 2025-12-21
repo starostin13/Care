@@ -808,4 +808,55 @@ async def add_battle_result(mission_id, counts1, counts2):
     print(f"🧪 Mock: add_battle_result({mission_id}, {counts1}, {counts2})")
     return True
 
+
+# New functions for inactive player transfer feature
+async def update_last_active(telegram_id):
+    """Mock: Update the last_active timestamp for a player."""
+    print(f"🧪 Mock: update_last_active({telegram_id})")
+    return True
+
+
+async def get_alliance_average_inactivity_days(alliance_id):
+    """Mock: Get the average number of days since last activity for alliance members."""
+    print(f"🧪 Mock: get_alliance_average_inactivity_days({alliance_id})")
+    return 5.0  # Mock average of 5 days
+
+
+async def get_inactive_players_in_alliance(alliance_id, threshold_multiplier=2.0):
+    """Mock: Get players who are significantly more inactive than their alliance average."""
+    print(f"🧪 Mock: get_inactive_players_in_alliance({alliance_id}, {threshold_multiplier})")
+    # Return empty list by default (no inactive players)
+    return []
+
+
+async def get_all_admins():
+    """Mock: Get all admin users."""
+    print("🧪 Mock: get_all_admins()")
+    # Return first user as admin
+    return [('325313837', 'TestUser1')]
+
+
+async def get_player_last_active(telegram_id):
+    """Mock: Get the last active timestamp for a player."""
+    print(f"🧪 Mock: get_player_last_active({telegram_id})")
+    return "2024-01-01 12:00:00"
+
+
+async def transfer_inactive_player(telegram_id, from_alliance_id, to_alliance_id):
+    """Mock: Transfer a player from one alliance to another."""
+    print(f"🧪 Mock: transfer_inactive_player({telegram_id}, {from_alliance_id}, {to_alliance_id})")
+    return {
+        'success': True,
+        'player_name': 'MockPlayer',
+        'from_alliance_id': from_alliance_id,
+        'to_alliance_id': to_alliance_id
+    }
+
+
+async def get_target_alliance_for_inactive_player(current_alliance_id):
+    """Mock: Find the best alliance to transfer an inactive player to."""
+    print(f"🧪 Mock: get_target_alliance_for_inactive_player({current_alliance_id})")
+    # Return a different alliance ID
+    return 2 if current_alliance_id != 2 else 1
+
 print("🧪 Mock SQLite Helper fully initialized")

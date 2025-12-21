@@ -1267,3 +1267,173 @@ async def get_all_players():
         ''') as cursor:
             return await cursor.fetchall()
 
+
+async def update_last_active(telegram_id):
+    """Update the last_active timestamp for a player.
+    
+    Args:
+        telegram_id: Telegram ID of the player
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE warmasters SET last_active = CURRENT_TIMESTAMP 
+            WHERE telegram_id = ?
+        ''', (telegram_id,))
+        await db.commit()
+
+
+async def get_alliance_average_inactivity_days(alliance_id):
+    """Get the average number of days since last activity for alliance members.
+    
+    Args:
+        alliance_id: Alliance ID
+        
+    Returns:
+        float: Average days of inactivity, or None if no members
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT AVG(JULIANDAY('now') - JULIANDAY(last_active)) as avg_days
+            FROM warmasters
+            WHERE alliance = ? AND last_active IS NOT NULL
+        ''', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result and result[0] is not None else None
+
+
+async def get_inactive_players_in_alliance(alliance_id, threshold_multiplier=2.0):
+    """Get players who are significantly more inactive than their alliance average.
+    
+    A player is considered inactive if their inactivity is threshold_multiplier times
+    the alliance average inactivity.
+    
+    Args:
+        alliance_id: Alliance ID
+        threshold_multiplier: Multiplier for average inactivity (default: 2.0)
+        
+    Returns:
+        list: List of tuples (telegram_id, nickname, days_inactive)
+    """
+    avg_inactivity = await get_alliance_average_inactivity_days(alliance_id)
+    
+    if avg_inactivity is None:
+        return []
+    
+    threshold_days = avg_inactivity * threshold_multiplier
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 
+                telegram_id, 
+                nickname,
+                JULIANDAY('now') - JULIANDAY(last_active) as days_inactive
+            FROM warmasters
+            WHERE alliance = ? 
+              AND last_active IS NOT NULL
+              AND JULIANDAY('now') - JULIANDAY(last_active) > ?
+            ORDER BY days_inactive DESC
+        ''', (alliance_id, threshold_days)) as cursor:
+            return await cursor.fetchall()
+
+
+async def get_all_admins():
+    """Get all admin users.
+    
+    Returns:
+        list: List of tuples (telegram_id, nickname)
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id, nickname FROM warmasters WHERE is_admin = 1
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_player_last_active(telegram_id):
+    """Get the last active timestamp for a player.
+    
+    Args:
+        telegram_id: Telegram ID of the player
+        
+    Returns:
+        str: ISO format timestamp or None
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT last_active FROM warmasters WHERE telegram_id = ?
+        ''', (telegram_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def transfer_inactive_player(telegram_id, from_alliance_id, to_alliance_id):
+    """Transfer a player from one alliance to another.
+    
+    Args:
+        telegram_id: Telegram ID of the player to transfer
+        from_alliance_id: Current alliance ID
+        to_alliance_id: Target alliance ID
+        
+    Returns:
+        dict: Result with success status and details
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get player info
+        async with db.execute('''
+            SELECT nickname, alliance FROM warmasters WHERE telegram_id = ?
+        ''', (telegram_id,)) as cursor:
+            player = await cursor.fetchone()
+        
+        if not player:
+            return {
+                'success': False,
+                'message': 'Player not found'
+            }
+        
+        nickname, current_alliance = player
+        
+        if current_alliance != from_alliance_id:
+            return {
+                'success': False,
+                'message': f'Player is not in alliance {from_alliance_id}'
+            }
+        
+        # Transfer the player
+        await db.execute('''
+            UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
+        ''', (to_alliance_id, telegram_id))
+        
+        await db.commit()
+        
+        return {
+            'success': True,
+            'player_name': nickname,
+            'from_alliance_id': from_alliance_id,
+            'to_alliance_id': to_alliance_id
+        }
+
+
+async def get_target_alliance_for_inactive_player(current_alliance_id):
+    """Find the best alliance to transfer an inactive player to.
+    
+    Chooses the alliance with the fewest members (excluding the current alliance).
+    
+    Args:
+        current_alliance_id: Current alliance ID of the player
+        
+    Returns:
+        int: Target alliance ID, or None if no suitable alliance found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT a.id, COUNT(w.telegram_id) as player_count
+            FROM alliances a
+            LEFT JOIN warmasters w ON a.id = w.alliance
+            WHERE a.id != ?
+            GROUP BY a.id
+            ORDER BY player_count ASC, a.id ASC
+            LIMIT 1
+        ''', (current_alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
