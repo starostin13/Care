@@ -155,7 +155,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     logger.info(f"hello function called by user {userId}")
 
     await players_helper.add_warmaster(userId)
-    
+
     menu = await keyboard_constructor.get_main_menu(userId)
     menu_markup = InlineKeyboardMarkup(menu)
 
@@ -163,7 +163,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_settings = await settings_helper.get_user_settings(userId)
     has_nickname = user_settings and user_settings[0]
     user_name = update.effective_user.first_name or "User"
-    
+
     if has_nickname:
         greeting_text = await localization.get_text_for_user(
             userId, 'main_menu_greeting', name=user_name
