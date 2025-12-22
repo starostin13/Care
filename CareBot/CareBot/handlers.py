@@ -60,19 +60,24 @@ async def contact_callback(update, bot):
     await warmaster_helper.register_warmaster(userid, phone)
 
 
-async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def get_the_mission(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> int:
     # update.callback_query.data 'mission_sch_2'
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
-    
+
     mission_number = int(
         query.data.replace("mission_sch_", ""))
     rules = await schedule_helper.get_mission_rules(mission_number)
     data = query.data  # Получаем данные из нажатой кнопки
-    
+
     # Получаем список всех участников события
-    participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
-    
+    participants = await schedule_helper.get_event_participants(
+        data.rsplit('_', 1)[-1]
+    )
+
     # Определяем атакующего (кто нажал) и защищающегося (оппонент)
     attacker_id = str(update.effective_user.id)
     defender_id = None
@@ -82,6 +87,14 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 defender_id = participant[0]
                 break
     
+    # Создаем список только из двух участников конкретной миссии
+    # а не всех игроков события
+    mission_participants = [(attacker_id,)]
+    if defender_id:
+        mission_participants.append((defender_id,))
+    
+    logger.info(f"Mission participants: attacker={attacker_id}, defender={defender_id}")
+    
     # Получаем миссию из базы данных с определением cell на основе участников
     mission = await mission_helper.get_mission(rules=rules, attacker_id=attacker_id, defender_id=defender_id)
     # mission_stack schema: [0:deploy, 1:rules, 2:cell, 3:description, 4:id, ...]
@@ -90,9 +103,9 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission_id = mission[4]
     logger.info(f"Mission ID from database: {mission_id}")
     
-    # Создаем бой с правильным mission_id
-    battle_id = await mission_helper.start_battle(mission_id, participants)
-    situation = await mission_helper.get_situation(battle_id, participants)
+    # Создаем бой с правильным mission_id, используя только двух участников миссии
+    battle_id = await mission_helper.start_battle(mission_id, mission_participants)
+    situation = await mission_helper.get_situation(battle_id, mission_participants)
 
     # Формируем текст для пользователя
     mission_description = mission[3] or ''
@@ -103,15 +116,14 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Отправляем текст миссии текущему пользователю
     await query.edit_message_text(f"{text}\n{situation}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
 
-    # Рассылаем сообщение с миссией всем участникам
-    for participant_id in participants:
-        # Исключаем текущего пользователя
-        if participant_id[0] != str(update.effective_user.id):
-            try:
-                await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
-            except Exception as e:
-                logger.error(
-                    f"Ошибка при отправке сообщения пользователю {participant_id}: {e}")
+    # Рассылаем сообщение с миссией только оппоненту (defender_id)
+    # Не отправляем всем участникам, а только тому кого выбрали
+    if defender_id:
+        try:
+            await context.bot.send_message(chat_id=defender_id, text=f"Новая миссия:\n{text}")
+            logger.info(f"Mission notification sent to defender {defender_id}")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке сообщения пользователю {defender_id}: {e}")
 
     return MISSIONS
 
