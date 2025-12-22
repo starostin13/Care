@@ -339,6 +339,18 @@ async def handle_mission_reply(
             logger.warning("Could not apply mission rewards for battle %s", battle_id)
             await update.message.reply_text("Результат битвы записан, но награды не могли быть применены (проверьте альянсы игроков).")
             return MAIN_MENU
+        
+        # Check for least recently active player and send warning
+        try:
+            least_active = await sqllite_helper.get_least_recently_active_player()
+            if least_active:
+                player_id, player_name, player_contact, max_battle_id = least_active
+                logger.info(f"Least active player: {player_name} (last battle ID: {max_battle_id})")
+                await notification_service.notify_inactive_player_warning(
+                    context, player_id, player_name, player_contact
+                )
+        except Exception as e:
+            logger.error(f"Error checking for inactive players: {e}")
             
         scenario_line = next(
             (line for line in lines if line.startswith('📜')), None)

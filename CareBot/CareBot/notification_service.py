@@ -226,123 +226,51 @@ async def notify_alliance_elimination(context: ContextTypes.DEFAULT_TYPE,
         logger.error("Error in notify_alliance_elimination: %s", e)
 
 
-async def notify_inactive_player_transfer(context: ContextTypes.DEFAULT_TYPE,
-                                          player_telegram_id: int,
-                                          player_name: str,
-                                          from_alliance_id: int,
-                                          from_alliance_name: str,
-                                          to_alliance_id: int,
-                                          to_alliance_name: str,
-                                          last_active: str,
-                                          alliance_avg_activity: str):
+async def notify_inactive_player_warning(context, player_telegram_id, player_name, player_contact):
     """
-    Notify admins, the transferred player, old alliance members, and new alliance members
-    about an inactive player transfer.
+    Notify player and admins about long inactivity.
     
     Args:
         context: Telegram bot context
-        player_telegram_id: Telegram ID of the transferred player
-        player_name: Name of the transferred player
-        from_alliance_id: ID of the alliance the player was transferred from
-        from_alliance_name: Name of the alliance the player was transferred from
-        to_alliance_id: ID of the alliance the player was transferred to
-        to_alliance_name: Name of the alliance the player was transferred to
-        last_active: Last activity timestamp string
-        alliance_avg_activity: Average activity timestamp string for old alliance
+        player_telegram_id: Telegram ID of the inactive player
+        player_name: Name of the inactive player
+        player_contact: Contact info (registered_as) of the inactive player
     """
     try:
-        # 1. Notify all admins
-        logger.info(f"Notifying admins about inactive player transfer: {player_name}")
-        admins = await sqllite_helper.get_all_admins()
-        
-        for admin_id, admin_nickname in admins:
-            try:
-                admin_message = await localization.get_text_for_user(
-                    admin_id,
-                    "inactive_player_transfer_admin_notification",
-                    player_name=player_name,
-                    from_alliance=from_alliance_name,
-                    to_alliance=to_alliance_name,
-                    last_active=last_active,
-                    alliance_avg_activity=alliance_avg_activity
-                )
-                
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=admin_message
-                )
-                logger.info(f"Notified admin {admin_nickname} ({admin_id})")
-            except Exception as e:
-                logger.error(f"Failed to notify admin {admin_id}: {e}")
-        
-        # 2. Notify the transferred player
+        # 1. Notify the inactive player
         try:
-            player_message = await localization.get_text_for_user(
-                player_telegram_id,
-                "inactive_player_transfer_player_notification",
-                to_alliance=to_alliance_name,
-                last_active=last_active
+            player_message = (
+                f"⚠️ Внимание! Вы давно не участвовали в миссиях.\n\n"
+                f"Пожалуйста, примите участие в играх, чтобы оставаться активным членом альянса."
             )
             
             await context.bot.send_message(
                 chat_id=player_telegram_id,
                 text=player_message
             )
-            logger.info(f"Notified transferred player {player_name} ({player_telegram_id})")
+            logger.info(f"Sent inactivity warning to player {player_name} ({player_telegram_id})")
         except Exception as e:
-            logger.error(f"Failed to notify transferred player {player_telegram_id}: {e}")
+            logger.error(f"Failed to notify inactive player {player_telegram_id}: {e}")
         
-        # 3. Notify members of the old alliance
-        logger.info(f"Notifying old alliance members (alliance {from_alliance_id})")
-        old_alliance_members = await sqllite_helper.get_players_by_alliance(from_alliance_id)
+        # 2. Notify admins with contact info
+        admins = await sqllite_helper.get_all_admins()
         
-        for member_id, member_nickname, _ in old_alliance_members:
-            # Skip the transferred player
-            if member_id == player_telegram_id:
-                continue
-            
+        for admin_id, admin_nickname in admins:
             try:
-                old_alliance_message = await localization.get_text_for_user(
-                    member_id,
-                    "inactive_player_transfer_old_alliance_notification",
-                    player_name=player_name,
-                    last_active=last_active
+                admin_message = (
+                    f"⚠️ Игрок {player_name} давно не участвовал в миссиях.\n\n"
+                    f"Контакт для связи: {player_contact}"
                 )
                 
                 await context.bot.send_message(
-                    chat_id=member_id,
-                    text=old_alliance_message
+                    chat_id=admin_id,
+                    text=admin_message
                 )
-                logger.info(f"Notified old alliance member {member_nickname} ({member_id})")
+                logger.info(f"Notified admin {admin_nickname} ({admin_id}) about inactive player {player_name}")
             except Exception as e:
-                logger.error(f"Failed to notify old alliance member {member_id}: {e}")
+                logger.error(f"Failed to notify admin {admin_id}: {e}")
         
-        # 4. Notify members of the new alliance
-        logger.info(f"Notifying new alliance members (alliance {to_alliance_id})")
-        new_alliance_members = await sqllite_helper.get_players_by_alliance(to_alliance_id)
-        
-        for member_id, member_nickname, _ in new_alliance_members:
-            # Skip the transferred player (they already got their own notification)
-            if member_id == player_telegram_id:
-                continue
-            
-            try:
-                new_alliance_message = await localization.get_text_for_user(
-                    member_id,
-                    "inactive_player_transfer_new_alliance_notification",
-                    player_name=player_name,
-                    from_alliance=from_alliance_name
-                )
-                
-                await context.bot.send_message(
-                    chat_id=member_id,
-                    text=new_alliance_message
-                )
-                logger.info(f"Notified new alliance member {member_nickname} ({member_id})")
-            except Exception as e:
-                logger.error(f"Failed to notify new alliance member {member_id}: {e}")
-        
-        logger.info(f"Successfully completed notifications for inactive player transfer of {player_name}")
+        logger.info(f"Completed notifications for inactive player {player_name}")
         
     except Exception as e:
-        logger.error(f"Error in notify_inactive_player_transfer: {e}")
+        logger.error(f"Error in notify_inactive_player_warning: {e}")
