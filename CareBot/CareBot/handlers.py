@@ -344,8 +344,8 @@ async def handle_mission_reply(
         try:
             least_active = await sqllite_helper.get_least_recently_active_player()
             if least_active:
-                player_id, player_name, player_contact, max_battle_id = least_active
-                logger.info(f"Least active player: {player_name} (last battle ID: {max_battle_id})")
+                player_id, player_name, player_contact, max_battle_id, last_mission_date = least_active
+                logger.info(f"Least active player: {player_name} (last battle ID: {max_battle_id}, last mission: {last_mission_date})")
                 await notification_service.notify_inactive_player_warning(
                     context, player_id, player_name, player_contact
                 )

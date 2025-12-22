@@ -2,7 +2,7 @@
 
 ## Overview
 
-Simple system to identify and warn players who haven't participated in missions for a long time. Triggered automatically when game results are entered.
+Simple system to identify and warn players who haven't participated in missions for more than **30 days**. Triggered automatically when game results are entered.
 
 ## How It Works
 
@@ -11,9 +11,15 @@ Simple system to identify and warn players who haven't participated in missions 
 - Runs after `apply_mission_rewards()` completes successfully
 
 ### Detection
-- Uses existing `battle_attenders` table (no DB changes needed)
-- Finds player whose most recent battle has the **lowest battle_id**
+- Uses existing `battle_attenders`, `battles`, and `mission_stack` tables (no DB changes needed)
+- Finds player whose most recent battle has the **lowest battle_id** AND whose last participation was **more than 30 days ago**
 - Battle IDs are auto-incrementing, so lower ID = participated longer ago
+- Uses `mission_stack.created_date` to calculate days since last participation
+
+### Threshold
+- **30 days** - Player must be inactive for more than a month to trigger warning
+- Only players meeting this threshold will receive notifications
+- If no players meet the criteria, no warnings are sent
 
 ### Notifications Sent
 
@@ -60,16 +66,25 @@ SELECT
     w.telegram_id,
     w.nickname,
     w.registered_as,
-    MAX(ba.battle_id) as max_battle_id
+    MAX(ba.battle_id) as max_battle_id,
+    MAX(ms.created_date) as last_mission_date
 FROM warmasters w
 LEFT JOIN battle_attenders ba ON w.telegram_id = ba.attender_id
+LEFT JOIN battles b ON ba.battle_id = b.id
+LEFT JOIN mission_stack ms ON b.mission_id = ms.id
 WHERE ba.battle_id IS NOT NULL
 GROUP BY w.telegram_id, w.nickname, w.registered_as
+HAVING julianday('now') - julianday(MAX(ms.created_date)) > 30
 ORDER BY max_battle_id ASC
 LIMIT 1
 ```
 
-This finds the player whose most recent battle ID is the lowest (i.e., participated longest ago).
+This finds the player whose most recent battle ID is the lowest (i.e., participated longest ago) AND whose last mission was more than 30 days ago.
+
+### 30-Day Threshold
+- Uses SQLite's `julianday()` function to calculate date difference
+- `HAVING julianday('now') - julianday(MAX(ms.created_date)) > 30` ensures only players inactive for >30 days are returned
+- If no players meet this criteria, the query returns NULL and no warnings are sent
 
 ### Error Handling
 - If no players with battles exist, no warnings sent
