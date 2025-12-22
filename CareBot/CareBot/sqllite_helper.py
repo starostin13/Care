@@ -1276,7 +1276,7 @@ async def get_least_recently_active_player():
     Returns the player whose most recent battle has the lowest ID.
     
     Returns:
-        tuple: (telegram_id, nickname, registered_as, max_battle_id) or None if no players meet criteria
+        tuple: (telegram_id, nickname, registered_as, max_battle_id, last_mission_date) or None if no players meet criteria
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
