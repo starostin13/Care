@@ -1,10 +1,16 @@
 ﻿"""Helper functions for interacting with the SQLite database asynchronously
-using aiosqlite."""
+using aiosqlite.
+
+Enhanced with detailed debug logging for alliance/opponent resolution.
+"""
 
 import datetime
 import aiosqlite
 import os
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Use environment variable for database path, fallback to default
 DATABASE_PATH = os.environ.get('DATABASE_PATH', 
@@ -106,14 +112,82 @@ async def get_number_of_safe_next_cells(cell_id):
             return result[0] if result else 0
 
 async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
+    logger.info(
+        "get_opponent_telegram_id(battle_id=%s, current_user=%s [type=%s])",
+        battle_id, current_user_telegram_id, type(current_user_telegram_id))
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        # First try the new battle_attenders table
         async with db.execute('''
             SELECT attender_id
             FROM battle_attenders
             WHERE battle_id = ?
             AND attender_id != ?
         ''', (battle_id, current_user_telegram_id)) as cursor:
-            return await cursor.fetchone()
+            result = await cursor.fetchone()
+            logger.info("battle_attenders lookup result: %s", result)
+            if result:
+                logger.info("Opponent resolved via battle_attenders: %s", result)
+                return result
+        
+        # Fallback to old battles table structure for legacy battles
+        async with db.execute('''
+            SELECT fstplayer, sndplayer
+            FROM battles
+            WHERE id = ?
+        ''', (battle_id,)) as cursor:
+            battle_result = await cursor.fetchone()
+            logger.info("legacy battles lookup result: %s", battle_result)
+            if battle_result and battle_result[0] and battle_result[1]:
+                # If current user is fstplayer, return sndplayer, and vice versa
+                if str(battle_result[0]) == str(current_user_telegram_id):
+                    logger.info("Opponent resolved via legacy (sndplayer): %s", battle_result[1])
+                    return (battle_result[1],)
+                elif str(battle_result[1]) == str(current_user_telegram_id):
+                    logger.info("Opponent resolved via legacy (fstplayer): %s", battle_result[0])
+                    return (battle_result[0],)
+            else:
+                logger.warning(
+                    "Could not resolve opponent from legacy battles for battle_id=%s",
+                    battle_id)
+        
+        logger.error(
+            "Opponent telegram id could not be determined for battle_id=%s, user=%s",
+            battle_id, current_user_telegram_id)
+        return None
+
+
+async def get_active_battle_id_for_mission(mission_id, user_telegram_id):
+    """Get the active battle_id for a mission where user participates.
+    
+    Args:
+        mission_id: The ID of the mission
+        user_telegram_id: Telegram ID of the user
+        
+    Returns:
+        int: Battle ID if found, None otherwise
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # First try to find battle with participants in battle_attenders
+        async with db.execute('''
+            SELECT b.id FROM battles b
+            INNER JOIN battle_attenders ba ON b.id = ba.battle_id
+            WHERE b.mission_id = ? AND ba.attender_id = ?
+            ORDER BY b.id DESC
+            LIMIT 1
+        ''', (mission_id, user_telegram_id)) as cursor:
+            result = await cursor.fetchone()
+            if result:
+                return result[0]
+        
+        # Fallback: find latest battle for this mission (for legacy support)
+        async with db.execute('''
+            SELECT id FROM battles
+            WHERE mission_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+        ''', (mission_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
 
 
 async def get_rules_of_mission(number_of_mission):
@@ -136,6 +210,8 @@ async def get_state(cell_id):
         ''', (cell_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
+
+# NOTE: get_mission_details is implemented later with logging and COALESCE.
 
 
 async def add_battle_result(mission_id, counts1, counts2):
@@ -289,11 +365,18 @@ async def get_warmasters_opponents(against_alliance, rule, date):
 
 
 async def get_alliance_of_warmaster(telegram_user_id):
+    logger.info(
+        "get_alliance_of_warmaster(telegram_id=%s [type=%s])",
+        telegram_user_id, type(telegram_user_id))
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT alliance FROM warmasters WHERE telegram_id=?
         ''', (telegram_user_id,)) as cursor:
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            logger.info("Alliance lookup result for %s: %s", telegram_user_id, row)
+            if row is None:
+                logger.error("Alliance not found for telegram_id=%s", telegram_user_id)
+            return row
 
 
 async def insert_to_schedule(date, rules, user_telegram):
@@ -518,15 +601,46 @@ async def get_hexes_by_alliance(alliance_id):
             return await cursor.fetchall()
 
 
-async def get_warehouse_count_by_alliance(alliance_id):
-    """Получает количество складов, контролируемых указанным альянсом."""
+async def get_adjacent_hexes_between_alliances(alliance1_id, alliance2_id):
+    """Find hexes of alliance2 that are adjacent to alliance1 hexes."""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT COUNT(*) FROM map
-            WHERE patron=? AND has_warehouse=1
-        ''', (alliance_id,)) as cursor:
-            result = await cursor.fetchone()
-            return result[0] if result else 0
+            SELECT DISTINCT m2.id
+            FROM map m1
+            JOIN edges e ON (m1.id = e.left_hexagon OR m1.id = e.right_hexagon)
+            JOIN map m2 ON (m2.id = e.left_hexagon OR m2.id = e.right_hexagon)
+            WHERE m1.patron = ? AND m2.patron = ? AND m1.id != m2.id
+        ''', (alliance1_id, alliance2_id)) as cursor:
+            return await cursor.fetchall()
+
+
+async def update_mission_cell(mission_id, cell_id):
+    """Update the cell field for a mission."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE mission_stack SET cell=? WHERE id=?
+        ''', (cell_id, mission_id))
+        await db.commit()
+
+
+async def get_warehouse_count_by_alliance(alliance_id):
+    """Get the number of warehouses owned by an alliance.
+
+    Uses warehouses table if present; falls back to map.has_warehouse.
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            async with db.execute('''
+                SELECT COUNT(*) FROM warehouses WHERE alliance_id = ?
+            ''', (alliance_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else 0
+        except Exception:
+            async with db.execute('''
+                SELECT COUNT(*) FROM map WHERE patron=? AND has_warehouse=1
+            ''', (alliance_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else 0
 
 
 async def get_mission_id_by_battle_id(battle_id):
@@ -540,13 +654,20 @@ async def get_mission_id_by_battle_id(battle_id):
 
 
 async def get_mission_details(mission_id):
-    """Get mission details by mission ID."""
+    """Get mission details by mission ID.
+
+    Returns: (deploy, rules, cell, mission_description, winner_bonus) or None
+    Uses mission_description column to avoid schema differences.
+    """
+    logger.info("get_mission_details(existing)(mission_id=%s)", mission_id)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT deploy, rules, cell, mission_description
+            SELECT deploy, rules, cell, mission_description, winner_bonus
             FROM mission_stack WHERE id = ?
         ''', (mission_id,)) as cursor:
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            logger.info("mission_details(existing) result: %s", row)
+            return row
 
 
 async def get_winner_bonus(mission_id):

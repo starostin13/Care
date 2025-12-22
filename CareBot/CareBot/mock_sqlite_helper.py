@@ -785,6 +785,12 @@ async def get_opponent_telegram_id(battle_id, current_user_telegram_id):
         return '123456789'
     return '325313837'
 
+async def get_active_battle_id_for_mission(mission_id, user_telegram_id):
+    """Mock реализация для получения активного battle_id по mission_id и пользователю."""
+    print(f"🧪 Mock: get_active_battle_id_for_mission({mission_id}, {user_telegram_id})")
+    # Для тестов возвращаем фиксированный battle_id
+    return mission_id  # Простая эмуляция
+
 async def get_rules_of_mission(number_of_mission):
     print(f"🧪 Mock: get_rules_of_mission({number_of_mission})")
     return 'wh40k'
