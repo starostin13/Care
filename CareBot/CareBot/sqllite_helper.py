@@ -851,15 +851,28 @@ async def get_alliance_player_count(alliance_id):
 async def set_warmaster_alliance(user_telegram_id, alliance_id):
     """Set a warmaster's alliance.
     
+    When assigning a player to an alliance (alliance_id != 0), expands the map by one ring.
+    
     Args:
         user_telegram_id: Telegram user ID
         alliance_id: Alliance ID to assign
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Check if the warmaster's alliance is changing from 0 to non-0
+        async with db.execute('''
+            SELECT alliance FROM warmasters WHERE telegram_id = ?
+        ''', (user_telegram_id,)) as cursor:
+            current_alliance = await cursor.fetchone()
+        
         await db.execute('''
             UPDATE warmasters SET alliance = ? WHERE telegram_id = ?
         ''', (alliance_id, user_telegram_id))
         await db.commit()
+    
+    # Expand map if player is being assigned to an alliance (not 0) and wasn't already in one
+    if alliance_id != 0 and (current_alliance is None or current_alliance[0] == 0):
+        logger.info(f"Player {user_telegram_id} joined alliance {alliance_id}, expanding map")
+        await expand_map_by_one_ring()
 
 
 async def create_alliance(name, initial_resources=0):
@@ -1310,4 +1323,173 @@ async def get_all_admins():
             SELECT telegram_id, nickname FROM warmasters WHERE is_admin = 1
         ''') as cursor:
             return await cursor.fetchall()
+
+
+async def expand_map_by_one_ring():
+    """Expand the planet map by adding a new ring of hexes.
+    
+    This function:
+    1. Calculates the current number of rings based on existing hexes
+    2. Generates coordinates for the new ring
+    3. Adds new hexes to the map table
+    4. Creates edges connecting new hexes to each other and to the existing map
+    """
+    from collections import Counter
+    
+    # Constants for hex generation
+    PLANET_ID = 1
+    STATES = [
+        "Леса",
+        "Тундра/снег",
+        "Пустыня",
+        "Отравленные земли",
+        "Завод",
+        "Город",
+        "Разрушенный город",
+        "Подземные системы",
+        "Останки корабля",
+        "Свалка",
+        "Храовый квартал",
+        "Изменённое варпом пространство"
+    ]
+    
+    HEX_DIRECTIONS = [
+        (1, 0), (1, -1), (0, -1),
+        (-1, 0), (-1, 1), (0, 1)
+    ]
+    
+    def hex_ring(center_q, center_r, radius):
+        """Generate coordinates for a hexagonal ring at given radius."""
+        if radius == 0:
+            return [(center_q, center_r)]
+        results = []
+        q, r = center_q + HEX_DIRECTIONS[4][0] * radius, center_r + HEX_DIRECTIONS[4][1] * radius
+        for i in range(6):
+            for _ in range(radius):
+                results.append((q, r))
+                dq, dr = HEX_DIRECTIONS[i]
+                q += dq
+                r += dr
+        return results
+    
+    def hex_neighbors(q, r):
+        """Get coordinates of all neighboring hexes."""
+        return [(q + dq, r + dr) for dq, dr in HEX_DIRECTIONS]
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get current number of hexes to determine the new radius
+        async with db.execute('SELECT COUNT(*) FROM map') as cursor:
+            hex_count = (await cursor.fetchone())[0]
+        
+        # Calculate current radius based on hex count
+        # Ring 0 has 1 hex, ring 1 has 6, ring 2 has 12, etc.
+        # Total hexes up to ring R = 1 + 6 + 12 + ... + 6*R = 1 + 6*(1+2+...+R) = 1 + 6*R*(R+1)/2 = 3*R^2 + 3*R + 1
+        current_radius = 0
+        total_hexes = 1
+        while total_hexes < hex_count:
+            current_radius += 1
+            total_hexes = 3 * current_radius * current_radius + 3 * current_radius + 1
+        
+        new_radius = current_radius + 1
+        logger.info(f"Expanding map: current radius {current_radius}, new radius {new_radius}")
+        
+        # Get all patron ids (alliances)
+        async with db.execute('SELECT id FROM alliances') as cursor:
+            patron_ids = [row[0] for row in await cursor.fetchall()]
+        
+        if not patron_ids:
+            logger.warning("No alliances found, cannot expand map")
+            return
+        
+        # Reconstruct the existing hex map to determine coordinates
+        async with db.execute('SELECT id FROM map ORDER BY id') as cursor:
+            existing_ids = [row[0] for row in await cursor.fetchall()]
+        
+        # Build coordinate map for existing hexes
+        hex_map = {}  # (q, r) -> {'id', 'state', ...}
+        hex_id_counter = 1
+        
+        for radius in range(current_radius + 1):
+            for q, r in hex_ring(0, 0, radius):
+                if hex_id_counter in existing_ids:
+                    async with db.execute(
+                        'SELECT state FROM map WHERE id = ?',
+                        (hex_id_counter,)
+                    ) as cursor:
+                        state = (await cursor.fetchone())[0]
+                    
+                    hex_map[(q, r)] = {
+                        'id': hex_id_counter,
+                        'state': state
+                    }
+                hex_id_counter += 1
+        
+        # Generate new ring
+        new_hexes = []
+        new_hex_id = max(existing_ids) + 1
+        
+        for q, r in hex_ring(0, 0, new_radius):
+            coord = (q, r)
+            
+            # Choose state based on neighbors
+            neighbors = hex_neighbors(q, r)
+            neighbor_states = [hex_map[nc]['state'] for nc in neighbors if nc in hex_map]
+            
+            if neighbor_states and random.random() < 0.1:
+                # 10% chance to match most common neighbor state
+                state = Counter(neighbor_states).most_common(1)[0][0]
+            else:
+                state = random.choice(STATES)
+            
+            has_warehouse = 1 if random.random() < 0.1 else 0
+            patron = random.choice(patron_ids)
+            
+            new_hexes.append({
+                'id': new_hex_id,
+                'coord': coord,
+                'state': state,
+                'patron': patron,
+                'has_warehouse': has_warehouse
+            })
+            
+            hex_map[coord] = {
+                'id': new_hex_id,
+                'state': state
+            }
+            
+            new_hex_id += 1
+        
+        # Insert new hexes
+        for hex_data in new_hexes:
+            await db.execute('''
+                INSERT INTO map (id, planet_id, state, patron, has_warehouse)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (hex_data['id'], PLANET_ID, hex_data['state'], 
+                  hex_data['patron'], hex_data['has_warehouse']))
+        
+        # Get current max edge id
+        async with db.execute('SELECT MAX(id) FROM edges') as cursor:
+            max_edge_id = (await cursor.fetchone())[0]
+        
+        edge_id = (max_edge_id or 0) + 1
+        
+        # Create edges for new hexes
+        for hex_data in new_hexes:
+            current_id = hex_data['id']
+            q, r = hex_data['coord']
+            
+            for nq, nr in hex_neighbors(q, r):
+                neighbor = hex_map.get((nq, nr))
+                if neighbor:
+                    neighbor_id = neighbor['id']
+                    # Add only one connection for each pair
+                    if current_id < neighbor_id:
+                        await db.execute('''
+                            INSERT INTO edges (id, left_hexagon, right_hexagon, state)
+                            VALUES (?, ?, ?, NULL)
+                        ''', (edge_id, current_id, neighbor_id))
+                        edge_id += 1
+        
+        await db.commit()
+        logger.info(f"Map expanded: added {len(new_hexes)} hexes, new total: {hex_count + len(new_hexes)}")
 

@@ -822,4 +822,11 @@ async def get_all_admins():
     # Return first user as admin
     return [('325313837', 'TestUser1')]
 
+
+async def expand_map_by_one_ring():
+    """Mock: Expand the planet map by adding a new ring of hexes."""
+    print("🧪 Mock: expand_map_by_one_ring()")
+    # In mock mode, we just log the expansion
+    return True
+
 print("🧪 Mock SQLite Helper fully initialized")
