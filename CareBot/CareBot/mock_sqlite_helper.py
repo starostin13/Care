@@ -808,4 +808,18 @@ async def add_battle_result(mission_id, counts1, counts2):
     print(f"🧪 Mock: add_battle_result({mission_id}, {counts1}, {counts2})")
     return True
 
+
+async def get_least_recently_active_player():
+    """Mock: Get the player who participated in battles longest ago."""
+    print("🧪 Mock: get_least_recently_active_player()")
+    # Return None by default (no inactive players)
+    return None
+
+
+async def get_all_admins():
+    """Mock: Get all admin users."""
+    print("🧪 Mock: get_all_admins()")
+    # Return first user as admin
+    return [('325313837', 'TestUser1')]
+
 print("🧪 Mock SQLite Helper fully initialized")

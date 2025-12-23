@@ -1267,3 +1267,47 @@ async def get_all_players():
         ''') as cursor:
             return await cursor.fetchall()
 
+
+async def get_least_recently_active_player():
+    """Get the player who participated in battles longest ago.
+    
+    Uses battle IDs and mission created_date to determine recency.
+    Only returns players whose last participation was more than 30 days ago.
+    Returns the player whose most recent battle has the lowest ID.
+    
+    Returns:
+        tuple: (telegram_id, nickname, registered_as, max_battle_id, last_mission_date) or None if no players meet criteria
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 
+                w.telegram_id,
+                w.nickname,
+                w.registered_as,
+                MAX(ba.battle_id) as max_battle_id,
+                MAX(ms.created_date) as last_mission_date
+            FROM warmasters w
+            LEFT JOIN battle_attenders ba ON w.telegram_id = ba.attender_id
+            LEFT JOIN battles b ON ba.battle_id = b.id
+            LEFT JOIN mission_stack ms ON b.mission_id = ms.id
+            WHERE ba.battle_id IS NOT NULL
+            GROUP BY w.telegram_id, w.nickname, w.registered_as
+            HAVING julianday('now') - julianday(MAX(ms.created_date)) > 30
+            ORDER BY max_battle_id ASC
+            LIMIT 1
+        ''') as cursor:
+            return await cursor.fetchone()
+
+
+async def get_all_admins():
+    """Get all admin users.
+    
+    Returns:
+        list: List of tuples (telegram_id, nickname)
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id, nickname FROM warmasters WHERE is_admin = 1
+        ''') as cursor:
+            return await cursor.fetchall()
+

@@ -224,3 +224,53 @@ async def notify_alliance_elimination(context: ContextTypes.DEFAULT_TYPE,
                 
     except Exception as e:
         logger.error("Error in notify_alliance_elimination: %s", e)
+
+
+async def notify_inactive_player_warning(context, player_telegram_id, player_name, player_contact):
+    """
+    Notify player and admins about long inactivity.
+    
+    Args:
+        context: Telegram bot context
+        player_telegram_id: Telegram ID of the inactive player
+        player_name: Name of the inactive player
+        player_contact: Contact info (registered_as) of the inactive player
+    """
+    try:
+        # 1. Notify the inactive player
+        try:
+            player_message = (
+                f"⚠️ Внимание! Вы давно не участвовали в миссиях.\n\n"
+                f"Пожалуйста, примите участие в играх, чтобы оставаться активным членом альянса."
+            )
+            
+            await context.bot.send_message(
+                chat_id=player_telegram_id,
+                text=player_message
+            )
+            logger.info(f"Sent inactivity warning to player {player_name} ({player_telegram_id})")
+        except Exception as e:
+            logger.error(f"Failed to notify inactive player {player_telegram_id}: {e}")
+        
+        # 2. Notify admins with contact info
+        admins = await sqllite_helper.get_all_admins()
+        
+        for admin_id, admin_nickname in admins:
+            try:
+                admin_message = (
+                    f"⚠️ Игрок {player_name} давно не участвовал в миссиях.\n\n"
+                    f"Контакт для связи: {player_contact}"
+                )
+                
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=admin_message
+                )
+                logger.info(f"Notified admin {admin_nickname} ({admin_id}) about inactive player {player_name}")
+            except Exception as e:
+                logger.error(f"Failed to notify admin {admin_id}: {e}")
+        
+        logger.info(f"Completed notifications for inactive player {player_name}")
+        
+    except Exception as e:
+        logger.error(f"Error in notify_inactive_player_warning: {e}")
