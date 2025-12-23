@@ -9,6 +9,7 @@ import aiosqlite
 import os
 import random
 import logging
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -1334,8 +1335,6 @@ async def expand_map_by_one_ring():
     3. Adds new hexes to the map table
     4. Creates edges connecting new hexes to each other and to the existing map
     """
-    from collections import Counter
-    
     # Constants for hex generation
     PLANET_ID = 1
     STATES = [
@@ -1349,7 +1348,7 @@ async def expand_map_by_one_ring():
         "Подземные системы",
         "Останки корабля",
         "Свалка",
-        "Храовый квартал",
+        "Храмовый квартал",
         "Изменённое варпом пространство"
     ]
     
