@@ -11,6 +11,11 @@ import random
 import logging
 from collections import Counter
 
+# Import map generation constants
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'database'))
+from map_constants import PLANET_ID, STATES, HEX_DIRECTIONS
+
 logger = logging.getLogger(__name__)
 
 # Use environment variable for database path, fallback to default
@@ -1335,28 +1340,6 @@ async def expand_map_by_one_ring():
     3. Adds new hexes to the map table
     4. Creates edges connecting new hexes to each other and to the existing map
     """
-    # Constants for hex generation
-    PLANET_ID = 1
-    STATES = [
-        "Леса",
-        "Тундра/снег",
-        "Пустыня",
-        "Отравленные земли",
-        "Завод",
-        "Город",
-        "Разрушенный город",
-        "Подземные системы",
-        "Останки корабля",
-        "Свалка",
-        "Храмовый квартал",
-        "Изменённое варпом пространство"
-    ]
-    
-    HEX_DIRECTIONS = [
-        (1, 0), (1, -1), (0, -1),
-        (-1, 0), (-1, 1), (0, 1)
-    ]
-    
     def hex_ring(center_q, center_r, radius):
         """Generate coordinates for a hexagonal ring at given radius."""
         if radius == 0:

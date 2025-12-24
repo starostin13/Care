@@ -3,28 +3,7 @@ import sqlite3
 import random
 import os
 from collections import Counter
-
-# Константы
-PLANET_ID = 1
-STATES = [
-    "Леса",
-    "Тундра/снег",
-    "Пустыня",
-    "Отравленные земли",
-    "Завод",
-    "Город",
-    "Разрушенный город",
-    "Подземные системы",
-    "Останки корабля",
-    "Свалка",
-    "Храмовый квартал",
-    "Изменённое варпом пространство"
-]
-
-HEX_DIRECTIONS = [
-    (1, 0), (1, -1), (0, -1),
-    (-1, 0), (-1, 1), (0, 1)
-]
+from map_constants import PLANET_ID, STATES, HEX_DIRECTIONS
 
 def hex_ring(center_q, center_r, radius):
     if radius == 0:
