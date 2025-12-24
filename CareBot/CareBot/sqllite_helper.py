@@ -12,9 +12,7 @@ import logging
 from collections import Counter
 
 # Import map generation constants
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'database'))
-from map_constants import PLANET_ID, STATES, HEX_DIRECTIONS
+from database.map_constants import PLANET_ID, STATES, HEX_DIRECTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -1387,13 +1385,16 @@ async def expand_map_by_one_ring():
         async with db.execute('SELECT id FROM map ORDER BY id') as cursor:
             existing_ids = [row[0] for row in await cursor.fetchall()]
         
+        # Convert to set for O(1) membership testing
+        existing_ids_set = set(existing_ids)
+        
         # Build coordinate map for existing hexes
         hex_map = {}  # (q, r) -> {'id', 'state', ...}
         hex_id_counter = 1
         
         for radius in range(current_radius + 1):
             for q, r in hex_ring(0, 0, radius):
-                if hex_id_counter in existing_ids:
+                if hex_id_counter in existing_ids_set:
                     async with db.execute(
                         'SELECT state FROM map WHERE id = ?',
                         (hex_id_counter,)
@@ -1408,7 +1409,8 @@ async def expand_map_by_one_ring():
         
         # Generate new ring
         new_hexes = []
-        new_hex_id = max(existing_ids) + 1
+        # Handle empty map case (max of empty list would raise ValueError)
+        new_hex_id = max(existing_ids, default=0) + 1
         
         for q, r in hex_ring(0, 0, new_radius):
             coord = (q, r)
@@ -1464,7 +1466,10 @@ async def expand_map_by_one_ring():
                 neighbor = hex_map.get((nq, nr))
                 if neighbor:
                     neighbor_id = neighbor['id']
-                    # Add only one connection for each pair
+                    # Avoid duplicate edges by only creating edge when current_id < neighbor_id
+                    # This works because hex IDs are assigned sequentially during generation
+                    # New ring hexes will have higher IDs than existing hexes, so this creates
+                    # edges both within the new ring and between new ring and existing hexes
                     if current_id < neighbor_id:
                         await db.execute('''
                             INSERT INTO edges (id, left_hexagon, right_hexagon, state)
