@@ -595,6 +595,18 @@ async def get_players_for_game(rule, date):
     print(f"🧪 Mock: get_players_for_game({rule}, {date})")
     return list(MOCK_WARMASTERS.values())
 
+async def get_weekly_rule_participant_count(rule: str, week_number: int) -> int:
+    """Mock implementation for getting weekly participant count"""
+    print(f"🧪 Mock: get_weekly_rule_participant_count({rule}, {week_number})")
+    # Return random count between 0-8 for testing
+    return random.randint(0, 8)
+
+async def get_daily_rule_participant_count(rule: str, date: str) -> int:
+    """Mock implementation for getting daily participant count"""
+    print(f"🧪 Mock: get_daily_rule_participant_count({rule}, {date})")
+    # Return random count between 0-6 for testing
+    return random.randint(0, 6)
+
 async def get_warmasters_opponents(against_alliance, rule, date):
     print(f"🧪 Mock: get_warmasters_opponents({against_alliance}, {rule}, {date})")
     return [w for w in MOCK_WARMASTERS.values() if w['alliance'] != against_alliance]

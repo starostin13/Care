@@ -1,5 +1,6 @@
 ﻿from datetime import datetime as dt
 from telegram import InlineKeyboardButton
+import random
 
 import settings_helper
 import schedule_helper
@@ -14,15 +15,59 @@ else:
     import sqllite_helper
     print("✅ Keyboard Constructor using REAL SQLite helper")
 
-async def get_keyboard_rules_keyboard_for_user(user_telegram: str):    
+# Emoji arrays for participant count display
+EMOJI_1_PERSON = ['👤', '🧑', '😗', '😎', '🫅', '👹', '👺', '👽', '🤖', '😼', '🐺', '🧟', '🧌', '🤺', '🥷', '🦹', '🧙', '🧚', '🧛', '🧝', '🙎', '🙋', '🧍', '🕺', '🪖', '🚼', '⚜️', '🚹', '1️⃣']
+EMOJI_2_PERSONS = ['👫', '👬', '🫂', '👯', '👭', '👥', '✌️', '🤼', '🤼‍♂️', '🧑🏻‍🤝‍🧑🏼', '🎎', '🎭', '🚸', '2️⃣']
+EMOJI_3_PERSONS = ['👫👤', '👥', '3️⃣']
+EMOJI_4_PERSONS = ['👫👫', '👥👥', '4️⃣']
+EMOJI_5_PERSONS = ['👫👫👤', '👥👤', '5️⃣']
+EMOJI_6_PERSONS = ['👫👫👫', '👥👥👥', '6️⃣']
+EMOJI_7_PLUS = ['🎉', '🎊', '🎈', '👥👥👥👥', '🎭', '🎪', '🎆', '🎇', '6️⃣➕']
+
+
+def get_participant_count_emoji(count: int) -> str:
+    """Return random emoji based on participant count.
+    Returns empty string if count is 0.
+    """
+    if count == 0:
+        return ""
+    elif count == 1:
+        return f" {random.choice(EMOJI_1_PERSON)}"
+    elif count == 2:
+        return f" {random.choice(EMOJI_2_PERSONS)}"
+    elif count == 3:
+        return f" {random.choice(EMOJI_3_PERSONS)}"
+    elif count == 4:
+        return f" {random.choice(EMOJI_4_PERSONS)}"
+    elif count == 5:
+        return f" {random.choice(EMOJI_5_PERSONS)}"
+    elif count == 6:
+        return f" {random.choice(EMOJI_6_PERSONS)}"
+    else:  # 7+
+        return f" {random.choice(EMOJI_7_PLUS)}"
+
+async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
+    # Get current week number (ISO week)
+    current_week = dt.now().isocalendar()[1]
+    
     rules = [
-        [InlineKeyboardButton("Kill Team", callback_data="rule:killteam")],
-        [InlineKeyboardButton("Boarding Action",callback_data="rule:boardingaction")],
-        [InlineKeyboardButton("WH40k 10",callback_data="rule:wh40k")],
-        [InlineKeyboardButton("Combat patrol",callback_data="rule:combatpatrol")],
-        [InlineKeyboardButton("Battlefleet",callback_data="rule:battlefleet")],
+        ("Kill Team", "killteam"),
+        ("Boarding Action", "boardingaction"),
+        ("WH40k 10", "wh40k"),
+        ("Combat patrol", "combatpatrol"),
+        ("Battlefleet", "battlefleet"),
     ]
-    return rules
+    
+    buttons = []
+    for rule_name, rule_key in rules:
+        # Get participant count for this rule in current week
+        count = await sqllite_helper.get_weekly_rule_participant_count(rule_key, current_week)
+        emoji = get_participant_count_emoji(count)
+        
+        button_text = f"{rule_name}{emoji}"
+        buttons.append([InlineKeyboardButton(button_text, callback_data=f"rule:{rule_key}")])
+    
+    return buttons
 
 async def get_main_menu(userId):
     items = []
@@ -126,6 +171,9 @@ async def missions_list(user_id):
 async def this_week(rule, user_id):
     from datetime import timedelta
     
+    # Получаем текущий номер недели (ISO)
+    current_week = dt.now().isocalendar()[1]
+    
     # Получаем сегодняшнюю дату
     today = dt.today()
     
@@ -152,8 +200,12 @@ async def this_week(rule, user_id):
     if weekend_days:
         weekend_row = []
         for date in weekend_days:
+            # Get participant count for this rule and date
+            count = await sqllite_helper.get_daily_rule_participant_count(rule, str(date.date()))
+            emoji = get_participant_count_emoji(count)
+            
             # Добавляем эмодзи 🔵 для выделения выходных
-            button_text = f"🔵 {date.strftime('%A %d.%m')}"
+            button_text = f"🔵 {date.strftime('%A %d.%m')}{emoji}"
             weekend_row.append(
                 InlineKeyboardButton(button_text, callback_data=date.strftime("%c") + ',' + rule)
             )
@@ -162,8 +214,13 @@ async def this_week(rule, user_id):
     # Остальные ряды: будни (по 2-3 кнопки в ряду)
     weekday_buttons = []
     for date in weekdays:
+        # Get participant count for this rule and date
+        count = await sqllite_helper.get_daily_rule_participant_count(rule, str(date.date()))
+        emoji = get_participant_count_emoji(count)
+        
+        button_text = f"{date.strftime('%A %d.%m')}{emoji}"
         weekday_buttons.append(
-            InlineKeyboardButton(date.strftime("%A %d.%m"), callback_data=date.strftime("%c") + ',' + rule)
+            InlineKeyboardButton(button_text, callback_data=date.strftime("%c") + ',' + rule)
         )
     
     # Распределяем будни по рядам (по 2-3 кнопки)

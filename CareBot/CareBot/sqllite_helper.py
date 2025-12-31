@@ -349,6 +349,46 @@ async def get_players_for_game(rule, date):
             return await cursor.fetchall()
 
 
+async def get_weekly_rule_participant_count(rule: str, week_number: int) -> int:
+    """Get count of unique participants for a rule in a specific week.
+    
+    Args:
+        rule: Rule name (e.g., 'killteam', 'wh40k')
+        week_number: ISO week number (1-53)
+        
+    Returns:
+        Count of distinct users registered for the rule in that week
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(DISTINCT user_telegram)
+            FROM schedule
+            WHERE rules = ? AND date_week = ?
+        ''', (rule, week_number)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
+async def get_daily_rule_participant_count(rule: str, date: str) -> int:
+    """Get count of unique participants for a rule on a specific date.
+    
+    Args:
+        rule: Rule name (e.g., 'killteam', 'wh40k')
+        date: Date string in format YYYY-MM-DD
+        
+    Returns:
+        Count of distinct users registered for the rule on that date
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(DISTINCT user_telegram)
+            FROM schedule
+            WHERE rules = ? AND date = ?
+        ''', (rule, date)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
 async def get_warmasters_opponents(against_alliance, rule, date):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
