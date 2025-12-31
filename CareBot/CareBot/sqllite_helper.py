@@ -389,6 +389,34 @@ async def get_daily_rule_participant_count(rule: str, date: str) -> int:
             return result[0] if result else 0
 
 
+async def get_weekly_rule_participant_counts(rules: list, week_number: int) -> dict:
+    """Get counts of unique participants for multiple rules in a specific week.
+    
+    Batches all rule queries into a single database query for improved performance.
+    
+    Args:
+        rules: List of rule keys (e.g., ['killteam', 'wh40k', 'combatpatrol'])
+        week_number: ISO week number (1-53)
+        
+    Returns:
+        Dictionary mapping rule names to participant counts
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT rules, COUNT(DISTINCT user_telegram) as count
+            FROM schedule
+            WHERE rules IN ({}) AND date_week = ?
+            GROUP BY rules
+        '''.format(','.join('?' * len(rules))), (*rules, week_number)) as cursor:
+            results = await cursor.fetchall()
+            # Create dictionary with all rules initialized to 0
+            counts = {rule: 0 for rule in rules}
+            # Update with actual counts from database
+            for rule, count in results:
+                counts[rule] = count
+            return counts
+
+
 async def get_warmasters_opponents(against_alliance, rule, date):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
