@@ -607,9 +607,11 @@ async def get_daily_rule_participant_count(rule: str, date: str) -> int:
     # Return random count between 0-6 for testing
     return random.randint(0, 6)
 
-async def get_weekly_rule_participant_counts(rules: list, week_number: int) -> dict:
+async def get_weekly_rule_participant_counts(rules: List[str], week_number: int) -> Dict[str, int]:
     """Mock implementation for getting weekly participant counts for multiple rules"""
     print(f"🧪 Mock: get_weekly_rule_participant_counts({rules}, {week_number})")
+    if not rules:
+        raise ValueError("Rules list cannot be empty")
     # Return random counts for all rules
     return {rule: random.randint(0, 8) for rule in rules}
 
