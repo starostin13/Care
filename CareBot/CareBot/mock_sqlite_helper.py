@@ -69,6 +69,12 @@ async def add_battle(mission_id):
     MOCK_BATTLES[battle_id] = {'id': battle_id, 'mission_id': mission_id}
     return (battle_id,)
 
+async def get_mission_id_for_battle(battle_id):
+    print(f"🧪 Mock: get_mission_id_for_battle({battle_id})")
+    if battle_id in MOCK_BATTLES:
+        return MOCK_BATTLES[battle_id]['mission_id']
+    return None
+
 # Map story functions
 async def add_to_story(cell_id, text):
     print(f"🧪 Mock: add_to_story({cell_id}, {text[:50]}...)")
@@ -357,7 +363,7 @@ async def save_mission(mission_data):
         **mission_data, 
         'id': mission_id,
         'created_date': today,
-        'locked': 1
+        'locked': 0
     }
     return mission_id
 
@@ -682,6 +688,11 @@ async def has_warehouse_in_hex(cell_id):
 async def get_hexes_by_alliance(alliance_id):
     print(f"🧪 Mock: get_hexes_by_alliance({alliance_id})")
     return [{'id': i, 'state': f'Test-{i}'} for i in range(1, 4)]
+
+async def get_adjacent_hexes_between_alliances(alliance1_id, alliance2_id):
+    print(f"🧪 Mock: get_adjacent_hexes_between_alliances({alliance1_id}, {alliance2_id})")
+    # Return mock adjacent hexes belonging to alliance2
+    return [(2,), (3,)]
 
 async def get_warehouse_count_by_alliance(alliance_id):
     print(f"🧪 Mock: get_warehouse_count_by_alliance({alliance_id})")
