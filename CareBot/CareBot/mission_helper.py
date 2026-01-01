@@ -112,6 +112,9 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
         rules: Mission ruleset (killteam, wh40k, etc.)
         attacker_id: Telegram ID of the attacker (who clicked the mission)
         defender_id: Telegram ID of the defender (opponent)
+    
+    Battle cell is determined by finding hexes adjacent to attacker's territory 
+    that belong to defender and randomly selecting one of them.
     """
     mission = await sqllite_helper.get_mission(rules)
 
@@ -131,23 +134,32 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
             attacker_alliance_id = attacker_alliance[0]
             defender_alliance_id = defender_alliance[0]
             
-            # Find defender's hexes adjacent to attacker's territory
-            adjacent_hexes = await sqllite_helper.get_adjacent_hexes_between_alliances(
+            # Find hexes of defender that are adjacent to hexes of attacker
+            adjacent_defender_hexes = await sqllite_helper.get_adjacent_hexes_between_alliances(
                 attacker_alliance_id, defender_alliance_id
             )
-            adjacent_hexes_list = list(adjacent_hexes) if adjacent_hexes else []
             
-            if adjacent_hexes_list:
-                # Use first adjacent hex as battle location
-                cell_id = adjacent_hexes_list[0][0]
-                logger.info(f"Battle cell determined: {cell_id} (adjacent hex of defender)")
+            if adjacent_defender_hexes:
+                # Randomly select one adjacent hex from defender's territory
+                cell_id = random.choice(adjacent_defender_hexes)[0]
+                logger.info(
+                    f"Battle cell determined: {cell_id} "
+                    f"(random hex from defender's territory adjacent to attacker)"
+                )
             else:
-                # No adjacent hexes, use random defender hex
+                # Fallback: no adjacent hexes, use random defender hex
                 defender_hexes = await sqllite_helper.get_hexes_by_alliance(defender_alliance_id)
                 defender_hexes_list = list(defender_hexes) if defender_hexes else []
                 if defender_hexes_list:
                     cell_id = random.choice(defender_hexes_list)[0]
-                    logger.info(f"Battle cell determined: {cell_id} (random defender hex, no adjacency)")
+                    logger.info(
+                        f"Battle cell determined: {cell_id} "
+                        f"(random defender hex, no adjacent hexes found)"
+                    )
+                else:
+                    logger.warning(
+                        f"No hexes found for defender alliance {defender_alliance_id}"
+                    )
         
         # Update mission tuple with determined cell_id
         if cell_id is not None:
@@ -220,9 +232,15 @@ async def get_situation(battle_id, telegram_ids):
 async def write_battle_result(battle_id, user_reply):
     """Writes the battle result to the database."""
     counts = user_reply.split(' ')
-    await sqllite_helper.get_rules_of_mission(battle_id)
+    # Get the mission_id from the battle record
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        logger.error(f"Could not find mission_id for battle {battle_id}")
+        raise ValueError(f"Battle {battle_id} not found or has no mission_id")
+    
+    await sqllite_helper.get_rules_of_mission(mission_id)
     await sqllite_helper.add_battle_result(
-        int(battle_id), counts[0], counts[1])
+        mission_id, counts[0], counts[1])
 
 
 async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):

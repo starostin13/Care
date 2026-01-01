@@ -36,6 +36,23 @@ async def add_battle(mission_id):
             return await cursor.fetchone()
 
 
+async def get_mission_id_for_battle(battle_id):
+    """Get the mission_id for a battle record.
+    
+    Args:
+        battle_id: The ID of the battle
+        
+    Returns:
+        int: Mission ID if found, None otherwise
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT mission_id FROM battles WHERE id = ?
+        ''', (battle_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def add_to_story(cell_id, text):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
@@ -602,14 +619,26 @@ async def get_hexes_by_alliance(alliance_id):
 
 
 async def get_adjacent_hexes_between_alliances(alliance1_id, alliance2_id):
-    """Find hexes of alliance2 that are adjacent to alliance1 hexes."""
+    """Find hexes of alliance2 that are adjacent to alliance1 hexes.
+    
+    Returns hexes of alliance2 (defender) that share edges with hexes of alliance1 (attacker).
+    
+    Args:
+        alliance1_id: Attacker alliance ID
+        alliance2_id: Defender alliance ID
+        
+    Returns:
+        List of tuples containing defender hex IDs adjacent to attacker hexes
+    """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT DISTINCT m2.id
-            FROM map m1
-            JOIN edges e ON (m1.id = e.left_hexagon OR m1.id = e.right_hexagon)
+            FROM edges e
+            JOIN map m1 ON (m1.id = e.left_hexagon OR m1.id = e.right_hexagon)
             JOIN map m2 ON (m2.id = e.left_hexagon OR m2.id = e.right_hexagon)
-            WHERE m1.patron = ? AND m2.patron = ? AND m1.id != m2.id
+            WHERE m1.patron = ? 
+              AND m2.patron = ? 
+              AND m1.id != m2.id
         ''', (alliance1_id, alliance2_id)) as cursor:
             return await cursor.fetchall()
 
