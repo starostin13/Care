@@ -357,7 +357,7 @@ async def save_mission(mission_data):
         **mission_data, 
         'id': mission_id,
         'created_date': today,
-        'locked': 1
+        'locked': 0
     }
     return mission_id
 

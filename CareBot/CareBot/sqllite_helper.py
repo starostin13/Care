@@ -475,7 +475,7 @@ async def save_mission(mission):
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
                                      mission_description, winner_bonus, locked, created_date)
-            VALUES(?, ?, ?, ?, ?, 1, ?)
+            VALUES(?, ?, ?, ?, ?, 0, ?)
         ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None, today))
         await db.commit()
 
