@@ -9,6 +9,7 @@ import aiosqlite
 import os
 import random
 import logging
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +388,40 @@ async def get_daily_rule_participant_count(rule: str, date: str) -> int:
         ''', (rule, date)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else 0
+
+
+async def get_weekly_rule_participant_counts(rules: List[str], week_number: int) -> Dict[str, int]:
+    """Get counts of unique participants for multiple rules in a specific week.
+    
+    Batches all rule queries into a single database query for improved performance.
+    
+    Args:
+        rules: List of rule keys (e.g., ['killteam', 'wh40k', 'combatpatrol'])
+        week_number: ISO week number (1-53)
+        
+    Returns:
+        Dictionary mapping rule names to participant counts
+        
+    Raises:
+        ValueError: If rules list is empty
+    """
+    if not rules:
+        raise ValueError("Rules list cannot be empty")
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT rules, COUNT(DISTINCT user_telegram) as count
+            FROM schedule
+            WHERE rules IN ({}) AND date_week = ?
+            GROUP BY rules
+        '''.format(','.join('?' * len(rules))), (*rules, week_number)) as cursor:
+            results = await cursor.fetchall()
+            # Create dictionary with all rules initialized to 0
+            counts = {rule: 0 for rule in rules}
+            # Update with actual counts from database
+            for rule, count in results:
+                counts[rule] = count
+            return counts
 
 
 async def get_warmasters_opponents(against_alliance, rule, date):

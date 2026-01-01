@@ -58,10 +58,13 @@ async def get_keyboard_rules_keyboard_for_user(user_telegram: str):
         ("Battlefleet", "battlefleet"),
     ]
     
+    # Get participant counts for all rules in a single database query
+    rule_keys = [rule_key for _, rule_key in rules]
+    counts = await sqllite_helper.get_weekly_rule_participant_counts(rule_keys, current_week)
+    
     buttons = []
     for rule_name, rule_key in rules:
-        # Get participant count for this rule in current week
-        count = await sqllite_helper.get_weekly_rule_participant_count(rule_key, current_week)
+        count = counts.get(rule_key, 0)
         emoji = get_participant_count_emoji(count)
         
         button_text = f"{rule_name}{emoji}"
