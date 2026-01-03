@@ -306,7 +306,9 @@ async def handle_mission_reply(
 
     if original_message is None:
         logger.error("Reply has no original message context (reply_to_message is None)")
-        await update.message.reply_text("Ответ должен быть на сообщение с миссией. Пожалуйста, нажмите 'Ответить' на сообщение миссии и укажите счёт в формате '20 0'.")
+        await update.message.reply_text(
+            "Ответ должен быть на сообщение с миссией. Пожалуйста, нажмите 'Ответить' на сообщение миссии и укажите счёт в формате '20 0'."
+        )
         return MAIN_MENU
 
     # Разделяем текст на строки
