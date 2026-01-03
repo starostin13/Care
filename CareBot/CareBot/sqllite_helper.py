@@ -474,7 +474,10 @@ async def get_alliance_of_warmaster(telegram_user_id):
 async def insert_to_schedule(date, rules, user_telegram):
     weekNumber = date.isocalendar()[1]
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute('DELETE FROM schedule WHERE date_week<>?', (weekNumber,))
+        # Удаляем записи всех пользователей, где разница в неделях больше 1
+        await db.execute(
+            'DELETE FROM schedule WHERE ABS(date_week - ?) > 1',
+            (weekNumber,))
         await db.execute('INSERT INTO schedule (date, rules, user_telegram, date_week) VALUES (?, ?, ?, ?)', (str(date.date()), rules, user_telegram, weekNumber))
         await db.commit()
 

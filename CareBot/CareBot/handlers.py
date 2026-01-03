@@ -281,10 +281,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
-    when_markup = await keyboard_constructor.this_week(query.data, user_id)
+    # Callback data looks like "rule:wh40k" – strip the prefix for DB queries
+    rule_key = query.data.split(':', 1)[1] if ':' in query.data else query.data
+    when_markup = await keyboard_constructor.this_week(rule_key, user_id)
     menu = InlineKeyboardMarkup(when_markup)
     await query.edit_message_text(
-        text=f"Selected option: {query.data}", reply_markup=menu
+        text=f"Selected option: {rule_key}", reply_markup=menu
     )
     return SCHEDULE
 

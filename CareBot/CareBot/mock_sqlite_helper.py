@@ -623,7 +623,14 @@ async def get_weekly_rule_participant_counts(rules: List[str], week_number: int)
 
 async def get_warmasters_opponents(against_alliance, rule, date):
     print(f"🧪 Mock: get_warmasters_opponents({against_alliance}, {rule}, {date})")
-    return [w for w in MOCK_WARMASTERS.values() if w['alliance'] != against_alliance]
+    # Приводим кортеж (id,) к числу, чтобы совпадало с prod-логикой
+    alliance_id = against_alliance[0] if isinstance(against_alliance, (list, tuple)) else against_alliance
+    # Возвращаем как в реальной БД: список кортежей (nickname, registered_as)
+    return [
+        (w.get('nickname'), w.get('registered_as'))
+        for w in MOCK_WARMASTERS.values()
+        if w.get('alliance') != alliance_id
+    ]
 
 async def get_alliance_of_warmaster(telegram_user_id):
     """

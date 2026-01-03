@@ -24,10 +24,16 @@ EMOJI_5_PERSONS = ['👫👫👤', '👥👤', '5️⃣']
 EMOJI_6_PERSONS = ['👫👫👫', '👥👥👥', '6️⃣']
 EMOJI_7_PLUS = ['🎉', '🎊', '🎈', '👥👥👥👥', '🎪', '🎆', '🎇', '6️⃣➕']
 
+# Short weekday labels by language (default to English)
+DAY_ABBR = {
+    'ru': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+    'en': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+}
+
 
 def get_participant_count_emoji(count: int) -> str:
     """Return random emoji based on participant count.
-    Returns empty string if count is 0.
+    Returns empty string if count is 0 (no participants).
     """
     if count == 0:
         return ""
@@ -176,6 +182,13 @@ async def this_week(rule, user_id):
     
     # Получаем сегодняшнюю дату
     today = dt.today()
+
+    # Определяем язык и короткие названия дней недели
+    user_lang = await localization.get_user_language(user_id)
+    day_abbr = DAY_ABBR.get(user_lang, DAY_ABBR['en'])
+
+    def format_day(date_obj):
+        return f"{day_abbr[date_obj.weekday()]} {date_obj.strftime('%d.%m')}"
     
     # Создаем список дат на следующие 7 дней начиная с сегодня
     menu_values = []
@@ -201,13 +214,22 @@ async def this_week(rule, user_id):
         weekend_row = []
         for date in weekend_days:
             # Get participant count for this rule and date
-            count = await sqllite_helper.get_daily_rule_participant_count(rule, str(date.date()))
+            date_str = str(date.date())
+            count = await sqllite_helper.get_daily_rule_participant_count(rule, date_str)
             emoji = get_participant_count_emoji(count)
             
+            # DEBUG: log the count and emoji for troubleshooting
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Weekend Date: {date_str}, Rule: {rule}, Count: {count}, Emoji: {emoji}")
+            
             # Добавляем эмодзи 🔵 для выделения выходных
-            button_text = f"🔵 {date.strftime('%A %d.%m')}{emoji}"
+            button_text = f"🔵 {format_day(date)}{emoji}"
             weekend_row.append(
-                InlineKeyboardButton(button_text, callback_data=date.strftime("%c") + ',' + rule)
+                InlineKeyboardButton(
+                    button_text,
+                    callback_data=f"{date.strftime('%c')},rule:{rule}"
+                )
             )
         days.append(weekend_row)
     
@@ -215,12 +237,21 @@ async def this_week(rule, user_id):
     weekday_buttons = []
     for date in weekdays:
         # Get participant count for this rule and date
-        count = await sqllite_helper.get_daily_rule_participant_count(rule, str(date.date()))
+        date_str = str(date.date())
+        count = await sqllite_helper.get_daily_rule_participant_count(rule, date_str)
         emoji = get_participant_count_emoji(count)
         
-        button_text = f"{date.strftime('%A %d.%m')}{emoji}"
+        # DEBUG: log the count and emoji for troubleshooting
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Date: {date_str}, Rule: {rule}, Count: {count}, Emoji: {emoji}")
+        
+        button_text = f"{format_day(date)}{emoji}"
         weekday_buttons.append(
-            InlineKeyboardButton(button_text, callback_data=date.strftime("%c") + ',' + rule)
+            InlineKeyboardButton(
+                button_text,
+                callback_data=f"{date.strftime('%c')},rule:{rule}"
+            )
         )
     
     # Распределяем будни по рядам (по 2-3 кнопки)
