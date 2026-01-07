@@ -411,6 +411,7 @@ async def get_weekly_rule_participant_counts(rules: List[str], week_number: int)
     """Get counts of unique participants for multiple rules in a specific week.
     
     Batches all rule queries into a single database query for improved performance.
+    Only counts dates that are today or in the future.
     
     Args:
         rules: List of rule keys (e.g., ['killteam', 'wh40k', 'combatpatrol'])
@@ -425,13 +426,15 @@ async def get_weekly_rule_participant_counts(rules: List[str], week_number: int)
     if not rules:
         raise ValueError("Rules list cannot be empty")
     
+    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT rules, COUNT(DISTINCT user_telegram) as count
             FROM schedule
-            WHERE rules IN ({}) AND date_week = ?
+            WHERE rules IN ({}) AND date_week = ? AND date >= ?
             GROUP BY rules
-        '''.format(','.join('?' * len(rules))), (*rules, week_number)) as cursor:
+        '''.format(','.join('?' * len(rules))), (*rules, week_number, today)) as cursor:
             results = await cursor.fetchall()
             # Create dictionary with all rules initialized to 0
             counts = {rule: 0 for rule in rules}

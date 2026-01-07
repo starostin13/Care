@@ -103,15 +103,13 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Отправляем текст миссии текущему пользователю
     await query.edit_message_text(f"{text}\n{situation}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
 
-    # Рассылаем сообщение с миссией всем участникам
-    for participant_id in participants:
-        # Исключаем текущего пользователя
-        if participant_id[0] != str(update.effective_user.id):
-            try:
-                await context.bot.send_message(chat_id=participant_id[0], text=f"Новая миссия:\n{text}")
-            except Exception as e:
-                logger.error(
-                    f"Ошибка при отправке сообщения пользователю {participant_id}: {e}")
+    # Отправляем сообщение с миссией только дефендеру
+    if defender_id:
+        try:
+            await context.bot.send_message(chat_id=defender_id, text=f"Новая миссия:\n{text}")
+        except Exception as e:
+            logger.error(
+                f"Ошибка при отправке сообщения дефендеру {defender_id}: {e}")
 
     return MISSIONS
 
