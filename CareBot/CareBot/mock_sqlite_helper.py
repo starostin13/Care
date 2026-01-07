@@ -780,6 +780,13 @@ async def get_alliance_player_count(alliance_id):
     count = len([w for w in MOCK_WARMASTERS.values() if w['alliance'] == alliance_id])
     return count
 
+async def get_alliance_territory_count(alliance_id):
+    print(f"🧪 Mock: get_alliance_territory_count({alliance_id})")
+    # Mock: Return 0 for alliance 0 (no alliance), 1+ for valid alliances
+    if alliance_id == 0 or alliance_id is None:
+        return 0
+    return random.randint(1, 5)  # Mock alliances have some territories
+
 async def set_warmaster_alliance(user_telegram_id, alliance_id):
     print(f"🧪 Mock: set_warmaster_alliance({user_telegram_id}, {alliance_id})")
     for user in MOCK_WARMASTERS.values():
