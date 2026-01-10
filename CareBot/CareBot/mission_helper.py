@@ -606,12 +606,42 @@ async def handle_alliance_elimination(eliminated_alliance_id, context=None):
     logger.info("Alliance %s eliminated and cleaned up", eliminated_alliance_id)
 
 
-async def start_battle(mission_id, participants):
-    """Starts a new battle for the given mission and participants."""
-    battle_id = await sqllite_helper.add_battle(mission_id)
-    for participant in participants:
-        await sqllite_helper.add_battle_participant(
-            battle_id[0],
-            participant[0]
+async def start_battle(mission_id, player1_id, player2_id):
+    """Starts a new battle for the given mission with exactly 2 players.
+    
+    Args:
+        mission_id: The mission ID
+        player1_id: First player telegram ID (will be fstplayer)
+        player2_id: Second player telegram ID (will be sndplayer)
+    
+    Returns:
+        int: Battle ID
+    
+    Raises:
+        ValueError: If player IDs are missing or invalid
+    """
+    if not player1_id or not player2_id:
+        raise ValueError(
+            f"start_battle requires exactly 2 players. "
+            f"Got player1={player1_id}, player2={player2_id}"
         )
+    
+    # Create battle without scores
+    battle_id = await sqllite_helper.add_battle(mission_id)
+    
+    # Add exactly 2 players in order: first player is fstplayer, second is sndplayer
+    await sqllite_helper.add_battle_participant(
+        battle_id[0],
+        player1_id
+    )
+    await sqllite_helper.add_battle_participant(
+        battle_id[0],
+        player2_id
+    )
+    
+    logger.info(
+        f"Battle {battle_id[0]} created for mission {mission_id} with "
+        f"fstplayer={player1_id}, sndplayer={player2_id}"
+    )
+    
     return battle_id[0]

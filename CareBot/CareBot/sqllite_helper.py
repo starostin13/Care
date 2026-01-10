@@ -28,6 +28,14 @@ async def add_battle_participant(battle_id, participant):
 
 
 async def add_battle(mission_id):
+    """Create a new battle record with mission_id.
+    
+    Args:
+        mission_id: The mission ID
+    
+    Returns:
+        Tuple with battle ID
+    """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
             INSERT INTO battles(mission_id) VALUES(?)
@@ -233,11 +241,19 @@ async def get_state(cell_id):
 
 
 async def add_battle_result(mission_id, counts1, counts2):
+    """Save battle result scores.
+    
+    Args:
+        mission_id: The mission ID
+        counts1: First player score (fstplayer score)
+        counts2: Second player score (sndplayer score)
+    """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
-            INSERT INTO battles(mission_id, fstplayer, sndplayer)
-            VALUES(?, ?, ?)
-        ''', (mission_id, counts1, counts2))
+            UPDATE battles
+            SET fstplayer = ?, sndplayer = ?
+            WHERE mission_id = ?
+        ''', (counts1, counts2, mission_id))
         await db.commit()
 
 

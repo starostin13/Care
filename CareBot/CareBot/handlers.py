@@ -71,13 +71,13 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data  # Получаем данные из нажатой кнопки
     
     # Получаем список всех участников события
-    participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
+    all_participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
     
     # Определяем атакующего (кто нажал) и защищающегося (оппонент)
     attacker_id = str(update.effective_user.id)
     defender_id = None
-    if participants:
-        for participant in participants:
+    if all_participants:
+        for participant in all_participants:
             if participant[0] != attacker_id:
                 defender_id = participant[0]
                 break
@@ -90,9 +90,22 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission_id = mission[4]
     logger.info(f"Mission ID from database: {mission_id}")
     
-    # Создаем бой с правильным mission_id
-    battle_id = await mission_helper.start_battle(mission_id, participants)
-    situation = await mission_helper.get_situation(battle_id, participants)
+    # Создаем бой с ровно двумя игроками
+    # attacker_id будет fstplayer, defender_id будет sndplayer
+    if not defender_id:
+        logger.error(
+            f"Cannot start battle: no defender found for attacker {attacker_id}. "
+            f"all_participants: {all_participants}")
+        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
+        return MISSIONS
+    
+    try:
+        battle_id = await mission_helper.start_battle(mission_id, attacker_id, defender_id)
+    except ValueError as e:
+        logger.error(f"Failed to start battle: {e}")
+        await query.edit_message_text(f"Ошибка при создании битвы: {str(e)}")
+        return MISSIONS
+    situation = await mission_helper.get_situation(battle_id, [(attacker_id,), (defender_id,)])
 
     # Формируем текст для пользователя
     mission_description = mission[3] or ''
