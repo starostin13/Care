@@ -974,6 +974,23 @@ async def get_alliance_player_count(alliance_id):
             return result[0] if result else 0
 
 
+async def get_alliance_territory_count(alliance_id):
+    """Get the number of territories (map cells) controlled by an alliance.
+    
+    Args:
+        alliance_id: Alliance ID
+        
+    Returns:
+        int: Number of territories controlled by the alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM map WHERE patron = ?
+        ''', (alliance_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
 async def set_warmaster_alliance(user_telegram_id, alliance_id):
     """Set a warmaster's alliance.
     
