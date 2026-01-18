@@ -251,6 +251,25 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     game_rules = data_arr[1].split(':')[1]
     user_id = update.effective_user.id
 
+    # Check if user's alliance has territories
+    alliance = await sqllite_helper.get_alliance_of_warmaster(user_id)
+    
+    if not alliance or alliance[0] is None or alliance[0] == 0:
+        # User has no alliance
+        error_message = await localization.get_text_for_user(user_id, "error_no_alliance")
+        await query.answer()
+        await query.edit_message_text(error_message)
+        return MAIN_MENU
+    
+    # Check if alliance has territories
+    territory_count = await sqllite_helper.get_alliance_territory_count(alliance[0])
+    if territory_count == 0:
+        # Alliance has no territories
+        error_message = await localization.get_text_for_user(user_id, "error_no_territories")
+        await query.answer()
+        await query.edit_message_text(error_message)
+        return MAIN_MENU
+
     # Register player for the game
     await schedule_helper.register_for_game(
         datetime.strptime(game_date, '%c'),
