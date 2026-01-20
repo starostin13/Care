@@ -761,13 +761,20 @@ async def has_adjacent_cell_to_hex(alliance_id, cell_id):
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT COUNT(*) 
-            FROM edges e
-            JOIN map m ON (m.id = e.left_hexagon OR m.id = e.right_hexagon)
-            WHERE (e.left_hexagon = ? OR e.right_hexagon = ?)
-              AND m.patron = ?
-              AND m.id != ?
-        ''', (cell_id, cell_id, alliance_id, cell_id)) as cursor:
+            SELECT COUNT(*) FROM (
+                SELECT e.right_hexagon AS neighbor_id
+                FROM edges e
+                JOIN map m ON e.right_hexagon = m.id
+                WHERE e.left_hexagon = ?
+                  AND m.patron = ?
+                UNION
+                SELECT e.left_hexagon AS neighbor_id
+                FROM edges e
+                JOIN map m ON e.left_hexagon = m.id
+                WHERE e.right_hexagon = ?
+                  AND m.patron = ?
+            )
+        ''', (cell_id, alliance_id, cell_id, alliance_id)) as cursor:
             result = await cursor.fetchone()
             return result[0] > 0 if result else False
 
