@@ -749,6 +749,29 @@ async def update_mission_cell(mission_id, cell_id):
         await db.commit()
 
 
+async def has_adjacent_cell_to_hex(alliance_id, cell_id):
+    """Check if an alliance has any cell adjacent to a specific hex.
+    
+    Args:
+        alliance_id: Alliance ID to check
+        cell_id: Target cell ID
+        
+    Returns:
+        bool: True if alliance has at least one cell adjacent to the target cell
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) 
+            FROM edges e
+            JOIN map m ON (m.id = e.left_hexagon OR m.id = e.right_hexagon)
+            WHERE (e.left_hexagon = ? OR e.right_hexagon = ?)
+              AND m.patron = ?
+              AND m.id != ?
+        ''', (cell_id, cell_id, alliance_id, cell_id)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] > 0 if result else False
+
+
 async def get_warehouse_count_by_alliance(alliance_id):
     """Get the number of warehouses owned by an alliance.
 
