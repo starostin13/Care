@@ -66,14 +66,22 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()  # Acknowledge the callback query
     
     # Extract schedule_id and defender_telegram_id from callback data
-    data_parts = query.data.replace("mission_sch_", "").split('_')
-    schedule_id = int(data_parts[0])
-    defender_id = data_parts[1] if len(data_parts) > 1 else None
-    
-    if not defender_id:
+    try:
+        data_parts = query.data.replace("mission_sch_", "").split('_')
+        if len(data_parts) < 2:
+            raise ValueError(f"Invalid callback data format: {query.data}")
+        
+        schedule_id = int(data_parts[0])
+        defender_id = data_parts[1]
+        
+        # Validate defender_id is not empty and looks like a telegram ID
+        if not defender_id or not defender_id.isdigit():
+            raise ValueError(f"Invalid defender_id: {defender_id}")
+            
+    except (ValueError, IndexError) as e:
         logger.error(
-            f"Defender ID not found in callback data: {query.data}")
-        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
+            f"Error parsing callback data '{query.data}': {e}")
+        await query.edit_message_text("Ошибка: неверный формат данных кнопки")
         return MISSIONS
     
     # Get mission rules for this schedule entry
