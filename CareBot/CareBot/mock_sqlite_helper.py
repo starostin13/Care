@@ -519,6 +519,20 @@ async def get_user_telegram_by_schedule_id(schedule_id):
     # Возвращаем telegram_id второго тестового пользователя как оппонента
     return '123456789'
 
+async def get_telegram_id_by_warmaster_id(warmaster_id):
+    """
+    Mock реализация для получения telegram_id по warmaster.id.
+    
+    Args:
+        warmaster_id: The internal ID of the warmaster (warmasters.id)
+        
+    Returns:
+        str: The telegram_id of the warmaster, or None if not found
+    """
+    print(f"🧪 Mock: get_telegram_id_by_warmaster_id({warmaster_id})")
+    user = await get_user_by_id(warmaster_id)
+    return user.get('telegram_id') if user else None
+
 async def get_faction_of_warmaster(user_telegram_id):
     print(f"🧪 Mock: get_faction_of_warmaster({user_telegram_id})")
     user = await get_user_by_telegram_id(user_telegram_id)
@@ -558,7 +572,7 @@ async def get_schedule_by_user(user_telegram, date=None):
 async def get_schedule_with_warmasters(user_telegram, date=None):
     """
     Mock реализация для получения расписания миссий на сегодня.
-    Возвращает список записей формата: (schedule_id, rules, nickname, telegram_id)
+    Возвращает список записей формата: (schedule_id, rules, nickname, warmaster_id)
     Генерирует миссии для всех игровых режимов с одним противником.
     """
     print(f"🧪 Mock: get_schedule_with_warmasters({user_telegram}, {date})")
@@ -589,7 +603,7 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
             schedule_id,
             rules, 
             opponent['nickname'],
-            opponent['telegram_id']  # Добавляем telegram_id в результат
+            opponent['id']  # Используем warmaster.id вместо telegram_id
         ))
     
     print(f"🧪 Mock: Сгенерировано {len(schedule_entries)} записей расписания")

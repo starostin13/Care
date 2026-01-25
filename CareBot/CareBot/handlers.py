@@ -61,22 +61,24 @@ async def contact_callback(update, bot):
 
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # update.callback_query.data format: 'mission_sch_{schedule_id}_{defender_telegram_id}'
+    # update.callback_query.data format: 'mission_sch_{schedule_id}_{warmaster_id}'
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
     
-    # Extract schedule_id and defender_telegram_id from callback data
+    # Extract schedule_id and warmaster_id from callback data
     try:
         data_parts = query.data.replace("mission_sch_", "").split('_')
         if len(data_parts) < 2:
             raise ValueError(f"Invalid callback data format: {query.data}")
         
         schedule_id = int(data_parts[0])
-        defender_id = data_parts[1]
+        warmaster_id = int(data_parts[1])
         
-        # Validate defender_id is not empty and looks like a telegram ID
-        if not defender_id or not defender_id.isdigit():
-            raise ValueError(f"Invalid defender_id: {defender_id}")
+        # Get defender's telegram_id from warmaster_id
+        defender_id = await sqllite_helper.get_telegram_id_by_warmaster_id(warmaster_id)
+        
+        if not defender_id:
+            raise ValueError(f"Warmaster not found for ID: {warmaster_id}")
             
     except (ValueError, IndexError) as e:
         logger.error(

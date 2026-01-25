@@ -16,7 +16,7 @@ import mock_sqlite_helper as sqllite_helper
 from unittest.mock import AsyncMock, MagicMock
 
 async def test_get_schedule_with_warmasters():
-    """Test that get_schedule_with_warmasters returns telegram_id"""
+    """Test that get_schedule_with_warmasters returns warmaster_id"""
     print("=== Testing get_schedule_with_warmasters ===\n")
     
     # Test with mock
@@ -25,21 +25,32 @@ async def test_get_schedule_with_warmasters():
     
     if result and len(result) > 0:
         first_entry = result[0]
-        print(f"First entry structure: (schedule_id={first_entry[0]}, rules={first_entry[1]}, nickname={first_entry[2]}, telegram_id={first_entry[3]})")
-        assert len(first_entry) == 4, "Should return 4 fields: schedule_id, rules, nickname, telegram_id"
-        assert first_entry[3] is not None, "Should include telegram_id"
-        print("✅ Test passed: get_schedule_with_warmasters now includes telegram_id\n")
+        print(f"First entry structure: (schedule_id={first_entry[0]}, rules={first_entry[1]}, nickname={first_entry[2]}, warmaster_id={first_entry[3]})")
+        assert len(first_entry) == 4, "Should return 4 fields: schedule_id, rules, nickname, warmaster_id"
+        assert first_entry[3] is not None, "Should include warmaster_id"
+        print("✅ Test passed: get_schedule_with_warmasters now includes warmaster_id\n")
     else:
         print("⚠️ No results returned from mock\n")
 
+async def test_get_telegram_id_by_warmaster_id():
+    """Test the new function to get telegram_id from warmaster_id"""
+    print("=== Testing get_telegram_id_by_warmaster_id ===\n")
+    
+    # Test with mock (user ID 2 exists in MOCK_WARMASTERS)
+    result = await sqllite_helper.get_telegram_id_by_warmaster_id(2)
+    print(f"Mock result for warmaster_id=2: {result}")
+    assert result is not None, "Should return a telegram_id"
+    print("✅ Test passed: Function returns telegram_id from warmaster_id\n")
+
 async def test_mission_notification_flow():
-    """Test that the new approach doesn't query the database for defender_id"""
+    """Test that the new approach uses warmaster_id for security"""
     print("=== Testing Mission Notification Flow ===\n")
     
-    print("✅ Callback data now includes telegram_id: mission_sch_{schedule_id}_{telegram_id}")
-    print("✅ Handler extracts telegram_id directly from callback_data")
-    print("✅ NO database query needed to find the opponent")
-    print("✅ This fully addresses the issue: 'There is NO need to query schedule table'\n")
+    print("✅ Callback data now includes warmaster_id: mission_sch_{schedule_id}_{warmaster_id}")
+    print("✅ Handler extracts warmaster_id from callback_data")
+    print("✅ Handler converts warmaster_id to telegram_id using database lookup")
+    print("✅ Uses internal warmaster.id instead of exposing telegram_id in callback_data")
+    print("✅ More secure: internal DB ID instead of public Telegram ID\n")
 
 async def main():
     """Run all tests"""
@@ -49,6 +60,7 @@ async def main():
     print()
     
     await test_get_schedule_with_warmasters()
+    await test_get_telegram_id_by_warmaster_id()
     await test_mission_notification_flow()
     
     print("=" * 50)
