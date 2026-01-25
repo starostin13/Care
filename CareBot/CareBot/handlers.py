@@ -78,7 +78,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         defender_id = await sqllite_helper.get_telegram_id_by_warmaster_id(warmaster_id)
         
         if not defender_id:
-            raise ValueError(f"Warmaster not found for ID: {warmaster_id}")
+            raise ValueError(f"Failed to find telegram_id for warmaster ID: {warmaster_id}")
             
     except (ValueError, IndexError) as e:
         logger.error(
