@@ -505,6 +505,15 @@ async def get_event_participants(eventId):
     # Возвращаем двух тестовых пользователей как кортежи (как SQL fetchall())
     return [('325313837',), ('123456789',)]
 
+async def get_user_telegram_by_schedule_id(schedule_id):
+    """
+    Mock реализация для получения user_telegram по schedule_id.
+    Возвращает telegram_id оппонента.
+    """
+    print(f"🧪 Mock: get_user_telegram_by_schedule_id({schedule_id})")
+    # Возвращаем telegram_id второго тестового пользователя как оппонента
+    return '123456789'
+
 async def get_faction_of_warmaster(user_telegram_id):
     print(f"🧪 Mock: get_faction_of_warmaster({user_telegram_id})")
     user = await get_user_by_telegram_id(user_telegram_id)

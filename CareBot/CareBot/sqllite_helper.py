@@ -283,6 +283,18 @@ async def get_event_participants(eventId):
             return await cursor.fetchall()
 
 
+async def get_user_telegram_by_schedule_id(schedule_id):
+    """Get the user_telegram for a specific schedule entry by its ID."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT user_telegram 
+            FROM schedule 
+            WHERE id = ?
+        ''', (schedule_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def get_faction_of_warmaster(user_telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
          async with db.execute('''

@@ -65,22 +65,24 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
     
-    mission_number = int(
-        query.data.replace("mission_sch_", ""))
-    rules = await schedule_helper.get_mission_rules(mission_number)
-    data = query.data  # Получаем данные из нажатой кнопки
+    # Extract schedule_id from callback data (format: 'mission_sch_{schedule_id}')
+    schedule_id = int(query.data.replace("mission_sch_", ""))
     
-    # Получаем список всех участников события
-    all_participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
+    # Get mission rules for this schedule entry
+    rules = await schedule_helper.get_mission_rules(schedule_id)
     
-    # Определяем атакующего (кто нажал) и защищающегося (оппонент)
+    # Определяем атакующего (кто нажал кнопку)
     attacker_id = str(update.effective_user.id)
-    defender_id = None
-    if all_participants:
-        for participant in all_participants:
-            if participant[0] != attacker_id:
-                defender_id = participant[0]
-                break
+    
+    # Получаем defender_id напрямую из конкретной записи schedule по её ID
+    # Это пользователь, чья запись отображается в кнопке (оппонент)
+    defender_id = await sqllite_helper.get_user_telegram_by_schedule_id(schedule_id)
+    
+    if not defender_id:
+        logger.error(
+            f"Cannot find opponent for schedule_id {schedule_id}")
+        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
+        return MISSIONS
     
     # Получаем миссию из базы данных с определением cell на основе участников
     mission = await mission_helper.get_mission(rules=rules, attacker_id=attacker_id, defender_id=defender_id)
@@ -92,13 +94,6 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Создаем бой с ровно двумя игроками
     # attacker_id будет fstplayer, defender_id будет sndplayer
-    if not defender_id:
-        logger.error(
-            f"Cannot start battle: no defender found for attacker {attacker_id}. "
-            f"all_participants: {all_participants}")
-        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
-        return MISSIONS
-    
     try:
         battle_id = await mission_helper.start_battle(mission_id, attacker_id, defender_id)
     except ValueError as e:
