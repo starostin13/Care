@@ -283,6 +283,44 @@ async def get_event_participants(eventId):
             return await cursor.fetchall()
 
 
+async def get_user_telegram_by_schedule_id(schedule_id):
+    """Get the user_telegram for a specific schedule entry by its ID.
+    
+    Args:
+        schedule_id: The ID of the schedule entry
+        
+    Returns:
+        str: The user_telegram ID from the schedule entry, or None if not found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT user_telegram 
+            FROM schedule 
+            WHERE id = ?
+        ''', (schedule_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def get_telegram_id_by_warmaster_id(warmaster_id):
+    """Get the telegram_id for a warmaster by their internal ID.
+    
+    Args:
+        warmaster_id: The internal ID of the warmaster (warmasters.id)
+        
+    Returns:
+        str: The telegram_id of the warmaster, or None if not found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id 
+            FROM warmasters 
+            WHERE id = ?
+        ''', (warmaster_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def get_faction_of_warmaster(user_telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
          async with db.execute('''
@@ -338,7 +376,7 @@ async def get_schedule_by_user(user_telegram, date=None):
 async def get_schedule_with_warmasters(user_telegram, date=None):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT schedule.id, schedule.rules, warmasters.nickname 
+            SELECT schedule.id, schedule.rules, warmasters.nickname, warmasters.id 
             FROM schedule 
             JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id 
             AND schedule.user_telegram<>? 

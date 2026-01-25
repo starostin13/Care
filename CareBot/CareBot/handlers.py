@@ -61,26 +61,36 @@ async def contact_callback(update, bot):
 
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # update.callback_query.data 'mission_sch_2'
+    # update.callback_query.data format: 'mission_sch_{schedule_id}_{warmaster_id}'
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
     
-    mission_number = int(
-        query.data.replace("mission_sch_", ""))
-    rules = await schedule_helper.get_mission_rules(mission_number)
-    data = query.data  # Получаем данные из нажатой кнопки
+    # Extract schedule_id and warmaster_id from callback data
+    try:
+        data_parts = query.data.replace("mission_sch_", "").split('_')
+        if len(data_parts) < 2:
+            raise ValueError(f"Invalid callback data format: {query.data}")
+        
+        schedule_id = int(data_parts[0])
+        warmaster_id = int(data_parts[1])
+        
+        # Get defender's telegram_id from warmaster_id
+        defender_id = await sqllite_helper.get_telegram_id_by_warmaster_id(warmaster_id)
+        
+        if not defender_id:
+            raise ValueError(f"Failed to find telegram_id for warmaster ID: {warmaster_id}")
+            
+    except (ValueError, IndexError) as e:
+        logger.error(
+            f"Error parsing callback data '{query.data}': {e}")
+        await query.edit_message_text("Ошибка: неверный формат данных кнопки")
+        return MISSIONS
     
-    # Получаем список всех участников события
-    all_participants = await schedule_helper.get_event_participants(data.rsplit('_', 1)[-1])
+    # Get mission rules for this schedule entry
+    rules = await schedule_helper.get_mission_rules(schedule_id)
     
-    # Определяем атакующего (кто нажал) и защищающегося (оппонент)
+    # Определяем атакующего (кто нажал кнопку)
     attacker_id = str(update.effective_user.id)
-    defender_id = None
-    if all_participants:
-        for participant in all_participants:
-            if participant[0] != attacker_id:
-                defender_id = participant[0]
-                break
     
     # Получаем миссию из базы данных с определением cell на основе участников
     mission = await mission_helper.get_mission(rules=rules, attacker_id=attacker_id, defender_id=defender_id)
@@ -92,13 +102,6 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Создаем бой с ровно двумя игроками
     # attacker_id будет fstplayer, defender_id будет sndplayer
-    if not defender_id:
-        logger.error(
-            f"Cannot start battle: no defender found for attacker {attacker_id}. "
-            f"all_participants: {all_participants}")
-        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
-        return MISSIONS
-    
     try:
         battle_id = await mission_helper.start_battle(mission_id, attacker_id, defender_id)
     except ValueError as e:
