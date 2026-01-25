@@ -61,28 +61,26 @@ async def contact_callback(update, bot):
 
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # update.callback_query.data 'mission_sch_2'
+    # update.callback_query.data format: 'mission_sch_{schedule_id}_{defender_telegram_id}'
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
     
-    # Extract schedule_id from callback data (format: 'mission_sch_{schedule_id}')
-    schedule_id = int(query.data.replace("mission_sch_", ""))
+    # Extract schedule_id and defender_telegram_id from callback data
+    data_parts = query.data.replace("mission_sch_", "").split('_')
+    schedule_id = int(data_parts[0])
+    defender_id = data_parts[1] if len(data_parts) > 1 else None
+    
+    if not defender_id:
+        logger.error(
+            f"Defender ID not found in callback data: {query.data}")
+        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
+        return MISSIONS
     
     # Get mission rules for this schedule entry
     rules = await schedule_helper.get_mission_rules(schedule_id)
     
     # Определяем атакующего (кто нажал кнопку)
     attacker_id = str(update.effective_user.id)
-    
-    # Получаем defender_id напрямую из конкретной записи schedule по её ID
-    # Это пользователь, чья запись отображается в кнопке (оппонент)
-    defender_id = await sqllite_helper.get_user_telegram_by_schedule_id(schedule_id)
-    
-    if not defender_id:
-        logger.error(
-            f"Cannot find opponent for schedule_id {schedule_id}")
-        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
-        return MISSIONS
     
     # Получаем миссию из базы данных с определением cell на основе участников
     mission = await mission_helper.get_mission(rules=rules, attacker_id=attacker_id, defender_id=defender_id)

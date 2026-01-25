@@ -357,7 +357,7 @@ async def get_schedule_by_user(user_telegram, date=None):
 async def get_schedule_with_warmasters(user_telegram, date=None):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT schedule.id, schedule.rules, warmasters.nickname 
+            SELECT schedule.id, schedule.rules, warmasters.nickname, warmasters.telegram_id 
             FROM schedule 
             JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id 
             AND schedule.user_telegram<>? 

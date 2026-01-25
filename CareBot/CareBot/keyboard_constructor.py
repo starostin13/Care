@@ -276,7 +276,8 @@ async def this_week(rule, user_id):
 async def today_schedule(user_id):
     today = dt.today()
     appointments = await sqllite_helper.get_schedule_with_warmasters(user_id, str(today.date()))
-    buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}'),appointments)]
+    # appointments format: (schedule_id, rules, nickname, telegram_id)
+    buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}_{ap[3]}'),appointments)]
     
     return [[button] for button in buttons]
 

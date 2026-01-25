@@ -558,7 +558,7 @@ async def get_schedule_by_user(user_telegram, date=None):
 async def get_schedule_with_warmasters(user_telegram, date=None):
     """
     Mock реализация для получения расписания миссий на сегодня.
-    Возвращает список записей формата: (schedule_id, rules, nickname)
+    Возвращает список записей формата: (schedule_id, rules, nickname, telegram_id)
     Генерирует миссии для всех игровых режимов с одним противником.
     """
     print(f"🧪 Mock: get_schedule_with_warmasters({user_telegram}, {date})")
@@ -588,7 +588,8 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
         schedule_entries.append((
             schedule_id,
             rules, 
-            opponent['nickname']
+            opponent['nickname'],
+            opponent['telegram_id']  # Добавляем telegram_id в результат
         ))
     
     print(f"🧪 Mock: Сгенерировано {len(schedule_entries)} записей расписания")
