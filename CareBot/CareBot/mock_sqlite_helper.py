@@ -508,7 +508,12 @@ async def get_event_participants(eventId):
 async def get_user_telegram_by_schedule_id(schedule_id):
     """
     Mock реализация для получения user_telegram по schedule_id.
-    Возвращает telegram_id оппонента.
+    
+    Args:
+        schedule_id: The ID of the schedule entry
+        
+    Returns:
+        str: The user_telegram ID from the schedule entry
     """
     print(f"🧪 Mock: get_user_telegram_by_schedule_id({schedule_id})")
     # Возвращаем telegram_id второго тестового пользователя как оппонента

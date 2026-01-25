@@ -284,7 +284,14 @@ async def get_event_participants(eventId):
 
 
 async def get_user_telegram_by_schedule_id(schedule_id):
-    """Get the user_telegram for a specific schedule entry by its ID."""
+    """Get the user_telegram for a specific schedule entry by its ID.
+    
+    Args:
+        schedule_id: The ID of the schedule entry
+        
+    Returns:
+        str: The user_telegram ID from the schedule entry, or None if not found
+    """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT user_telegram 
