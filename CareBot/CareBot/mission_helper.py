@@ -10,6 +10,12 @@ from database.killzone_manager import get_killzone_for_mission
 
 logger = logging.getLogger(__name__)
 
+# Reinforcement restriction message
+REINFORCEMENT_RESTRICTION_MESSAGE = (
+    "⚠️ Атакующий игрок не может отправлять юнитов в резервы, "
+    "за исключением тех кто имеет правило Deep Strike"
+)
+
 
 def generate_new_one(rules):
     """Generates a new mission based on the provided ruleset."""
@@ -232,8 +238,7 @@ async def check_attacker_reinforcement_status(battle_id, attacker_id):
     # apply reinforcement restriction
     if not cell_id:
         # No cell assigned - reinforcement restriction applies
-        return ("⚠️ Атакующий игрок не может отправлять юнитов в резервы, "
-                "за исключением тех кто имеет правило Deep Strike")
+        return REINFORCEMENT_RESTRICTION_MESSAGE
     
     # Check if attacker has any adjacent cell to the mission cell
     has_adjacent = await sqllite_helper.has_adjacent_cell_to_hex(
@@ -241,8 +246,7 @@ async def check_attacker_reinforcement_status(battle_id, attacker_id):
     )
     
     if not has_adjacent:
-        return ("⚠️ Атакующий игрок не может отправлять юнитов в резервы, "
-                "за исключением тех кто имеет правило Deep Strike")
+        return REINFORCEMENT_RESTRICTION_MESSAGE
     
     return None
 
