@@ -106,20 +106,36 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text(f"Ошибка при создании битвы: {str(e)}")
         return MISSIONS
     situation = await mission_helper.get_situation(battle_id, [(attacker_id,), (defender_id,)])
+    
+    # Check if attacker has reinforcement restrictions
+    reinforcement_message = await mission_helper.check_attacker_reinforcement_status(
+        battle_id, attacker_id
+    )
 
     # Формируем текст для пользователя
     mission_description = mission[3] or ''
     mission_rules = mission[1] or ''
     text = f"📜{mission_description}: {mission_rules}\n#{mission_id}"
     logger.info(f"Composed mission text for user: {text}")
+    
+    # Build full message with situation and reinforcement status
+    full_message = text
+    if situation:
+        full_message += "\n" + "\n".join(situation)
+    if reinforcement_message:
+        full_message += f"\n{reinforcement_message}"
 
     # Отправляем текст миссии текущему пользователю
-    await query.edit_message_text(f"{text}\n{situation}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
+    await query.edit_message_text(f"{full_message}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
 
     # Отправляем сообщение с миссией только дефендеру
     if defender_id:
         try:
-            await context.bot.send_message(chat_id=defender_id, text=f"Новая миссия:\n{text}")
+            # Include reinforcement message for defender too
+            defender_message = f"Новая миссия:\n{text}"
+            if reinforcement_message:
+                defender_message += f"\n{reinforcement_message}"
+            await context.bot.send_message(chat_id=defender_id, text=defender_message)
         except Exception as e:
             logger.error(
                 f"Ошибка при отправке сообщения дефендеру {defender_id}: {e}")

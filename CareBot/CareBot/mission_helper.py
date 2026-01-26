@@ -10,6 +10,12 @@ from database.killzone_manager import get_killzone_for_mission
 
 logger = logging.getLogger(__name__)
 
+# Reinforcement restriction message
+REINFORCEMENT_RESTRICTION_MESSAGE = (
+    "⚠️ Атакующий игрок не может отправлять юнитов в резервы, "
+    "за исключением тех кто имеет правило Deep Strike"
+)
+
 
 def generate_new_one(rules):
     """Generates a new mission based on the provided ruleset."""
@@ -205,6 +211,41 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
                 mission = mission + point
 
     return mission
+
+
+async def check_attacker_reinforcement_status(battle_id, attacker_id):
+    """
+    Checks if the attacker has adjacent cells to the mission cell.
+    If not, returns a message about reinforcement restriction.
+    
+    Args:
+        battle_id: Battle ID
+        attacker_id: Telegram ID of the attacker
+        
+    Returns:
+        str or None: Reinforcement restriction message if applicable, None otherwise
+    """
+    cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
+    
+    # Get attacker's alliance
+    attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
+    if not attacker_alliance:
+        return None
+    
+    attacker_alliance_id = attacker_alliance[0]
+    
+    if not cell_id:
+        return REINFORCEMENT_RESTRICTION_MESSAGE
+    
+    # Check if attacker has any adjacent cell to the mission cell
+    has_adjacent = await sqllite_helper.has_adjacent_cell_to_hex(
+        attacker_alliance_id, cell_id
+    )
+    
+    if not has_adjacent:
+        return REINFORCEMENT_RESTRICTION_MESSAGE
+    
+    return None
 
 
 async def get_situation(battle_id, telegram_ids):
