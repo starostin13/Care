@@ -234,10 +234,7 @@ async def check_attacker_reinforcement_status(battle_id, attacker_id):
     
     attacker_alliance_id = attacker_alliance[0]
     
-    # If no cell is assigned or attacker has no adjacent cell to the mission cell,
-    # apply reinforcement restriction
     if not cell_id:
-        # No cell assigned - reinforcement restriction applies
         return REINFORCEMENT_RESTRICTION_MESSAGE
     
     # Check if attacker has any adjacent cell to the mission cell
