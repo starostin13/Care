@@ -220,8 +220,6 @@ async def check_attacker_reinforcement_status(battle_id, attacker_id):
         str or None: Reinforcement restriction message if applicable, None otherwise
     """
     cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
-    if not cell_id:
-        return None
     
     # Get attacker's alliance
     attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
@@ -229,6 +227,13 @@ async def check_attacker_reinforcement_status(battle_id, attacker_id):
         return None
     
     attacker_alliance_id = attacker_alliance[0]
+    
+    # If no cell is assigned or attacker has no adjacent cell to the mission cell,
+    # apply reinforcement restriction
+    if not cell_id:
+        # No cell assigned - reinforcement restriction applies
+        return ("⚠️ Атакующий игрок не может отправлять юнитов в резервы, "
+                "за исключением тех кто имеет правило Deep Strike")
     
     # Check if attacker has any adjacent cell to the mission cell
     has_adjacent = await sqllite_helper.has_adjacent_cell_to_hex(
