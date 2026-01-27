@@ -1021,6 +1021,25 @@ async def get_alliance_territory_count(alliance_id):
             return result[0] if result else 0
 
 
+async def get_dominant_alliance():
+    """Get the alliance with the most territories (cells) on the map.
+    
+    Returns:
+        int or None: Alliance ID with most territories, or None if no alliances have territories
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT patron, COUNT(*) as cell_count
+            FROM map
+            WHERE patron != 0
+            GROUP BY patron
+            ORDER BY cell_count DESC
+            LIMIT 1
+        ''') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def set_warmaster_alliance(user_telegram_id, alliance_id):
     """Set a warmaster's alliance.
     

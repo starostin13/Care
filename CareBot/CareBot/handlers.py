@@ -13,6 +13,7 @@ import map_helper
 import warmaster_helper
 import settings_helper
 import schedule_helper
+import mission_message_builder
 # Автоматическое переключение на mock версию в тестовом режиме
 if config.TEST_MODE:
     import mock_sqlite_helper as sqllite_helper
@@ -112,30 +113,72 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         battle_id, attacker_id
     )
 
-    # Формируем текст для пользователя
+    # Determine dominant alliance
+    dominant_alliance_id = await sqllite_helper.get_dominant_alliance()
+    logger.info(f"Dominant alliance: {dominant_alliance_id}")
+    
+    # Get alliances of both players
+    attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
+    defender_alliance = await sqllite_helper.get_alliance_of_warmaster(defender_id)
+    
+    attacker_alliance_id = attacker_alliance[0] if attacker_alliance else None
+    defender_alliance_id = defender_alliance[0] if defender_alliance else None
+    
+    # Check if either player belongs to dominant alliance
+    attacker_is_dominant = (dominant_alliance_id and 
+                           attacker_alliance_id == dominant_alliance_id and
+                           attacker_alliance_id != 0)
+    defender_is_dominant = (dominant_alliance_id and 
+                           defender_alliance_id == dominant_alliance_id and
+                           defender_alliance_id != 0)
+    
+    # Get nicknames for messages
+    attacker_nickname = await sqllite_helper.get_nicknamane(attacker_id)
+    defender_nickname = await sqllite_helper.get_nicknamane(defender_id)
+    
+    # Формируем текст для пользователя используя message builder
     mission_description = mission[3] or ''
     mission_rules = mission[1] or ''
-    text = f"📜{mission_description}: {mission_rules}\n#{mission_id}"
-    logger.info(f"Composed mission text for user: {text}")
     
-    # Build full message with situation and reinforcement status
-    full_message = text
-    if situation:
-        full_message += "\n" + "\n".join(situation)
-    if reinforcement_message:
-        full_message += f"\n{reinforcement_message}"
+    # Build message for attacker
+    attacker_builder = mission_message_builder.MissionMessageBuilder(
+        mission_id, mission_description, mission_rules
+    )
+    
+    # Add double exp bonus if defender is dominant
+    if defender_is_dominant:
+        attacker_builder.add_double_exp_bonus(defender_nickname)
+    
+    attacker_builder.add_situation(situation)
+    attacker_builder.add_reinforcement_message(reinforcement_message)
+    
+    attacker_message = attacker_builder.build()
+    logger.info(f"Composed mission text for attacker: {attacker_message}")
 
-    # Отправляем текст миссии текущему пользователю
-    await query.edit_message_text(f"{full_message}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
+    # Отправляем текст миссии текущему пользователю (атакующему)
+    await query.edit_message_text(f"{attacker_message}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
 
-    # Отправляем сообщение с миссией только дефендеру
+    # Отправляем сообщение с миссией дефендеру
     if defender_id:
         try:
-            # Include reinforcement message for defender too
-            defender_message = f"Новая миссия:\n{text}"
-            if reinforcement_message:
-                defender_message += f"\n{reinforcement_message}"
-            await context.bot.send_message(chat_id=defender_id, text=defender_message)
+            # Build message for defender
+            defender_builder = mission_message_builder.MissionMessageBuilder(
+                mission_id, mission_description, mission_rules
+            )
+            
+            # Add double exp bonus if attacker is dominant
+            if attacker_is_dominant:
+                defender_builder.add_double_exp_bonus(attacker_nickname)
+            
+            defender_builder.add_situation(situation)
+            defender_builder.add_reinforcement_message(reinforcement_message)
+            
+            defender_message = defender_builder.build()
+            
+            await context.bot.send_message(
+                chat_id=defender_id, 
+                text=f"Новая миссия:\n{defender_message}"
+            )
         except Exception as e:
             logger.error(
                 f"Ошибка при отправке сообщения дефендеру {defender_id}: {e}")

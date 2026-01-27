@@ -787,6 +787,12 @@ async def get_alliance_territory_count(alliance_id):
         return 0
     return random.randint(1, 5)  # Mock alliances have some territories
 
+async def get_dominant_alliance():
+    """Mock: Get the alliance with the most territories (cells) on the map."""
+    print("🧪 Mock: get_dominant_alliance()")
+    # For testing, return alliance 1 as dominant (Crimson Legion)
+    return 1
+
 async def set_warmaster_alliance(user_telegram_id, alliance_id):
     print(f"🧪 Mock: set_warmaster_alliance({user_telegram_id}, {alliance_id})")
     for user in MOCK_WARMASTERS.values():
