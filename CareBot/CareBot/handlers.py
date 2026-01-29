@@ -140,19 +140,24 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission_description = mission[3] or ''
     mission_rules = mission[1] or ''
     
-    # Build message for attacker
-    attacker_builder = mission_message_builder.MissionMessageBuilder(
-        mission_id, mission_description, mission_rules
-    )
+    # Helper function to build message for a player
+    def build_mission_message(opponent_is_dominant, opponent_nickname):
+        builder = mission_message_builder.MissionMessageBuilder(
+            mission_id, mission_description, mission_rules
+        )
+        
+        # Add double exp bonus if opponent is dominant
+        if opponent_is_dominant:
+            builder.add_double_exp_bonus(opponent_nickname)
+        
+        # Add common components
+        builder.add_situation(situation)
+        builder.add_reinforcement_message(reinforcement_message)
+        
+        return builder.build()
     
-    # Add double exp bonus if defender is dominant
-    if defender_is_dominant:
-        attacker_builder.add_double_exp_bonus(defender_nickname)
-    
-    attacker_builder.add_situation(situation)
-    attacker_builder.add_reinforcement_message(reinforcement_message)
-    
-    attacker_message = attacker_builder.build()
+    # Build messages for both players
+    attacker_message = build_mission_message(defender_is_dominant, defender_nickname)
     logger.info(f"Composed mission text for attacker: {attacker_message}")
 
     # Отправляем текст миссии текущему пользователю (атакующему)
@@ -161,19 +166,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Отправляем сообщение с миссией дефендеру
     if defender_id:
         try:
-            # Build message for defender
-            defender_builder = mission_message_builder.MissionMessageBuilder(
-                mission_id, mission_description, mission_rules
-            )
-            
-            # Add double exp bonus if attacker is dominant
-            if attacker_is_dominant:
-                defender_builder.add_double_exp_bonus(attacker_nickname)
-            
-            defender_builder.add_situation(situation)
-            defender_builder.add_reinforcement_message(reinforcement_message)
-            
-            defender_message = defender_builder.build()
+            defender_message = build_mission_message(attacker_is_dominant, attacker_nickname)
             
             await context.bot.send_message(
                 chat_id=defender_id, 
