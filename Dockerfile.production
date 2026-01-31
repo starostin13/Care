@@ -21,6 +21,9 @@ COPY CareBot/run_bot.py .
 COPY CareBot/runserver.py .
 COPY CareBot/CareBot/ ./CareBot/
 
+# Явно копируем mission_message_builder.py чтобы убедиться что он включен
+COPY CareBot/CareBot/mission_message_builder.py ./CareBot/mission_message_builder.py
+
 # Копирование дампа базы данных и скрипта деплоя
 COPY CareBot/CareBot/db/ ./db_deploy/
 
