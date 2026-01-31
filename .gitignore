@@ -173,3 +173,4 @@ cython_debug/
 /CareBot/.vs/CareBot/v17
 /CareBot/.vs/CareBot/copilot-chat
 /CareBot/.vs/CareBot/CopilotIndices
+*.tar.gz

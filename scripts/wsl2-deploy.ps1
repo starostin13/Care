@@ -19,7 +19,7 @@ $LOCAL_HEALTH_URL = "http://localhost:5556/health"
 $LOCAL_ENV_FILE = ".env"
 
 # WSL2 Configuration
-$WSL_DISTRO = "Ubuntu-22.04"
+$WSL_DISTRO = "Ubuntu"
 $PROJECT_PATH_WIN = Get-Location
 $PROJECT_PATH_WSL = $PROJECT_PATH_WIN.Path -replace '\\', '/' -replace 'C:', '/mnt/c' -replace 'c:', '/mnt/c'
 
