@@ -1,12 +1,13 @@
 ﻿"""Helper functions for managing missions in the game."""
 
-from typing import Optional
+from typing import Optional, Tuple
 import random
 import logging
 import sqllite_helper
 import map_helper
 import notification_service
 from database.killzone_manager import get_killzone_for_mission
+from models import Mission, MissionDetails
 
 logger = logging.getLogger(__name__)
 
@@ -119,18 +120,27 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
         attacker_id: Telegram ID of the attacker (who clicked the mission)
         defender_id: Telegram ID of the defender (opponent)
     
+    Returns:
+        Tuple with mission data for display (backwards compatible format)
+    
     Battle cell is determined by finding hexes adjacent to attacker's territory 
     that belong to defender and randomly selecting one of them.
     """
+    # Get mission from database (returns Mission object or None)
     mission = await sqllite_helper.get_mission(rules)
-
+    
     if not mission:
-        # Если миссия не найдена, генерируем новую
-        mission = generate_new_one(rules)
-        await sqllite_helper.save_mission(mission)
-
+        # Generate new mission (returns tuple)
+        mission_tuple = generate_new_one(rules)
+        await sqllite_helper.save_mission(mission_tuple)
+        # Re-fetch from DB to get Mission object with ID
+        mission = await sqllite_helper.get_mission(rules)
+        
+    if not mission:
+        raise ValueError(f"Failed to get or create mission for rules: {rules}")
+    
     # Determine cell_id based on participants
-    cell_id = mission[2]  # May be None for newly generated missions
+    cell_id = mission.cell
     
     if attacker_id and defender_id and cell_id is None:
         attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
@@ -145,9 +155,11 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
                 attacker_alliance_id, defender_alliance_id
             )
             
-            if adjacent_defender_hexes:
+            # Convert iterator to list if needed
+            adjacent_hexes_list = list(adjacent_defender_hexes) if adjacent_defender_hexes else []
+            if adjacent_hexes_list:
                 # Randomly select one adjacent hex from defender's territory
-                cell_id = random.choice(adjacent_defender_hexes)[0]
+                cell_id = random.choice(adjacent_hexes_list)[0]
                 logger.info(
                     f"Battle cell determined: {cell_id} "
                     f"(random hex from defender's territory adjacent to attacker)"
@@ -167,51 +179,56 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
                         f"No hexes found for defender alliance {defender_alliance_id}"
                     )
         
-        # Update mission tuple with determined cell_id
+        # Update mission with determined cell_id
         if cell_id is not None:
-            mission = list(mission)
-            mission[2] = cell_id
-            mission = tuple(mission)
-            # Update mission in database with the cell
-            await sqllite_helper.update_mission_cell(mission[4], cell_id)
+            await sqllite_helper.update_mission_cell(mission.id, cell_id)
+            mission.cell = cell_id  # Update local object
 
     if rules == "killteam":
         if cell_id is not None:
-            await sqllite_helper.lock_mission(mission[4])  # Lock by mission id, not cell
+            await sqllite_helper.lock_mission(mission.id)
             state = await sqllite_helper.get_state(cell_id)
 
             # Получаем killzone для данного state гекса (или None)
             hex_state = state[0] if state is not None else None
             killzone = get_killzone_for_mission(hex_state)
-            mission = mission + (f"Killzone: {killzone}",)
+            
+            # Build result tuple with extra info
+            result = mission.to_tuple() + (f"Killzone: {killzone}",)
 
             if state is not None:
-                mission = mission + (state[0],)
+                result = result + (state[0],)
 
             history = await sqllite_helper.get_cell_history(cell_id)
             for point in history:
-                mission = mission + point
+                result = result + tuple(point)  # Convert Row to tuple
+            
+            return result
         else:
             # For killteam without cell, just lock the mission
-            await sqllite_helper.lock_mission(mission[4])
+            await sqllite_helper.lock_mission(mission.id)
+            return mission.to_tuple()
 
     elif rules == "wh40k":
-        # Lock mission by id (mission[4])
-        await sqllite_helper.lock_mission(mission[4])
+        # Lock mission by id
+        await sqllite_helper.lock_mission(mission.id)
         if cell_id is not None:
             # If cell is assigned, add extra info
             number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
-            mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
+            result = mission.to_tuple() + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
             history = await sqllite_helper.get_cell_history(cell_id)
             state = await sqllite_helper.get_state(cell_id)
             if state is not None:
-                mission = mission + (state[0],)
+                result = result + (state[0],)
 
             for point in history:
-                mission = mission + point
+                result = result + tuple(point)  # Convert Row to tuple
+            
+            return result
+        else:
+            return mission.to_tuple()
 
-    return mission
-
+    return mission.to_tuple()
 
 async def check_attacker_reinforcement_status(battle_id, attacker_id):
     """
@@ -331,10 +348,9 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         logger.error("Could not find mission details for battle %s", battle_id)
         return
 
-    # Extract mission type (the first part of the mission tuple is the
-    # mission name/type)
-    mission_type = mission_details[0]
-    rules = mission_details[1]
+    # Extract mission type and rules from Mission object
+    mission_type = mission_details.deploy  # Mission name/type
+    rules = mission_details.rules
     logger.info("Mission type: %s, rules: %s", mission_type, rules)
 
     # Get alliance IDs for both players 
@@ -562,10 +578,12 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
             "Checking hexes for loser alliance: %s", loser_alliance_id)
         remaining_hexes = await sqllite_helper.get_hexes_by_alliance(
             loser_alliance_id)
+        # Convert iterator to list to get length
+        remaining_hexes_list = list(remaining_hexes) if remaining_hexes else []
         logger.info(
             "Alliance %s has %s hexes remaining",
-            loser_alliance_id, len(remaining_hexes))
-        if len(remaining_hexes) == 0:
+            loser_alliance_id, len(remaining_hexes_list))
+        if len(remaining_hexes_list) == 0:
             logger.info(
                 "Alliance %s eliminated - no hexes remaining",
                 loser_alliance_id)
@@ -668,21 +686,26 @@ async def start_battle(mission_id, player1_id, player2_id):
         )
     
     # Create battle without scores
-    battle_id = await sqllite_helper.add_battle(mission_id)
+    battle_id_result = await sqllite_helper.add_battle(mission_id)
+    
+    if not battle_id_result:
+        raise RuntimeError(f"Failed to create battle for mission {mission_id}")
+    
+    battle_id = battle_id_result[0]
     
     # Add exactly 2 players in order: first player is fstplayer, second is sndplayer
     await sqllite_helper.add_battle_participant(
-        battle_id[0],
+        battle_id,
         player1_id
     )
     await sqllite_helper.add_battle_participant(
-        battle_id[0],
+        battle_id,
         player2_id
     )
     
     logger.info(
-        f"Battle {battle_id[0]} created for mission {mission_id} with "
+        f"Battle {battle_id} created for mission {mission_id} with "
         f"fstplayer={player1_id}, sndplayer={player2_id}"
     )
     
-    return battle_id[0]
+    return battle_id

@@ -9,7 +9,8 @@ import aiosqlite
 import os
 import random
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
+from models import Mission, Battle, MissionDetails, Warmaster, Alliance, MapCell
 
 logger = logging.getLogger(__name__)
 
@@ -314,16 +315,26 @@ async def unlock_expired_missions():
         return cursor.rowcount
 
 
-async def get_mission(rules):
+async def get_mission(rules) -> Optional[Mission]:
+    """Get an unlocked mission by rules.
+    
+    Args:
+        rules: Mission ruleset (killteam, wh40k, etc.)
+    
+    Returns:
+        Mission object or None if no mission found
+    """
     # Unlock any expired missions before fetching
     await unlock_expired_missions()
     
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT * FROM mission_stack
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, locked, created_date
+            FROM mission_stack
             WHERE locked=0 AND rules=?
         ''', (rules,)) as cursor:
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return Mission.from_db_row(row)
 
 async def get_schedule_by_user(user_telegram, date=None):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -336,9 +347,13 @@ async def get_schedule_by_user(user_telegram, date=None):
             return await cursor.fetchall()
 
 async def get_schedule_with_warmasters(user_telegram, date=None):
+    """Get schedule with opponent info including their telegram_id.
+    
+    Returns: List of tuples (schedule_id, rules, opponent_nickname, opponent_telegram_id)
+    """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT schedule.id, schedule.rules, warmasters.nickname 
+            SELECT schedule.id, schedule.rules, warmasters.nickname, warmasters.telegram_id
             FROM schedule 
             JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id 
             AND schedule.user_telegram<>? 
@@ -809,21 +824,25 @@ async def get_mission_id_by_battle_id(battle_id):
             return result[0] if result else None
 
 
-async def get_mission_details(mission_id):
+async def get_mission_details(mission_id) -> Optional[Mission]:
     """Get mission details by mission ID.
 
-    Returns: (deploy, rules, cell, mission_description, winner_bonus) or None
-    Uses mission_description column to avoid schema differences.
+    Args:
+        mission_id: The mission ID
+    
+    Returns:
+        Mission object or None if not found
     """
-    logger.info("get_mission_details(existing)(mission_id=%s)", mission_id)
+    logger.info("get_mission_details(mission_id=%s)", mission_id)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT deploy, rules, cell, mission_description, winner_bonus
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, locked, created_date
             FROM mission_stack WHERE id = ?
         ''', (mission_id,)) as cursor:
             row = await cursor.fetchone()
-            logger.info("mission_details(existing) result: %s", row)
-            return row
+            mission = Mission.from_db_row(row)
+            logger.info("mission_details result: %s", mission)
+            return mission
 
 
 async def get_winner_bonus(mission_id):

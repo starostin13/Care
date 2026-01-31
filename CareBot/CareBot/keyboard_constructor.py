@@ -274,9 +274,14 @@ async def this_week(rule, user_id):
     return days
 
 async def today_schedule(user_id):
+    """Create schedule keyboard with opponent info in callback_data.
+    
+    appointments format: (schedule_id, rules, opponent_nickname, opponent_telegram_id)
+    callback_data format: mission_sch_{schedule_id}_{opponent_telegram_id}
+    """
     today = dt.today()
     appointments = await sqllite_helper.get_schedule_with_warmasters(user_id, str(today.date()))
-    buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}'),appointments)]
+    buttons = [*map(lambda ap: InlineKeyboardButton(f'{ap[1]} {ap[2]}', callback_data=f'mission_sch_{ap[0]}_{ap[3]}'),appointments)]
     
     return [[button] for button in buttons]
 
