@@ -66,8 +66,18 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
     
-    mission_number = int(
-        query.data.replace("mission_sch_", ""))
+    # Validate callback data - it should start with 'mission_sch_'
+    if not query.data.startswith("mission_sch_"):
+        logger.error(f"Invalid mission callback data: {query.data}")
+        await query.edit_message_text("❌ Ошибка: неверный формат запроса. Пожалуйста, попробуйте снова.")
+        return MISSIONS
+    
+    try:
+        mission_number = int(query.data.replace("mission_sch_", ""))
+    except (ValueError, AttributeError) as e:
+        logger.error(f"Failed to parse mission number from callback data '{query.data}': {e}")
+        await query.edit_message_text("❌ Ошибка: не удалось получить информацию о миссии. Пожалуйста, попробуйте снова.")
+        return MISSIONS
     rules = await schedule_helper.get_mission_rules(mission_number)
     data = query.data  # Получаем данные из нажатой кнопки
     
@@ -161,7 +171,14 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info(f"Composed mission text for attacker: {attacker_message}")
 
     # Отправляем текст миссии текущему пользователю (атакующему)
-    await query.edit_message_text(f"{attacker_message}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0")
+    # Create Back button to return to missions list
+    back_button = [[InlineKeyboardButton("⬅️ Назад к миссиям", callback_data="back_to_missions")]]
+    back_markup = InlineKeyboardMarkup(back_button)
+    
+    await query.edit_message_text(
+        f"{attacker_message}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0",
+        reply_markup=back_markup
+    )
 
     # Отправляем сообщение с миссией дефендеру
     if defender_id:
@@ -538,6 +555,23 @@ async def show_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     missions_text = await localization.get_text_for_user(user_id, "missions_title")
     await query.edit_message_text(missions_text, reply_markup=markup)
+    return MISSIONS
+
+
+async def back_to_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 'Back' button from mission to return to missions list"""
+    user_id = update.effective_user.id
+    logger.info(f"back_to_missions called by user {user_id}")
+    
+    query = update.callback_query
+    await query.answer()
+    
+    menu = await keyboard_constructor.today_schedule(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    missions_text = await localization.get_text_for_user(user_id, "missions_title")
+    await query.edit_message_text(missions_text, reply_markup=markup)
+    logger.info(f"Successfully returned to missions list for user {user_id}")
     return MISSIONS
 
 
@@ -1181,7 +1215,8 @@ def start_bot():
             ],
             MISSIONS: [
                 CallbackQueryHandler(hello, pattern='^start$'),
-                CallbackQueryHandler(get_the_mission)
+                CallbackQueryHandler(back_to_missions, pattern='^back_to_missions$'),
+                CallbackQueryHandler(get_the_mission, pattern='^mission_sch_')
             ],
             ALLIANCE_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_alliance_text_input),
