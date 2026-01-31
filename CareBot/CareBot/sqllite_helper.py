@@ -341,9 +341,18 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
             SELECT schedule.id, schedule.rules, warmasters.nickname 
             FROM schedule 
             JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id 
-            AND schedule.user_telegram<>? 
+            WHERE schedule.user_telegram<>? 
             AND schedule.date=?
-        ''', (user_telegram, date)) as cursor:
+            AND (
+                warmasters.alliance IS NULL 
+                OR warmasters.alliance = 0
+                OR warmasters.alliance != (
+                    SELECT alliance FROM warmasters WHERE telegram_id=?
+                )
+                OR (SELECT alliance FROM warmasters WHERE telegram_id=?) IS NULL
+                OR (SELECT alliance FROM warmasters WHERE telegram_id=?) = 0
+            )
+        ''', (user_telegram, date, user_telegram, user_telegram, user_telegram)) as cursor:
             return await cursor.fetchall()
 
 
