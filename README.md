@@ -3,18 +3,34 @@ bot for caring wh40k crusadess deals
 
 ## 🚀 Быстрое развертывание
 
-Для развертывания CareBot используйте проверенное решение:
+### WSL2 Deployment (РЕКОМЕНДУЕТСЯ - January 2026)
 
-- **📖 Полная документация:** [DEPLOYMENT_SUCCESS.md](DEPLOYMENT_SUCCESS.md)
-- **🤖 Для AI агентов:** [AI_AGENTS_READ_THIS.md](AI_AGENTS_READ_THIS.md)
-- **⚡ Готовый скрипт:** `scripts\deploy-proven.ps1`
+Новый способ деплоя через WSL2 + Docker на локальной машине:
+
+- **⚡ Быстрый старт:** [WSL2_QUICKSTART.md](WSL2_QUICKSTART.md)
+- **📖 Полная документация:** [WSL2_DEPLOYMENT.md](WSL2_DEPLOYMENT.md)
+- **🤖 Для AI агентов:** [agents.md](agents.md) - см. секцию "WSL2 + Docker деплой"
+- **🔧 Основной скрипт:** `scripts\wsl2-deploy.ps1`
 
 ```powershell
-# Быстрое развертывание
-.\scripts\deploy-proven.ps1
+# Полный цикл деплоя (build → test → deploy)
+.\scripts\wsl2-deploy.ps1 full
 
-# Проверка статуса
-.\scripts\deploy-proven.ps1 status
+# Или поэтапно:
+.\scripts\wsl2-deploy.ps1 build     # Сборка образа в WSL2
+.\scripts\wsl2-deploy.ps1 inspect   # Проверка содержимого
+.\scripts\wsl2-deploy.ps1 test      # Локальное тестирование
+.\scripts\wsl2-deploy.ps1 deploy    # Деплой на production
+```
+
+### Legacy Deployment (УСТАРЕЛ)
+
+- **📖 Документация:** [DEPLOYMENT_SUCCESS.md](DEPLOYMENT_SUCCESS.md)
+- **⚡ Скрипт:** `scripts\update-production.ps1`
+
+```powershell
+# Legacy способ (собирает образ на production)
+.\scripts\update-production.ps1 update
 ```
 
 ## 📊 Рабочие сервисы
