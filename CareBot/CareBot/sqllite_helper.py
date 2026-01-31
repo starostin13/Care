@@ -338,21 +338,26 @@ async def get_schedule_by_user(user_telegram, date=None):
 async def get_schedule_with_warmasters(user_telegram, date=None):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
+            WITH current_user_alliance AS (
+                SELECT alliance FROM warmasters WHERE telegram_id=?
+            )
             SELECT schedule.id, schedule.rules, warmasters.nickname 
             FROM schedule 
             JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id 
+            CROSS JOIN current_user_alliance
             WHERE schedule.user_telegram<>? 
             AND schedule.date=?
             AND (
-                warmasters.alliance IS NULL 
-                OR warmasters.alliance = 0
-                OR warmasters.alliance != (
-                    SELECT alliance FROM warmasters WHERE telegram_id=?
+                -- Exclude allies: both users must have valid alliances AND they must be the same
+                NOT (
+                    warmasters.alliance IS NOT NULL 
+                    AND warmasters.alliance != 0
+                    AND current_user_alliance.alliance IS NOT NULL
+                    AND current_user_alliance.alliance != 0
+                    AND warmasters.alliance = current_user_alliance.alliance
                 )
-                OR (SELECT alliance FROM warmasters WHERE telegram_id=?) IS NULL
-                OR (SELECT alliance FROM warmasters WHERE telegram_id=?) = 0
             )
-        ''', (user_telegram, date, user_telegram, user_telegram, user_telegram)) as cursor:
+        ''', (user_telegram, user_telegram, date)) as cursor:
             return await cursor.fetchall()
 
 

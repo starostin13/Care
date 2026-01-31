@@ -114,18 +114,21 @@ async def test_sql_query_logic():
             func_end = content.find('\nasync def ', func_start + 1)
             func_content = content[func_start:func_end]
             
-            # Check for alliance filtering conditions
+            # Check for new improved logic with CTE and NOT condition
             conditions = [
-                'warmasters.alliance IS NULL',
-                'warmasters.alliance = 0',
-                'warmasters.alliance !=',
-                'SELECT alliance FROM warmasters WHERE telegram_id=?'
+                'WITH current_user_alliance',
+                'warmasters.alliance IS NOT NULL',
+                'warmasters.alliance != 0',
+                'current_user_alliance.alliance IS NOT NULL',
+                'current_user_alliance.alliance != 0',
+                'warmasters.alliance = current_user_alliance.alliance',
+                'NOT ('
             ]
             
             all_present = all(cond in func_content for cond in conditions)
             
             if all_present:
-                print("✅ SQL query includes proper alliance filtering logic")
+                print("✅ SQL query includes proper alliance filtering logic (CTE + NOT pattern)")
                 return True
             else:
                 print("❌ SQL query missing some alliance filtering conditions")
