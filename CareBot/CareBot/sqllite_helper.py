@@ -1481,12 +1481,15 @@ async def get_all_players():
 
 
 # ============================================================================
-# Pending Results Management
+# Pending Results Management (using battles table)
 # ============================================================================
 
-async def create_pending_result(battle_id: int, submitter_id: str, 
-                                fstplayer_score: int, sndplayer_score: int) -> int:
-    """Create a pending result for a battle.
+async def submit_battle_result(battle_id: int, submitter_id: str, 
+                               fstplayer_score: int, sndplayer_score: int) -> bool:
+    """Submit a battle result (pending confirmation).
+    
+    Stores the scores in the battles table along with who submitted them.
+    The result is not considered confirmed until the mission status is set to 3.
     
     Args:
         battle_id: The battle ID
@@ -1495,53 +1498,57 @@ async def create_pending_result(battle_id: int, submitter_id: str,
         sndplayer_score: Score of the second player
         
     Returns:
-        int: The ID of the created pending result
+        bool: True if successful
     """
-    from datetime import datetime
-    created_at = datetime.now().isoformat()
-    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
-            INSERT INTO pending_results(battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at)
-            VALUES(?, ?, ?, ?, ?)
-        ''', (battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at))
+            UPDATE battles
+            SET fstplayer = ?, sndplayer = ?, submitter_id = ?
+            WHERE id = ?
+        ''', (fstplayer_score, sndplayer_score, submitter_id, battle_id))
         await db.commit()
-        
-        async with db.execute('SELECT last_insert_rowid()') as cursor:
-            result = await cursor.fetchone()
-            return result[0] if result else None
+        return True
 
 
-async def get_pending_result_by_battle_id(battle_id: int):
-    """Get a pending result by battle ID.
+async def get_battle_result(battle_id: int):
+    """Get battle result including submitter.
     
     Args:
         battle_id: The battle ID
         
     Returns:
-        PendingResult or None
+        dict with keys: battle_id, mission_id, fstplayer_score, sndplayer_score, submitter_id
+        or None if not found
     """
-    from models import PendingResult
-    
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at
-            FROM pending_results
-            WHERE battle_id = ?
+            SELECT id, mission_id, fstplayer, sndplayer, submitter_id
+            FROM battles
+            WHERE id = ?
         ''', (battle_id,)) as cursor:
             row = await cursor.fetchone()
-            return PendingResult.from_db_row(row) if row else None
+            if not row:
+                return None
+            return {
+                'battle_id': row[0],
+                'mission_id': row[1],
+                'fstplayer_score': row[2],
+                'sndplayer_score': row[3],
+                'submitter_id': row[4]
+            }
 
 
-async def delete_pending_result(battle_id: int):
-    """Delete a pending result.
+async def clear_battle_result(battle_id: int):
+    """Clear a battle result (when cancelled).
     
     Args:
         battle_id: The battle ID
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
-            DELETE FROM pending_results WHERE battle_id = ?
+            UPDATE battles
+            SET fstplayer = NULL, sndplayer = NULL, submitter_id = NULL
+            WHERE id = ?
         ''', (battle_id,))
         await db.commit()
 

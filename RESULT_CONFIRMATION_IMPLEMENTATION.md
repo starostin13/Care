@@ -10,25 +10,25 @@ Implemented a two-step confirmation system for game results in the CareBot Teleg
 - **Renamed** `locked` column to `status` in `mission_stack` table
   - Old values: 0=unlocked, 1=locked, 2=score_submitted
   - New values: 0=available, 1=active, 2=pending_confirmation, 3=confirmed
-- Created new `pending_results` table to store unconfirmed results
-  - Fields: id, battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at
+- **Added** `submitter_id` column to `battles` table to track who submitted the result
+- **No separate pending_results table** - uses existing battles table structure
 
 ### 2. Data Models
 **File**: `CareBot/CareBot/models.py`
 - Updated `Mission` model: changed `locked` field to `status` field
 - Updated `MissionDetails` model: changed `locked` field to `status` field
-- Added new `PendingResult` model with `from_db_row()` factory method
+- **No new PendingResult model** - uses existing Battle model with submitter_id
 
 ### 3. Database Helper Functions
 **File**: `CareBot/CareBot/sqllite_helper.py`
 
-Added functions for pending results management:
-- `create_pending_result()` - Store a pending result
-- `get_pending_result_by_battle_id()` - Retrieve pending result
-- `delete_pending_result()` - Remove pending result
+Replaced pending_results table functions with battles table-based functions:
+- `submit_battle_result()` - Store scores and submitter in battles table
+- `get_battle_result()` - Retrieve battle result including submitter
+- `clear_battle_result()` - Clear scores and submitter (on cancellation)
 - `get_all_pending_missions()` - Get missions with status=2
 - `update_mission_status()` - Update mission status
-- `get_battle_participants()` - Get both players in a battle
+- `get_battle_participants()` - Get both players in a battle (from battle_attenders)
 - `get_pending_missions_count()` - Count pending missions
 - `get_battle_id_by_mission_id()` - Find battle by mission
 
@@ -39,7 +39,7 @@ Added functions for pending results management:
 - Validates score format (e.g., "20 0")
 - Checks if result already pending for this battle
 - Determines submitter and opponent
-- Creates pending result (does NOT apply immediately)
+- Stores result in battles table with submitter_id (does NOT apply immediately)
 - Sets mission status to 2 (pending_confirmation)
 - Sends confirmation request to opponent with buttons
 
@@ -55,7 +55,7 @@ Added functions for pending results management:
 
 **Added `cancel_result()`**:
 - Validates user is not the submitter
-- Deletes pending result
+- Clears battle result from battles table
 - Resets mission status to 1 (active)
 - Notifies both players
 
@@ -171,9 +171,10 @@ Created `test_result_confirmation.py` which validates:
 1. Stop the bot
 2. Run migrations: `yoyo apply`
    - Migration 020 will rename `locked` column to `status` in mission_stack
-   - Migration 020 will create `pending_results` table
+   - Migration 020 will add `submitter_id` column to battles table
 3. Restart the bot
 4. Existing missions will retain their status values (0, 1, or 2 become valid status values)
+5. Existing battles will have NULL submitter_id until a new result is submitted
 
 ## Future Considerations
 
