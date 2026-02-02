@@ -1595,3 +1595,37 @@ async def get_battle_participants(battle_id: int):
             result = await cursor.fetchone()
             return (str(result[0]), str(result[1])) if result else None
 
+
+async def get_pending_missions_count():
+    """Get the count of missions with status=2 (pending confirmation).
+    
+    Returns:
+        int: Number of missions pending confirmation
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM mission_stack WHERE status = 2
+        ''') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
+async def get_battle_id_by_mission_id(mission_id: int):
+    """Get the most recent battle_id for a given mission_id.
+    
+    Args:
+        mission_id: The mission ID
+        
+    Returns:
+        int: The battle ID or None if not found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id FROM battles 
+            WHERE mission_id = ? 
+            ORDER BY id DESC 
+            LIMIT 1
+        ''', (mission_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+

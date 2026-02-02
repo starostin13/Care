@@ -432,6 +432,15 @@ async def get_admin_menu(userId):
             callback_data="admin_alliance_management")
     ])
     
+    # Pending mission confirmations - only show if there are pending missions
+    pending_count = await sqllite_helper.get_pending_missions_count()
+    if pending_count > 0:
+        items.append([
+            InlineKeyboardButton(
+                f"⏳ Подтверждение миссий ({pending_count})",
+                callback_data="admin_pending_confirmations")
+        ])
+    
     # Back to main menu
     items.append([
         InlineKeyboardButton(
