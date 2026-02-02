@@ -593,12 +593,16 @@ async def confirm_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         
         if rewards is None:
-            logger.warning("Could not apply mission rewards for battle %s", battle_id)
+            logger.warning(
+                "Could not apply mission rewards for battle %s - "
+                "check that both players are assigned to alliances",
+                battle_id
+            )
         
         # Update the map based on battle results
         # Get scenario from mission details if available
         mission_details = await sqllite_helper.get_mission_details(mission_id)
-        scenario = mission_details.get('rules') if mission_details else None
+        scenario = mission_details.rules if mission_details else None
         
         await map_helper.update_map(
             battle_id,
@@ -1508,8 +1512,8 @@ async def admin_confirm_mission(update: Update, context: ContextTypes.DEFAULT_TY
     
     message_text = (
         f"🎲 Миссия #{mission_id}\n"
-        f"📜 Правила: {mission_details.get('rules', 'неизвестно')}\n"
-        f"📅 Создана: {mission_details.get('created_date', 'неизвестно')}\n\n"
+        f"📜 Правила: {mission_details.rules if mission_details else 'неизвестно'}\n"
+        f"📅 Создана: {mission_details.created_date if mission_details else 'неизвестно'}\n\n"
         f"{participants_text}\n"
         f"{winner_text}\n\n"
         f"Подтвердить результат?"
@@ -1569,11 +1573,15 @@ async def admin_do_confirm_mission(update: Update, context: ContextTypes.DEFAULT
         )
         
         if rewards is None:
-            logger.warning("Could not apply mission rewards for battle %s", battle_id)
+            logger.warning(
+                "Could not apply mission rewards for battle %s - "
+                "check that both players are assigned to alliances",
+                battle_id
+            )
         
         # Update the map
         mission_details = await sqllite_helper.get_mission_details(mission_id)
-        scenario = mission_details.get('rules') if mission_details else None
+        scenario = mission_details.rules if mission_details else None
         
         await map_helper.update_map(
             battle_id,
