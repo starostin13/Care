@@ -1478,3 +1478,120 @@ async def get_all_players():
         ''') as cursor:
             return await cursor.fetchall()
 
+
+# ============================================================================
+# Pending Results Management
+# ============================================================================
+
+async def create_pending_result(battle_id: int, submitter_id: str, 
+                                fstplayer_score: int, sndplayer_score: int) -> int:
+    """Create a pending result for a battle.
+    
+    Args:
+        battle_id: The battle ID
+        submitter_id: Telegram ID of the user who submitted the result
+        fstplayer_score: Score of the first player
+        sndplayer_score: Score of the second player
+        
+    Returns:
+        int: The ID of the created pending result
+    """
+    from datetime import datetime
+    created_at = datetime.now().isoformat()
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            INSERT INTO pending_results(battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at)
+            VALUES(?, ?, ?, ?, ?)
+        ''', (battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at))
+        await db.commit()
+        
+        async with db.execute('SELECT last_insert_rowid()') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def get_pending_result_by_battle_id(battle_id: int):
+    """Get a pending result by battle ID.
+    
+    Args:
+        battle_id: The battle ID
+        
+    Returns:
+        PendingResult or None
+    """
+    from models import PendingResult
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at
+            FROM pending_results
+            WHERE battle_id = ?
+        ''', (battle_id,)) as cursor:
+            row = await cursor.fetchone()
+            return PendingResult.from_db_row(row) if row else None
+
+
+async def delete_pending_result(battle_id: int):
+    """Delete a pending result.
+    
+    Args:
+        battle_id: The battle ID
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            DELETE FROM pending_results WHERE battle_id = ?
+        ''', (battle_id,))
+        await db.commit()
+
+
+async def get_all_pending_missions():
+    """Get all missions with status=2 (pending confirmation).
+    
+    Returns:
+        List of tuples: (mission_id, deploy, rules, cell, description, created_date)
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, deploy, rules, cell, mission_description, created_date
+            FROM mission_stack
+            WHERE status = 2
+            ORDER BY created_date DESC
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def update_mission_status(mission_id: int, status: int):
+    """Update the status of a mission.
+    
+    Args:
+        mission_id: The mission ID
+        status: The new status (1=active, 2=pending, 3=confirmed)
+        
+    Returns:
+        bool: True if update was successful
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE mission_stack SET status = ? WHERE id = ?
+        ''', (status, mission_id))
+        await db.commit()
+        return True
+
+
+async def get_battle_participants(battle_id: int):
+    """Get the telegram IDs of both participants in a battle.
+    
+    Args:
+        battle_id: The battle ID
+        
+    Returns:
+        Tuple of (fstplayer_id, sndplayer_id) or None
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT fstplayer, sndplayer FROM battles WHERE id = ?
+        ''', (battle_id,)) as cursor:
+            result = await cursor.fetchone()
+            return (str(result[0]), str(result[1])) if result else None
+

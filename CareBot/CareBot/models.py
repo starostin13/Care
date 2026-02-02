@@ -19,6 +19,7 @@ class Mission:
     winner_bonus: Optional[str]
     locked: int
     created_date: str
+    status: int = 1  # 1=active, 2=pending_confirmation, 3=confirmed
     
     @classmethod
     def from_db_row(cls, row):
@@ -26,7 +27,7 @@ class Mission:
         
         Args:
             row: tuple from SELECT * FROM mission_stack
-                 (id, deploy, rules, cell, mission_description, winner_bonus, locked, created_date)
+                 (id, deploy, rules, cell, mission_description, winner_bonus, locked, created_date, status)
         """
         if not row:
             return None
@@ -38,7 +39,8 @@ class Mission:
             mission_description=row[4],
             winner_bonus=row[5],
             locked=row[6],
-            created_date=row[7]
+            created_date=row[7],
+            status=row[8] if len(row) > 8 else 1
         )
     
     def to_tuple(self):
@@ -87,6 +89,7 @@ class MissionDetails:
     winner_bonus: Optional[str]
     locked: int
     created_date: str
+    status: int = 1
     # Extended fields added by mission_helper
     killzone: Optional[str] = None
     hex_state: Optional[str] = None
@@ -104,7 +107,8 @@ class MissionDetails:
             mission_description=mission.mission_description,
             winner_bonus=mission.winner_bonus,
             locked=mission.locked,
-            created_date=mission.created_date
+            created_date=mission.created_date,
+            status=mission.status
         )
 
 
@@ -174,4 +178,29 @@ class MapCell:
             q=row[2],
             r=row[3],
             state=row[4] if len(row) > 4 else None
+        )
+
+
+@dataclass
+class PendingResult:
+    """Pending result from pending_results table."""
+    id: int
+    battle_id: int
+    submitter_id: str
+    fstplayer_score: int
+    sndplayer_score: int
+    created_at: str
+    
+    @classmethod
+    def from_db_row(cls, row):
+        """Create PendingResult from database row."""
+        if not row:
+            return None
+        return cls(
+            id=row[0],
+            battle_id=row[1],
+            submitter_id=row[2],
+            fstplayer_score=row[3],
+            sndplayer_score=row[4],
+            created_at=row[5]
         )
