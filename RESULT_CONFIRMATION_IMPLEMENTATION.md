@@ -7,16 +7,16 @@ Implemented a two-step confirmation system for game results in the CareBot Teleg
 
 ### 1. Database Schema Changes
 **File**: `CareBot/CareBot/migrations/020_add_status_and_pending_results.py`
-- Added `status` column to `mission_stack` table
-  - Status values: 1=active, 2=pending_confirmation, 3=confirmed
-  - Default value: 1 (active)
+- **Renamed** `locked` column to `status` in `mission_stack` table
+  - Old values: 0=unlocked, 1=locked, 2=score_submitted
+  - New values: 0=available, 1=active, 2=pending_confirmation, 3=confirmed
 - Created new `pending_results` table to store unconfirmed results
   - Fields: id, battle_id, submitter_id, fstplayer_score, sndplayer_score, created_at
 
 ### 2. Data Models
 **File**: `CareBot/CareBot/models.py`
-- Updated `Mission` model to include `status` field
-- Updated `MissionDetails` model to include `status` field
+- Updated `Mission` model: changed `locked` field to `status` field
+- Updated `MissionDetails` model: changed `locked` field to `status` field
 - Added new `PendingResult` model with `from_db_row()` factory method
 
 ### 3. Database Helper Functions
@@ -136,7 +136,8 @@ Added functions for pending results management:
 ## Key Implementation Details
 
 ### Status Values
-- **1 (active)**: Mission can be played, no result submitted
+- **0 (available)**: Mission can be selected for play (was "unlocked")
+- **1 (active)**: Mission being played (was "locked")
 - **2 (pending_confirmation)**: Result submitted, awaiting confirmation
 - **3 (confirmed)**: Result confirmed, applied to map and ratings
 
@@ -169,10 +170,10 @@ Created `test_result_confirmation.py` which validates:
 
 1. Stop the bot
 2. Run migrations: `yoyo apply`
-   - Migration 020 will add `status` column to mission_stack
+   - Migration 020 will rename `locked` column to `status` in mission_stack
    - Migration 020 will create `pending_results` table
 3. Restart the bot
-4. All existing missions will have status=1 (active)
+4. Existing missions will retain their status values (0, 1, or 2 become valid status values)
 
 ## Future Considerations
 

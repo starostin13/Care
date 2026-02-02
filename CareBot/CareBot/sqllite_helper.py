@@ -297,7 +297,7 @@ async def unlock_expired_missions():
     """Unlock all missions with past dates that are still locked.
     
     This function updates all missions where:
-    - locked = 1 (mission is locked)
+    - status = 1 (mission is active/locked)
     - created_date is before today (mission is from a past date)
     - created_date is NULL (old missions without date - also unlocked for safety)
     
@@ -308,15 +308,15 @@ async def unlock_expired_missions():
         today = datetime.date.today().isoformat()
         cursor = await db.execute('''
             UPDATE mission_stack 
-            SET locked=0 
-            WHERE locked=1 AND (created_date < ? OR created_date IS NULL)
+            SET status=0 
+            WHERE status=1 AND (created_date < ? OR created_date IS NULL)
         ''', (today,))
         await db.commit()
         return cursor.rowcount
 
 
 async def get_mission(rules) -> Optional[Mission]:
-    """Get an unlocked mission by rules.
+    """Get an available mission by rules.
     
     Args:
         rules: Mission ruleset (killteam, wh40k, etc.)
@@ -329,9 +329,9 @@ async def get_mission(rules) -> Optional[Mission]:
     
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, deploy, rules, cell, mission_description, winner_bonus, locked, created_date
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
             FROM mission_stack
-            WHERE locked=0 AND rules=?
+            WHERE status=0 AND rules=?
         ''', (rules,)) as cursor:
             row = await cursor.fetchone()
             return Mission.from_db_row(row)
@@ -566,15 +566,16 @@ async def is_hex_patroned_by(cell_id, participant_telegram):
 
 
 async def lock_mission(mission_id):
+    """Lock a mission by setting its status to 1 (active/locked)."""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
-            UPDATE mission_stack SET locked=1 WHERE id=?
+            UPDATE mission_stack SET status=1 WHERE id=?
         ''', (mission_id,))
         await db.commit()
 
 
 async def set_mission_score_submitted(mission_id):
-    """Set mission locked status to 2 when battle score is submitted.
+    """Set mission status to 2 when battle score is submitted.
     
     Args:
         mission_id: The ID of the mission to update
@@ -584,7 +585,7 @@ async def set_mission_score_submitted(mission_id):
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute('''
-            UPDATE mission_stack SET locked=2 WHERE id=?
+            UPDATE mission_stack SET status=2 WHERE id=?
         ''', (mission_id,))
         await db.commit()
         return cursor.rowcount > 0
@@ -836,7 +837,7 @@ async def get_mission_details(mission_id) -> Optional[Mission]:
     logger.info("get_mission_details(mission_id=%s)", mission_id)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, deploy, rules, cell, mission_description, winner_bonus, locked, created_date
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
             FROM mission_stack WHERE id = ?
         ''', (mission_id,)) as cursor:
             row = await cursor.fetchone()
