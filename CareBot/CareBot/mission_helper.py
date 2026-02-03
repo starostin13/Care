@@ -17,6 +17,111 @@ REINFORCEMENT_RESTRICTION_MESSAGE = (
     "за исключением тех кто имеет правило Deep Strike"
 )
 
+# Battlefleet Gothica celestial phenomena generators
+BATTLEZONE_GENERATORS = {
+    1: {  # Asteroid Field
+        1: "Dense Asteroid Cluster - Ships moving through reduce speed by 2\"",
+        2: "Asteroid Belt - Provides cover, enemies get -1 to hit",
+        3: "Scattered Debris - No effect on movement",
+        4: "Mining Operation - Abandoned structures provide partial cover",
+        5: "Ice Field - Sensors reduced, -2\" to detection range",
+        6: "Metallic Asteroids - Interferes with targeting systems"
+    },
+    2: {  # Nebula Zone
+        1: "Gas Cloud - Reduces weapon range by 6\"",
+        2: "Plasma Storm - Random energy discharges, roll for damage each turn",
+        3: "Dust Cloud - All ships count as obscured",
+        4: "Ion Nebula - Shields reduced by 1",
+        5: "Radiation Field - Crew take 1 damage per turn inside",
+        6: "Clear Zone - No effect"
+    },
+    3: {  # Gravity Wells
+        1: "Massive Gravity Well - All movement reduced by 3\"",
+        2: "Unstable Gravity - Random direction pull each turn",
+        3: "Black Hole Proximity - Ships within 12\" pulled 2\" towards center",
+        4: "Tidal Forces - Ships take 1 hull damage if moving at full speed",
+        5: "Gravitational Anomaly - Unpredictable sensor readings",
+        6: "Stable Orbit Zone - +1 to hit for ships not moving"
+    },
+    4: {  # Solar Phenomena
+        1: "Solar Flare - All shields at -2 this turn",
+        2: "Radiation Burst - Communications disrupted",
+        3: "Electromagnetic Pulse - Ordnance weapons gain +1 strength",
+        4: "Corona Discharge - Energy weapons reduced range by 6\"",
+        5: "Stellar Wind - All ships pushed 3\" in random direction",
+        6: "Magnetic Storm - Torpedoes may veer off course"
+    },
+    5: {  # Debris Field
+        1: "Ship Wreckage - Provides full cover",
+        2: "Battle Debris - Hazardous terrain, moving ships roll for damage",
+        3: "Ancient Hulk - Can be used as cover or boarded",
+        4: "Orbital Wreckage - Scattered debris, no effect",
+        5: "Minefield Remnants - Roll D6 when entering, 5+ takes 1 damage",
+        6: "Salvage Field - No combat effect"
+    },
+    6: {  # Planetary Bodies
+        1: "Moon - Provides cover and gravity well",
+        2: "Small Planet - Can use for slingshot maneuvers",
+        3: "Gas Giant - Obscures sensors within 6\"",
+        4: "Planetary Ring - Counts as asteroid field",
+        5: "Barren Rock - Blocks line of sight",
+        6: "Space Station - Neutral fortification"
+    }
+}
+
+
+def generate_battlefleet_map():
+    """Generate celestial phenomena map for Battlefleet Gothica missions.
+    
+    Based on Setting Up Celestial Phenomena: Method 2
+    Divides table into 60cm square areas and generates phenomena.
+    
+    Returns:
+        str: Formatted map description with celestial phenomena
+    """
+    # Standard table is typically 120cm x 180cm, giving us 2x3 = 6 areas of 60cm each
+    # We'll use a simpler 2x3 grid (6 areas total)
+    areas = []
+    
+    # First, determine which battlezone generator to use (D6 roll)
+    generator_type = random.randint(1, 6)
+    generator_name = {
+        1: "Asteroid Field",
+        2: "Nebula Zone", 
+        3: "Gravity Wells",
+        4: "Solar Phenomena",
+        5: "Debris Field",
+        6: "Planetary Bodies"
+    }[generator_type]
+    
+    selected_generator = BATTLEZONE_GENERATORS[generator_type]
+    
+    # Check each area (6 total in 2x3 grid)
+    area_labels = [
+        "Top-Left", "Top-Center", "Top-Right",
+        "Bottom-Left", "Bottom-Center", "Bottom-Right"
+    ]
+    
+    for i, label in enumerate(area_labels):
+        # Roll D6 for each area - on 4+ it contains phenomena
+        roll = random.randint(1, 6)
+        if roll >= 4:
+            # Generate phenomena from the selected generator
+            phenomena_roll = random.randint(1, 6)
+            phenomena = selected_generator[phenomena_roll]
+            areas.append(f"  • {label}: {phenomena}")
+        else:
+            areas.append(f"  • {label}: Empty space")
+    
+    # Build the final map description
+    map_desc = f"🗺️ BATTLEFLEET MAP - {generator_name.upper()}\n\n"
+    map_desc += "Celestial Phenomena (60cm grid areas):\n"
+    map_desc += "\n".join(areas)
+    map_desc += "\n\n📋 Note: Position phenomena anywhere within each area, but don't overlap them."
+    
+    return map_desc
+
+
 
 def generate_new_one(rules):
     """Generates a new mission based on the provided ruleset."""
@@ -39,7 +144,7 @@ def generate_new_one(rules):
         description = random.choice(missions)
 
         # cell should be None when generating, assigned later when mission is selected
-        return (mission_name, rules, None, description, None)
+        return (mission_name, rules, None, description, None, None)
 
     elif rules == "boarding_action":
         deploy_types = ["Breach Points", "Ship Interface", "Void Strike"]
@@ -53,8 +158,8 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Forces must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        # Return tuple with cell=None, no winner_bonus for boarding_action
-        return (deploy, rules, None, description, None)
+        # Return tuple with cell=None, no winner_bonus, no map_description for boarding_action
+        return (deploy, rules, None, description, None, None)
 
     elif rules == "combat_patrol":
         deploy_types = ["Strategic Reserves",
@@ -71,8 +176,8 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Patrol forces must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        # Return tuple with cell=None for consistency
-        return (deploy, rules, None, description, None)
+        # Return tuple with cell=None, no winner_bonus, no map_description for consistency
+        return (deploy, rules, None, description, None, None)
 
     elif rules == "wh40k":
         deploy_types = ["Total Domination"]
@@ -85,8 +190,8 @@ def generate_new_one(rules):
         description = random.choice(missions)
         deploy = random.choice(deploy_types)
         winner_bonus = random.choice(winner_bonuses)
-        # Return tuple with cell=None, winner_bonus included for wh40k
-        return (deploy, rules, None, description, winner_bonus)
+        # Return tuple with cell=None, winner_bonus included, no map_description for wh40k
+        return (deploy, rules, None, description, winner_bonus, None)
 
     elif rules == "battlefleet":
         deploy_types = ["Convoy Pattern", "Battle Line", "Orbital Superiority"]
@@ -103,13 +208,15 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Fleet must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        # Return tuple with cell=None, no winner_bonus for battlefleet
-        return (deploy, rules, None, description, None)
+        # Generate celestial phenomena map
+        map_description = generate_battlefleet_map()
+        # Return tuple with cell=None, no winner_bonus, but with map_description for battlefleet
+        return (deploy, rules, None, description, None, map_description)
 
     else:
         # Default case if rules type is not recognized
-        # Return tuple with cell=None for consistency
-        return ('Only War', rules, None, f'Generic mission for {rules}', None)
+        # Return tuple with cell=None, no winner_bonus, no map_description for consistency
+        return ('Only War', rules, None, f'Generic mission for {rules}', None, None)
 
 
 async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, defender_id: Optional[str] = None):
@@ -227,6 +334,15 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
             return result
         else:
             return mission.to_tuple()
+    
+    elif rules == "battlefleet":
+        # Lock mission and include map description
+        await sqllite_helper.lock_mission(mission.id)
+        result = mission.to_tuple()
+        # Add map description if available
+        if mission.map_description:
+            result = result + (mission.map_description,)
+        return result
 
     return mission.to_tuple()
 
@@ -650,6 +766,7 @@ async def handle_alliance_elimination(eliminated_alliance_id, context=None):
                 None,  # cell (NULL)
                 "Collect resources from eliminated alliance reserves.",
                 None,  # winner_bonus
+                None,  # map_description
             )
             await sqllite_helper.save_mission(mission_data)
     

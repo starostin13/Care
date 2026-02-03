@@ -143,6 +143,12 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Формируем текст для пользователя используя message builder
     mission_description = mission[3] or ''
     mission_rules = mission[1] or ''
+    # Check if map_description is available (for battlefleet missions)
+    # For battlefleet missions, the tuple is: (deploy, rules, cell, description, winner_bonus, map_description)
+    # But it's appended after to_tuple(), so it would be at index 5
+    map_description = None
+    if len(mission) > 5 and mission_rules == "battlefleet":
+        map_description = mission[5]
     
     # Helper function to build message for a player
     def build_mission_message(opponent_is_dominant, opponent_nickname):
@@ -157,6 +163,10 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Add common components
         builder.add_situation(situation)
         builder.add_reinforcement_message(reinforcement_message)
+        
+        # Add map description for battlefleet missions
+        if map_description:
+            builder.add_custom_info(f"\n{map_description}")
         
         return builder.build()
     
