@@ -46,10 +46,10 @@ class Mission:
     def to_tuple(self):
         """Convert to tuple for backwards compatibility.
         
-        Returns tuple in old format:
-        (deploy, rules, cell, mission_description, winner_bonus)
+        Returns tuple in format:
+        (deploy, rules, cell, mission_description, id, winner_bonus)
         """
-        return (self.deploy, self.rules, self.cell, self.mission_description, self.winner_bonus)
+        return (self.deploy, self.rules, self.cell, self.mission_description, self.id, self.winner_bonus)
 
 
 @dataclass

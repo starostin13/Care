@@ -11,6 +11,7 @@ import asyncio
 import random
 import os
 from typing import List, Tuple, Optional, Dict, Any
+from models import Mission
 
 # Критическая защита от использования в production
 if os.getenv('CAREBOT_TEST_MODE', 'false').lower() != 'true':
@@ -513,28 +514,34 @@ async def get_faction_of_warmaster(user_telegram_id):
 async def get_mission(rules):
     """
     Mock реализация для получения миссии по правилам.
-    Возвращает кортеж формата: (deploy, rules, cell, mission_description, id, locked, created_date)
-    Совместимо с реальной структурой таблицы mission_stack.
+    Возвращает Mission объект совместимо с реальной структурой.
     """
     print(f"🧪 Mock: get_mission({rules})")
     
     # Разблокируем просроченные миссии перед получением
     await unlock_expired_missions()
     
-    # Генерируем тестовые данные в правильном формате
+    # Генерируем тестовые данные
     mission_id = random.randint(1, 100)
-    cell_id = random.randint(1, 50)  # Cell ID для карты
+    cell_id = random.randint(1, 50)
     today = datetime.date.today().isoformat()
     
-    # Формат: (deploy, rules, cell, mission_description, id, locked, created_date)
-    return (
-        f"Mock {rules} Deploy",    # deploy
-        rules,                     # rules
-        cell_id,                   # cell (это mission[2] которое ожидается)
-        f"Тестовая миссия для {rules}",  # mission_description
-        mission_id,               # id
-        0,                        # locked (0 = unlocked, 1 = locked)
-        today                     # created_date
+    # For battlefleet, include map description
+    map_description = None
+    if rules == "battlefleet":
+        map_description = "🗺️ BATTLEFLEET MAP - TEST\n\nCelestial Phenomena:\n  • Test Area: Mock Phenomenon"
+    
+    # Create Mission object
+    return Mission(
+        id=mission_id,
+        deploy=f"Mock {rules} Deploy",
+        rules=rules,
+        cell=cell_id,
+        mission_description=f"Тестовая миссия для {rules}",
+        winner_bonus=None,
+        locked=0,
+        created_date=today,
+        map_description=map_description
     )
 
 async def get_schedule_by_user(user_telegram, date=None):
@@ -732,12 +739,18 @@ async def get_mission_id_by_battle_id(battle_id):
 
 async def get_mission_details(mission_id):
     print(f"🧪 Mock: get_mission_details({mission_id})")
-    return {
-        'id': mission_id,
-        'name': 'Mock Mission',
-        'description': 'Test mission details',
-        'rules': 'wh40k'
-    }
+    today = datetime.date.today().isoformat()
+    return Mission(
+        id=mission_id,
+        deploy='Mock Deploy',
+        rules='wh40k',
+        cell=None,
+        mission_description='Test mission details',
+        winner_bonus=None,
+        locked=0,
+        created_date=today,
+        map_description=None
+    )
 
 async def destroy_warehouse_by_alliance(alliance_id):
     print(f"🧪 Mock: destroy_warehouse_by_alliance({alliance_id})")
