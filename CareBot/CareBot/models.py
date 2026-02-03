@@ -48,6 +48,9 @@ class Mission:
         
         Returns tuple in format:
         (deploy, rules, cell, mission_description, id, winner_bonus)
+        
+        Note: map_description is NOT included in the base tuple. It's added
+        separately by mission_helper.get_mission() for specific mission types.
         """
         return (self.deploy, self.rules, self.cell, self.mission_description, self.id, self.winner_bonus)
 

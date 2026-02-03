@@ -102,7 +102,7 @@ def generate_battlefleet_map():
         "Bottom-Left", "Bottom-Center", "Bottom-Right"
     ]
     
-    for i, label in enumerate(area_labels):
+    for label in area_labels:
         # Roll D6 for each area - on 4+ it contains phenomena
         roll = random.randint(1, 6)
         if roll >= 4:
