@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   carebot-production:
-    build:
-      context: .
-      dockerfile: Dockerfile.production
+    image: carebot:latest
     container_name: carebot_production
     ports:
       - "5555:5555"

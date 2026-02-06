@@ -15,6 +15,14 @@ from yoyo import step
 
 def rename_locked_to_status_and_create_pending_results(conn):
     cursor = conn.cursor()
+
+    # Preserve trigger definitions that depend on mission_stack.
+    cursor.execute("""
+        SELECT sql FROM sqlite_master
+        WHERE type='trigger' AND name='validate_battle_mission_id'
+    """)
+    trigger_row = cursor.fetchone()
+    trigger_sql = trigger_row[0] if trigger_row else None
     
     # Check current schema
     cursor.execute("PRAGMA table_info(mission_stack)")
@@ -24,6 +32,9 @@ def rename_locked_to_status_and_create_pending_results(conn):
     if 'locked' in columns and 'status' not in columns:
         # SQLite doesn't support RENAME COLUMN in older versions, so we need to recreate the table
         print("🔄 Renaming 'locked' column to 'status' in mission_stack...")
+
+        if trigger_sql:
+            cursor.execute("DROP TRIGGER IF EXISTS validate_battle_mission_id")
         
         # Create new table with status column
         cursor.execute("""
@@ -51,6 +62,9 @@ def rename_locked_to_status_and_create_pending_results(conn):
         
         # Rename new table to original name
         cursor.execute("ALTER TABLE mission_stack_new RENAME TO mission_stack")
+
+        if trigger_sql:
+            cursor.execute(trigger_sql)
         
         print("✅ Successfully renamed 'locked' to 'status' in mission_stack")
         
