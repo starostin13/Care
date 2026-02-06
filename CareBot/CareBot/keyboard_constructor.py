@@ -190,17 +190,53 @@ async def this_week(rule, user_id):
     def format_day(date_obj):
         return f"{day_abbr[date_obj.weekday()]} {date_obj.strftime('%d.%m')}"
     
+    async def create_day_button(date, user_bookings, rule):
+        """Helper function to create a calendar day button.
+        
+        Args:
+            date: datetime object for the day
+            user_bookings: dict mapping date strings to rule names
+            rule: current rule being displayed
+            
+        Returns:
+            InlineKeyboardButton for the day
+        """
+        date_str = str(date.date())
+        count = await sqllite_helper.get_daily_rule_participant_count(rule, date_str)
+        emoji = get_participant_count_emoji(count)
+        
+        # Check if user is booked for other rules on this date
+        is_booked_for_other_rule = date_str in user_bookings and user_bookings[date_str] != rule
+        
+        # Add blue circle only if user is booked for a different rule
+        prefix = "🔵 " if is_booked_for_other_rule else ""
+        button_text = f"{prefix}{format_day(date)}{emoji}"
+        
+        return InlineKeyboardButton(
+            button_text,
+            callback_data=f"{date.strftime('%c')},rule:{rule}"
+        )
+    
     # Создаем список дат на следующие 7 дней начиная с сегодня
     menu_values = []
     for i in range(7):
         date = today + timedelta(days=i)
         menu_values.append(date)
 
+    # Get user's existing bookings for all dates in the week
+    date_strs = [str(date.date()) for date in menu_values]
+    user_bookings = await sqllite_helper.get_user_bookings_for_dates(user_id, date_strs)
+
     # Разделяем дни на выходные (суббота=5, воскресенье=6) и будни
     weekend_days = []
     weekdays = []
     
     for date in menu_values:
+        date_str = str(date.date())
+        # Skip dates where user is already booked for the selected rule
+        if date_str in user_bookings and user_bookings[date_str] == rule:
+            continue
+            
         if date.weekday() in [5, 6]:  # Saturday=5, Sunday=6
             weekend_days.append(date)
         else:
@@ -209,50 +245,19 @@ async def this_week(rule, user_id):
     # Создаем кнопки для дней
     days = []
     
-    # Первый ряд: выходные дни (всегда первыми с выделением)
+    # Первый ряд: выходные дни (всегда первыми, без выделения)
     if weekend_days:
         weekend_row = []
         for date in weekend_days:
-            # Get participant count for this rule and date
-            date_str = str(date.date())
-            count = await sqllite_helper.get_daily_rule_participant_count(rule, date_str)
-            emoji = get_participant_count_emoji(count)
-            
-            # DEBUG: log the count and emoji for troubleshooting
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Weekend Date: {date_str}, Rule: {rule}, Count: {count}, Emoji: {emoji}")
-            
-            # Добавляем эмодзи 🔵 для выделения выходных
-            button_text = f"🔵 {format_day(date)}{emoji}"
-            weekend_row.append(
-                InlineKeyboardButton(
-                    button_text,
-                    callback_data=f"{date.strftime('%c')},rule:{rule}"
-                )
-            )
+            button = await create_day_button(date, user_bookings, rule)
+            weekend_row.append(button)
         days.append(weekend_row)
     
     # Остальные ряды: будни (по 2-3 кнопки в ряду)
     weekday_buttons = []
     for date in weekdays:
-        # Get participant count for this rule and date
-        date_str = str(date.date())
-        count = await sqllite_helper.get_daily_rule_participant_count(rule, date_str)
-        emoji = get_participant_count_emoji(count)
-        
-        # DEBUG: log the count and emoji for troubleshooting
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Date: {date_str}, Rule: {rule}, Count: {count}, Emoji: {emoji}")
-        
-        button_text = f"{format_day(date)}{emoji}"
-        weekday_buttons.append(
-            InlineKeyboardButton(
-                button_text,
-                callback_data=f"{date.strftime('%c')},rule:{rule}"
-            )
-        )
+        button = await create_day_button(date, user_bookings, rule)
+        weekday_buttons.append(button)
     
     # Распределяем будни по рядам (по 2-3 кнопки)
     i = 0

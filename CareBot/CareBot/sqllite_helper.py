@@ -362,6 +362,33 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
             return await cursor.fetchall()
 
 
+async def get_user_bookings_for_dates(user_telegram, dates: List[str]) -> Dict[str, str]:
+    """Get user's bookings for a list of dates.
+    
+    Args:
+        user_telegram: User's telegram ID
+        dates: List of date strings in ISO format (YYYY-MM-DD), 
+               e.g., as returned by str(date.date())
+        
+    Returns:
+        Dictionary mapping date to rule name for dates where user has bookings
+        Example: {'2024-04-27': 'killteam', '2024-04-28': 'wh40k'}
+    """
+    if not dates:
+        return {}
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Create placeholders for the IN clause
+        placeholders = ','.join('?' * len(dates))
+        async with db.execute(f'''
+            SELECT date, rules
+            FROM schedule
+            WHERE user_telegram = ? AND date IN ({placeholders})
+        ''', (user_telegram, *dates)) as cursor:
+            results = await cursor.fetchall()
+            return {date: rule for date, rule in results}
+
+
 async def get_settings(telegram_user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
