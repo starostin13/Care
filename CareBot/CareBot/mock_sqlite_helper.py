@@ -580,6 +580,25 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
     print(f"🧪 Mock: Сгенерировано {len(schedule_entries)} записей расписания")
     return schedule_entries
 
+
+async def get_user_bookings_for_dates(user_telegram, dates):
+    """
+    Mock реализация для получения бронирований пользователя на указанные даты.
+    
+    Args:
+        user_telegram: User's telegram ID
+        dates: List of date strings in format YYYY-MM-DD
+        
+    Returns:
+        Dictionary mapping date to rule name for dates where user has bookings
+    """
+    print(f"🧪 Mock: get_user_bookings_for_dates({user_telegram}, {dates})")
+    
+    # В mock режиме возвращаем пустой словарь (нет бронирований)
+    # В реальных тестах можно добавить mock данные
+    return {}
+
+
 async def get_settings(telegram_user_id):
     print(f"🧪 Mock: get_settings({telegram_user_id})")
     user = await get_user_by_telegram_id(telegram_user_id)

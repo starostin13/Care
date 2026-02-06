@@ -196,11 +196,20 @@ async def this_week(rule, user_id):
         date = today + timedelta(days=i)
         menu_values.append(date)
 
+    # Get user's existing bookings for all dates in the week
+    date_strs = [str(date.date()) for date in menu_values]
+    user_bookings = await sqllite_helper.get_user_bookings_for_dates(user_id, date_strs)
+
     # Разделяем дни на выходные (суббота=5, воскресенье=6) и будни
     weekend_days = []
     weekdays = []
     
     for date in menu_values:
+        date_str = str(date.date())
+        # Skip dates where user is already booked for the selected rule
+        if date_str in user_bookings and user_bookings[date_str] == rule:
+            continue
+            
         if date.weekday() in [5, 6]:  # Saturday=5, Sunday=6
             weekend_days.append(date)
         else:
@@ -209,7 +218,7 @@ async def this_week(rule, user_id):
     # Создаем кнопки для дней
     days = []
     
-    # Первый ряд: выходные дни (всегда первыми с выделением)
+    # Первый ряд: выходные дни (всегда первыми, без выделения)
     if weekend_days:
         weekend_row = []
         for date in weekend_days:
@@ -218,13 +227,12 @@ async def this_week(rule, user_id):
             count = await sqllite_helper.get_daily_rule_participant_count(rule, date_str)
             emoji = get_participant_count_emoji(count)
             
-            # DEBUG: log the count and emoji for troubleshooting
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Weekend Date: {date_str}, Rule: {rule}, Count: {count}, Emoji: {emoji}")
+            # Check if user is booked for other rules on this date
+            is_booked_for_other_rule = date_str in user_bookings and user_bookings[date_str] != rule
             
-            # Добавляем эмодзи 🔵 для выделения выходных
-            button_text = f"🔵 {format_day(date)}{emoji}"
+            # Add blue circle only if user is booked for a different rule
+            prefix = "🔵 " if is_booked_for_other_rule else ""
+            button_text = f"{prefix}{format_day(date)}{emoji}"
             weekend_row.append(
                 InlineKeyboardButton(
                     button_text,
@@ -241,12 +249,12 @@ async def this_week(rule, user_id):
         count = await sqllite_helper.get_daily_rule_participant_count(rule, date_str)
         emoji = get_participant_count_emoji(count)
         
-        # DEBUG: log the count and emoji for troubleshooting
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Date: {date_str}, Rule: {rule}, Count: {count}, Emoji: {emoji}")
+        # Check if user is booked for other rules on this date
+        is_booked_for_other_rule = date_str in user_bookings and user_bookings[date_str] != rule
         
-        button_text = f"{format_day(date)}{emoji}"
+        # Add blue circle only if user is booked for a different rule
+        prefix = "🔵 " if is_booked_for_other_rule else ""
+        button_text = f"{prefix}{format_day(date)}{emoji}"
         weekday_buttons.append(
             InlineKeyboardButton(
                 button_text,
