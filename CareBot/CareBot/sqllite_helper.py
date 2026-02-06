@@ -367,7 +367,8 @@ async def get_user_bookings_for_dates(user_telegram, dates: List[str]) -> Dict[s
     
     Args:
         user_telegram: User's telegram ID
-        dates: List of date strings in format YYYY-MM-DD
+        dates: List of date strings in ISO format (YYYY-MM-DD), 
+               e.g., as returned by str(date.date())
         
     Returns:
         Dictionary mapping date to rule name for dates where user has bookings
