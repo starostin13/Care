@@ -186,13 +186,12 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
 
     if rules == "killteam":
         if cell_id is not None:
-            await sqllite_helper.lock_mission(mission.id)
             state = await sqllite_helper.get_state(cell_id)
 
             # Получаем killzone для данного state гекса (или None)
             hex_state = state[0] if state is not None else None
             killzone = get_killzone_for_mission(hex_state)
-            
+
             # Build result tuple with extra info
             result = mission.to_tuple() + (f"Killzone: {killzone}",)
 
@@ -202,16 +201,14 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
             history = await sqllite_helper.get_cell_history(cell_id)
             for point in history:
                 result = result + tuple(point)  # Convert Row to tuple
-            
+
             return result
         else:
-            # For killteam without cell, just lock the mission
-            await sqllite_helper.lock_mission(mission.id)
+            # For killteam without cell, return mission tuple
             return mission.to_tuple()
 
     elif rules == "wh40k":
-        # Lock mission by id
-        await sqllite_helper.lock_mission(mission.id)
+        # Return mission info without locking
         if cell_id is not None:
             # If cell is assigned, add extra info
             number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)

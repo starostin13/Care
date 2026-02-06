@@ -110,6 +110,10 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error(f"Failed to start battle: {e}")
         await query.edit_message_text(f"Ошибка при создании битвы: {str(e)}")
         return MISSIONS
+
+    # Lock the mission now that battle has been successfully created
+    await sqllite_helper.lock_mission(mission_id)
+
     situation = await mission_helper.get_situation(battle_id, [(attacker_id,), (defender_id,)])
     
     # Check if attacker has reinforcement restrictions
