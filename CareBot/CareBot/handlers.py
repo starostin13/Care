@@ -629,8 +629,7 @@ async def confirm_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Send success message
         await query.edit_message_text(
             f"✅ Результат подтверждён!\n"
-            f"Счёт: {pending_result.fstplayer_score}:{pending_result.sndplayer_score}\n"
-            f"Результаты применены к карте и рейтингу."
+            f"Счёт: {pending_result.fstplayer_score}:{pending_result.sndplayer_score}"
         )
         
         # Notify the submitter that result was confirmed
@@ -1516,7 +1515,7 @@ async def admin_confirm_mission(update: Update, context: ContextTypes.DEFAULT_TY
         winner_text = "🤝 Ничья"
     
     message_text = (
-        f"🎲 Миссия #{mission_id}\n"
+        f"📋 Миссия #{mission_id}\n"
         f"📜 Правила: {mission_details.rules if mission_details else 'неизвестно'}\n"
         f"📅 Создана: {mission_details.created_date if mission_details else 'неизвестно'}\n\n"
         f"{participants_text}\n"

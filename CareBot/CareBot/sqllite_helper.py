@@ -10,7 +10,7 @@ import os
 import random
 import logging
 from typing import List, Dict, Optional
-from models import Mission, Battle, MissionDetails, Warmaster, Alliance, MapCell
+from models import Mission, Battle, MissionDetails, Warmaster, Alliance, MapCell, PendingResult
 
 logger = logging.getLogger(__name__)
 
@@ -1497,8 +1497,7 @@ async def create_pending_result(battle_id: int, submitter_id: str,
     Returns:
         int: The ID of the created pending result
     """
-    from datetime import datetime
-    created_at = datetime.now().isoformat()
+    created_at = datetime.datetime.now().isoformat()
     
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
@@ -1521,7 +1520,6 @@ async def get_pending_result_by_battle_id(battle_id: int):
     Returns:
         PendingResult or None
     """
-    from models import PendingResult
     
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
