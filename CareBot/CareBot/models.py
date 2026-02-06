@@ -175,3 +175,28 @@ class MapCell:
             r=row[3],
             state=row[4] if len(row) > 4 else None
         )
+
+
+@dataclass
+class PendingResult:
+    """Pending result from pending_results table."""
+    id: int
+    battle_id: int
+    submitter_id: str
+    fstplayer_score: int
+    sndplayer_score: int
+    created_at: str
+    
+    @classmethod
+    def from_db_row(cls, row):
+        """Create PendingResult from database row."""
+        if not row:
+            return None
+        return cls(
+            id=row[0],
+            battle_id=row[1],
+            submitter_id=row[2],
+            fstplayer_score=row[3],
+            sndplayer_score=row[4],
+            created_at=row[5]
+        )
