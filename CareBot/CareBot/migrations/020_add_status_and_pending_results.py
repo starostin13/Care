@@ -1,5 +1,5 @@
 """
-Migration 020: Rename locked column to status and add submitter_id to battles
+Migration 020: Rename locked column to status
 This enables the confirmation flow for game results.
 
 The locked column is renamed to status for clarity.
@@ -9,11 +9,12 @@ Status values:
 - 2: Pending confirmation (score submitted, awaiting confirmation) - NEW
 - 3: Confirmed (score confirmed, results applied) - NEW
 
-The battles table gets a submitter_id column to track who submitted the result.
+Note: The submitter of the result can be determined by checking who confirmed it
+(the non-confirmer must be the submitter).
 """
 from yoyo import step
 
-def rename_locked_to_status_and_add_submitter(conn):
+def rename_locked_to_status(conn):
     cursor = conn.cursor()
     
     # Check current schema
@@ -63,16 +64,6 @@ def rename_locked_to_status_and_add_submitter(conn):
         cursor.execute("ALTER TABLE mission_stack ADD COLUMN status INTEGER DEFAULT 0")
         print("✅ Added 'status' column to mission_stack")
     
-    # Add submitter_id column to battles table
-    cursor.execute("PRAGMA table_info(battles)")
-    battle_columns = [col[1] for col in cursor.fetchall()]
-    
-    if 'submitter_id' not in battle_columns:
-        cursor.execute("ALTER TABLE battles ADD COLUMN submitter_id TEXT")
-        print("✅ Added 'submitter_id' column to battles table")
-    else:
-        print("✅ 'submitter_id' column already exists in battles table")
-    
     conn.commit()
 
-steps = [step(rename_locked_to_status_and_add_submitter)]
+steps = [step(rename_locked_to_status)]

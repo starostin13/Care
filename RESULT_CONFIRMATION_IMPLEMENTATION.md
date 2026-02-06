@@ -10,27 +10,33 @@ Implemented a two-step confirmation system for game results in the CareBot Teleg
 - **Renamed** `locked` column to `status` in `mission_stack` table
   - Old values: 0=unlocked, 1=locked, 2=score_submitted
   - New values: 0=available, 1=active, 2=pending_confirmation, 3=confirmed
-- **Added** `submitter_id` column to `battles` table to track who submitted the result
+- **No additional columns** to battles table
 - **No separate pending_results table** - uses existing battles table structure
 
 ### 2. Data Models
 **File**: `CareBot/CareBot/models.py`
 - Updated `Mission` model: changed `locked` field to `status` field
 - Updated `MissionDetails` model: changed `locked` field to `status` field
-- **No new PendingResult model** - uses existing Battle model with submitter_id
+- **No new models** - uses existing Battle model
 
 ### 3. Database Helper Functions
 **File**: `CareBot/CareBot/sqllite_helper.py`
 
-Replaced pending_results table functions with battles table-based functions:
-- `submit_battle_result()` - Store scores and submitter in battles table
-- `get_battle_result()` - Retrieve battle result including submitter
-- `clear_battle_result()` - Clear scores and submitter (on cancellation)
+Updated battle results management functions:
+- `submit_battle_result()` - Store scores in battles table (removed submitter_id param)
+- `get_battle_result()` - Retrieve battle result (no submitter_id returned)
+- `clear_battle_result()` - Clear scores (on cancellation)
+- `get_battle_participants()` - **Fixed** to query from battle_attenders table correctly
 - `get_all_pending_missions()` - Get missions with status=2
 - `update_mission_status()` - Update mission status
-- `get_battle_participants()` - Get both players in a battle (from battle_attenders)
 - `get_pending_missions_count()` - Count pending missions
 - `get_battle_id_by_mission_id()` - Find battle by mission
+
+### Key Design Decision
+The submitter is determined dynamically:
+- Players always enter their own score first, then opponent's score
+- When confirming/canceling, the submitter is the participant who is NOT performing the action
+- For admin confirmations, the first player (attacker) is used as the reference player
 
 ### 4. Result Submission Flow
 **File**: `CareBot/CareBot/handlers.py`
@@ -171,10 +177,9 @@ Created `test_result_confirmation.py` which validates:
 1. Stop the bot
 2. Run migrations: `yoyo apply`
    - Migration 020 will rename `locked` column to `status` in mission_stack
-   - Migration 020 will add `submitter_id` column to battles table
 3. Restart the bot
 4. Existing missions will retain their status values (0, 1, or 2 become valid status values)
-5. Existing battles will have NULL submitter_id until a new result is submitted
+5. The submitter is determined dynamically based on who confirms (the non-confirmer is the submitter)
 
 ## Future Considerations
 

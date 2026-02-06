@@ -1484,18 +1484,18 @@ async def get_all_players():
 # Pending Results Management (using battles table)
 # ============================================================================
 
-async def submit_battle_result(battle_id: int, submitter_id: str, 
+async def submit_battle_result(battle_id: int, 
                                fstplayer_score: int, sndplayer_score: int) -> bool:
     """Submit a battle result (pending confirmation).
     
-    Stores the scores in the battles table along with who submitted them.
+    Stores the scores in the battles table.
     The result is not considered confirmed until the mission status is set to 3.
+    The submitter can be determined by comparing the confirming user with battle participants.
     
     Args:
         battle_id: The battle ID
-        submitter_id: Telegram ID of the user who submitted the result
-        fstplayer_score: Score of the first player
-        sndplayer_score: Score of the second player
+        fstplayer_score: Score of the first player (attacker)
+        sndplayer_score: Score of the second player (defender)
         
     Returns:
         bool: True if successful
@@ -1503,26 +1503,26 @@ async def submit_battle_result(battle_id: int, submitter_id: str,
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
             UPDATE battles
-            SET fstplayer = ?, sndplayer = ?, submitter_id = ?
+            SET fstplayer = ?, sndplayer = ?
             WHERE id = ?
-        ''', (fstplayer_score, sndplayer_score, submitter_id, battle_id))
+        ''', (fstplayer_score, sndplayer_score, battle_id))
         await db.commit()
         return True
 
 
 async def get_battle_result(battle_id: int):
-    """Get battle result including submitter.
+    """Get battle result.
     
     Args:
         battle_id: The battle ID
         
     Returns:
-        dict with keys: battle_id, mission_id, fstplayer_score, sndplayer_score, submitter_id
+        dict with keys: battle_id, mission_id, fstplayer_score, sndplayer_score
         or None if not found
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, mission_id, fstplayer, sndplayer, submitter_id
+            SELECT id, mission_id, fstplayer, sndplayer
             FROM battles
             WHERE id = ?
         ''', (battle_id,)) as cursor:
@@ -1533,8 +1533,7 @@ async def get_battle_result(battle_id: int):
                 'battle_id': row[0],
                 'mission_id': row[1],
                 'fstplayer_score': row[2],
-                'sndplayer_score': row[3],
-                'submitter_id': row[4]
+                'sndplayer_score': row[3]
             }
 
 
@@ -1547,7 +1546,7 @@ async def clear_battle_result(battle_id: int):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
             UPDATE battles
-            SET fstplayer = NULL, sndplayer = NULL, submitter_id = NULL
+            SET fstplayer = NULL, sndplayer = NULL
             WHERE id = ?
         ''', (battle_id,))
         await db.commit()
@@ -1588,20 +1587,25 @@ async def update_mission_status(mission_id: int, status: int):
 
 
 async def get_battle_participants(battle_id: int):
-    """Get the telegram IDs of both participants in a battle.
+    """Get the telegram IDs of both participants in a battle from battle_attenders.
     
     Args:
         battle_id: The battle ID
         
     Returns:
-        Tuple of (fstplayer_id, sndplayer_id) or None
+        Tuple of (player1_id, player2_id) where player1 is the first attender (attacker)
+        and player2 is the second attender (defender), or None if not found
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT fstplayer, sndplayer FROM battles WHERE id = ?
+            SELECT attender_id FROM battle_attenders 
+            WHERE battle_id = ? 
+            ORDER BY rowid
         ''', (battle_id,)) as cursor:
-            result = await cursor.fetchone()
-            return (str(result[0]), str(result[1])) if result else None
+            rows = await cursor.fetchall()
+            if rows and len(rows) >= 2:
+                return (str(rows[0][0]), str(rows[1][0]))
+            return None
 
 
 async def get_pending_missions_count():
