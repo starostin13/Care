@@ -17,7 +17,7 @@ class Mission:
     cell: Optional[int]
     mission_description: str
     winner_bonus: Optional[str]
-    locked: int
+    status: int  # 0=available, 1=active/locked, 2=pending_confirmation, 3=confirmed
     created_date: str
     
     @classmethod
@@ -26,7 +26,7 @@ class Mission:
         
         Args:
             row: tuple from SELECT * FROM mission_stack
-                 (id, deploy, rules, cell, mission_description, winner_bonus, locked, created_date)
+                 (id, deploy, rules, cell, mission_description, winner_bonus, status, created_date)
         """
         if not row:
             return None
@@ -37,7 +37,7 @@ class Mission:
             cell=row[3],
             mission_description=row[4],
             winner_bonus=row[5],
-            locked=row[6],
+            status=row[6],
             created_date=row[7]
         )
     
@@ -85,7 +85,7 @@ class MissionDetails:
     cell: Optional[int]
     mission_description: str
     winner_bonus: Optional[str]
-    locked: int
+    status: int  # 0=available, 1=active/locked, 2=pending_confirmation, 3=confirmed
     created_date: str
     # Extended fields added by mission_helper
     killzone: Optional[str] = None
@@ -103,7 +103,7 @@ class MissionDetails:
             cell=mission.cell,
             mission_description=mission.mission_description,
             winner_bonus=mission.winner_bonus,
-            locked=mission.locked,
+            status=mission.status,
             created_date=mission.created_date
         )
 
@@ -174,4 +174,29 @@ class MapCell:
             q=row[2],
             r=row[3],
             state=row[4] if len(row) > 4 else None
+        )
+
+
+@dataclass
+class PendingResult:
+    """Pending result from pending_results table."""
+    id: int
+    battle_id: int
+    submitter_id: str
+    fstplayer_score: int
+    sndplayer_score: int
+    created_at: str
+    
+    @classmethod
+    def from_db_row(cls, row):
+        """Create PendingResult from database row."""
+        if not row:
+            return None
+        return cls(
+            id=row[0],
+            battle_id=row[1],
+            submitter_id=row[2],
+            fstplayer_score=row[3],
+            sndplayer_score=row[4],
+            created_at=row[5]
         )
