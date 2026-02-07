@@ -110,6 +110,10 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error(f"Failed to start battle: {e}")
         await query.edit_message_text(f"Ошибка при создании битвы: {str(e)}")
         return MISSIONS
+
+    # Lock the mission now that battle has been successfully created
+    await sqllite_helper.lock_mission(mission_id)
+
     situation = await mission_helper.get_situation(battle_id, [(attacker_id,), (defender_id,)])
     
     # Check if attacker has reinforcement restrictions
@@ -397,7 +401,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def handle_mission_reply(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """Handler to process the reply to the message from show_missions"""
+    """Handler to process the reply to the message from show_missions.
+    
+    New flow:
+    1. Player submits result by replying to mission message
+    2. Result is stored as pending (not applied yet)
+    3. Mission status set to 2 (pending confirmation)
+    4. Other player receives confirmation request with buttons
+    """
     # Retrieve the original message's text and user's reply
     original_message = (
         update.message.reply_to_message.text
@@ -416,63 +427,308 @@ async def handle_mission_reply(
         )
         return MAIN_MENU
 
+    # Validate score format
+    try:
+        counts = user_reply.split(' ')
+        if len(counts) != 2:
+            raise ValueError("Invalid format")
+        submitter_score = int(counts[0])
+        opponent_score = int(counts[1])
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "Неверный формат счёта. Пожалуйста, используйте формат '20 0' (ваш_счёт счёт_противника)."
+        )
+        return MAIN_MENU
+
     # Разделяем текст на строки
     lines = original_message.splitlines()
 
     # Ищем строку, начинающуюся с '#'
     mission_id_line = next(
         (line for line in lines if line.startswith('#')), None)
-    if mission_id_line:
-        # Извлекаем значение после решётки - это реальный mission_id из базы
-        mission_id = int(mission_id_line[1:])
+    if not mission_id_line:
+        await update.message.reply_text("Не удалось определить миссию.")
+        return MAIN_MENU
         
-        # Находим активный battle_id для этой миссии и пользователя
-        battle_id = await sqllite_helper.get_active_battle_id_for_mission(
-            mission_id, update.effective_user.id)
-        
-        if not battle_id:
-            logger.error(f"No active battle found for mission {mission_id} and user {update.effective_user.id}")
-            await update.message.reply_text("Не найден активный бой для этой миссии.")
-            return MAIN_MENU
-            
-        logger.info(f"Found battle_id {battle_id} for mission_id {mission_id}")
-        await mission_helper.write_battle_result(battle_id, user_reply)
+    # Извлекаем значение после решётки - это реальный mission_id из базы
+    mission_id = int(mission_id_line[1:])
+    
+    # Находим активный battle_id для этой миссии и пользователя
+    battle_id = await sqllite_helper.get_active_battle_id_for_mission(
+        mission_id, update.effective_user.id)
+    
+    if not battle_id:
+        logger.error(f"No active battle found for mission {mission_id} and user {update.effective_user.id}")
+        await update.message.reply_text("Не найден активный бой для этой миссии.")
+        return MAIN_MENU
+    
+    # Check if there's already a pending result for this battle
+    existing_pending = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if existing_pending:
+        await update.message.reply_text(
+            "Для этой миссии уже ожидается подтверждение результата. "
+            "Дождитесь подтверждения или отмены от противника."
+        )
+        return MAIN_MENU
+    
+    logger.info(f"Found battle_id {battle_id} for mission_id {mission_id}")
+    
+    # Get battle participants
+    participants = await sqllite_helper.get_battle_participants(battle_id)
+    if not participants:
+        await update.message.reply_text("Ошибка: не удалось найти участников битвы.")
+        return MAIN_MENU
+    
+    fstplayer_id, sndplayer_id = participants
+    submitter_id = str(update.effective_user.id)
+    
+    # Determine scores in database order (fstplayer, sndplayer)
+    # User always enters their own score first, then opponent's score
+    if submitter_id == fstplayer_id:
+        fstplayer_score = submitter_score
+        sndplayer_score = opponent_score
+        opponent_id = sndplayer_id
+    elif submitter_id == sndplayer_id:
+        fstplayer_score = opponent_score
+        sndplayer_score = submitter_score
+        opponent_id = fstplayer_id
+    else:
+        await update.message.reply_text("Ошибка: вы не являетесь участником этой битвы.")
+        return MAIN_MENU
+    
+    # Create pending result
+    pending_id = await sqllite_helper.create_pending_result(
+        battle_id, submitter_id, fstplayer_score, sndplayer_score
+    )
+    
+    if not pending_id:
+        await update.message.reply_text("Ошибка при сохранении результата.")
+        return MAIN_MENU
+    
+    # Update mission status to 2 (pending confirmation)
+    await sqllite_helper.update_mission_status(mission_id, 2)
+    logger.info(f"Mission {mission_id} status set to 2 (pending confirmation)")
+    
+    # Get submitter and opponent nicknames
+    submitter_nickname = await sqllite_helper.get_nickname_by_telegram_id(submitter_id)
+    opponent_nickname = await sqllite_helper.get_nickname_by_telegram_id(opponent_id)
+    
+    # Determine winner
+    if submitter_score > opponent_score:
+        winner_text = f"Победитель: {submitter_nickname} ({submitter_score}:{opponent_score})"
+    elif opponent_score > submitter_score:
+        winner_text = f"Победитель: {opponent_nickname} ({submitter_score}:{opponent_score})"
+    else:
+        winner_text = f"Ничья ({submitter_score}:{opponent_score})"
+    
+    # Send confirmation request to opponent
+    confirmation_message = (
+        f"🎲 Результат миссии #{mission_id}\n\n"
+        f"Игрок {submitter_nickname} ввёл результат:\n"
+        f"{winner_text}\n\n"
+        f"Подтвердите или отмените результат:"
+    )
+    
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_result_{battle_id}"),
+            InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_result_{battle_id}")
+        ]
+    ])
+    
+    try:
+        await context.bot.send_message(
+            chat_id=opponent_id,
+            text=confirmation_message,
+            reply_markup=keyboard
+        )
+        logger.info(f"Sent confirmation request to {opponent_id} for battle {battle_id}")
+    except Exception as e:
+        logger.error(f"Failed to send confirmation request to {opponent_id}: {e}")
+        # Still allow the flow to continue
+    
+    # Respond to submitter
+    await update.message.reply_text(
+        f"✅ Результат отправлен на подтверждение противнику.\n{winner_text}"
+    )
+    
+    return MAIN_MENU
 
-        # Apply mission-specific rewards
-        rewards = await mission_helper.apply_mission_rewards(battle_id, user_reply, update.effective_user.id)
+
+async def confirm_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handler for confirming a pending battle result."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = str(update.effective_user.id)
+    battle_id = int(query.data.replace("confirm_result_", ""))
+    
+    logger.info(f"User {user_id} confirming result for battle {battle_id}")
+    
+    # Get the pending result
+    pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if not pending_result:
+        await query.edit_message_text("❌ Ошибка: результат не найден или уже обработан.")
+        return MAIN_MENU
+    
+    # Verify that the user is not the submitter
+    if pending_result.submitter_id == user_id:
+        await query.edit_message_text("❌ Вы не можете подтвердить свой собственный результат.")
+        return MAIN_MENU
+    
+    # Get battle participants
+    participants = await sqllite_helper.get_battle_participants(battle_id)
+    if not participants:
+        await query.edit_message_text("❌ Ошибка: не удалось найти участников битвы.")
+        return MAIN_MENU
+    
+    fstplayer_id, sndplayer_id = participants
+    
+    # Verify that the user is a participant
+    if user_id not in [fstplayer_id, sndplayer_id]:
+        await query.edit_message_text("❌ Вы не являетесь участником этой битвы.")
+        return MAIN_MENU
+    
+    # Get mission_id
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        await query.edit_message_text("❌ Ошибка: миссия не найдена.")
+        return MAIN_MENU
+    
+    # Construct user_reply for existing functions
+    user_reply = f"{pending_result.fstplayer_score} {pending_result.sndplayer_score}"
+    
+    try:
+        # Apply the battle result using existing functions
+        await mission_helper.write_battle_result(battle_id, user_reply)
+        
+        # Apply mission-specific rewards - use submitter_id as they originally entered the result
+        rewards = await mission_helper.apply_mission_rewards(
+            battle_id, user_reply, pending_result.submitter_id
+        )
         
         if rewards is None:
-            # Handle case where rewards couldn't be applied (e.g., no alliances)
-            logger.warning("Could not apply mission rewards for battle %s", battle_id)
-            await update.message.reply_text("Результат битвы записан, но награды не могли быть применены (проверьте альянсы игроков).")
-            return MAIN_MENU
-            
-        scenario_line = next(
-            (line for line in lines if line.startswith('📜')), None)
-        scenario_name_regexp_result = re.search(
-            r"📜(.*?)\:", scenario_line) if scenario_line else None
-        scenario = None
-        if scenario_name_regexp_result:
-            scenario = scenario_name_regexp_result.group(1)
-
+            logger.warning(
+                "Could not apply mission rewards for battle %s - "
+                "check that both players are assigned to alliances",
+                battle_id
+            )
+        
         # Update the map based on battle results
+        # Get scenario from mission details if available
+        mission_details = await sqllite_helper.get_mission_details(mission_id)
+        scenario = mission_details.rules if mission_details else None
+        
         await map_helper.update_map(
             battle_id,
             user_reply,
-            update.effective_user.id,
+            pending_result.submitter_id,
             scenario
         )
+        
+        # Update mission status to 3 (confirmed)
+        await sqllite_helper.update_mission_status(mission_id, 3)
+        logger.info(f"Mission {mission_id} status set to 3 (confirmed)")
+        
+        # Delete the pending result
+        await sqllite_helper.delete_pending_result(battle_id)
+        
+        # Get nicknames for message
+        submitter_nickname = await sqllite_helper.get_nickname_by_telegram_id(pending_result.submitter_id)
+        
+        # Send success message
+        await query.edit_message_text(
+            f"✅ Результат подтверждён!\n"
+            f"Счёт: {pending_result.fstplayer_score}:{pending_result.sndplayer_score}"
+        )
+        
+        # Notify the submitter that result was confirmed
+        try:
+            confirmer_nickname = await sqllite_helper.get_nickname_by_telegram_id(user_id)
+            await context.bot.send_message(
+                chat_id=pending_result.submitter_id,
+                text=f"✅ Ваш результат для миссии #{mission_id} подтверждён игроком {confirmer_nickname}!"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify submitter {pending_result.submitter_id}: {e}")
+        
+    except Exception as e:
+        logger.error(f"Error confirming result for battle {battle_id}: {e}", exc_info=True)
+        await query.edit_message_text(f"❌ Ошибка при применении результата: {str(e)}")
+        return MAIN_MENU
+    
+    return MAIN_MENU
 
-        # Mark mission score as submitted to prevent replays (locked=2)
-        updated = await sqllite_helper.set_mission_score_submitted(mission_id)
-        if not updated:
-            logger.warning(f"Failed to update mission status to 2 for mission_id {mission_id}")
-        else:
-            logger.info(f"Mission {mission_id} status set to 2 (score submitted)")
 
-    # Respond to the user's reply
-    logger.info("Reply processed for user %s, sending confirmation", update.effective_user.id)
-    await update.message.reply_text(f"Сообщение получено: {user_reply}. Отправлено на обработку.")
+async def cancel_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handler for canceling a pending battle result."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = str(update.effective_user.id)
+    battle_id = int(query.data.replace("cancel_result_", ""))
+    
+    logger.info(f"User {user_id} canceling result for battle {battle_id}")
+    
+    # Get the pending result
+    pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if not pending_result:
+        await query.edit_message_text("❌ Ошибка: результат не найден или уже обработан.")
+        return MAIN_MENU
+    
+    # Verify that the user is not the submitter
+    if pending_result.submitter_id == user_id:
+        await query.edit_message_text("❌ Вы не можете отменить свой собственный результат. Попросите противника сделать это.")
+        return MAIN_MENU
+    
+    # Get battle participants
+    participants = await sqllite_helper.get_battle_participants(battle_id)
+    if not participants:
+        await query.edit_message_text("❌ Ошибка: не удалось найти участников битвы.")
+        return MAIN_MENU
+    
+    fstplayer_id, sndplayer_id = participants
+    
+    # Verify that the user is a participant
+    if user_id not in [fstplayer_id, sndplayer_id]:
+        await query.edit_message_text("❌ Вы не являетесь участником этой битвы.")
+        return MAIN_MENU
+    
+    # Get mission_id
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        await query.edit_message_text("❌ Ошибка: миссия не найдена.")
+        return MAIN_MENU
+    
+    try:
+        # Delete the pending result
+        await sqllite_helper.delete_pending_result(battle_id)
+        
+        # Reset mission status to 1 (active) so they can resubmit
+        await sqllite_helper.update_mission_status(mission_id, 1)
+        logger.info(f"Mission {mission_id} status reset to 1 (active)")
+        
+        await query.edit_message_text(
+            f"❌ Результат отменён.\n"
+            f"Миссия #{mission_id} открыта для повторного ввода результата."
+        )
+        
+        # Notify the submitter that result was canceled
+        try:
+            canceler_nickname = await sqllite_helper.get_nickname_by_telegram_id(user_id)
+            await context.bot.send_message(
+                chat_id=pending_result.submitter_id,
+                text=f"❌ Ваш результат для миссии #{mission_id} был отменён игроком {canceler_nickname}. Вы можете ввести новый результат."
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify submitter {pending_result.submitter_id}: {e}")
+        
+    except Exception as e:
+        logger.error(f"Error canceling result for battle {battle_id}: {e}", exc_info=True)
+        await query.edit_message_text(f"❌ Ошибка при отмене результата: {str(e)}")
+        return MAIN_MENU
+    
+    return MAIN_MENU
 
 
 async def input_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1138,6 +1394,315 @@ async def handle_alliance_text_input(update: Update, context: ContextTypes.DEFAU
         return await handle_alliance_name_input(update, context)
 
 
+async def admin_pending_confirmations(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of missions pending confirmation."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        await query.edit_message_text("❌ У вас нет прав администратора")
+        return MAIN_MENU
+    
+    # Get all pending missions
+    pending_missions = await sqllite_helper.get_all_pending_missions()
+    
+    if not pending_missions:
+        await query.edit_message_text(
+            "✅ Нет миссий ожидающих подтверждения.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("« Назад", callback_data="admin_menu")
+            ]])
+        )
+        return MAIN_MENU
+    
+    # Build keyboard with pending missions
+    keyboard = []
+    for mission in pending_missions:
+        mission_id, deploy, rules, cell, description, created_date = mission
+        
+        # Get pending result for this mission
+        # Find battle_id for this mission
+        battle_id = await sqllite_helper.get_battle_id_by_mission_id(mission_id)
+        if battle_id:
+            pending = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+            if pending:
+                score_text = f"{pending.fstplayer_score}:{pending.sndplayer_score}"
+            else:
+                score_text = "?"
+        else:
+            score_text = "?"
+        
+        button_text = f"#{mission_id} - {rules} ({score_text})"
+        keyboard.append([
+            InlineKeyboardButton(
+                button_text,
+                callback_data=f"admin_confirm_mission:{mission_id}"
+            )
+        ])
+    
+    keyboard.append([
+        InlineKeyboardButton("« Назад в админ меню", callback_data="admin_menu")
+    ])
+    
+    markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(
+        f"⏳ Миссии ожидающие подтверждения ({len(pending_missions)}):\n\n"
+        "Выберите миссию для подтверждения результата:",
+        reply_markup=markup
+    )
+    return MAIN_MENU
+
+
+async def admin_confirm_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Admin confirms a specific pending mission."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        await query.edit_message_text("❌ У вас нет прав администратора")
+        return MAIN_MENU
+    
+    # Extract mission_id from callback data
+    mission_id = int(query.data.split(':')[1])
+    
+    # Get battle_id for this mission
+    battle_id = await sqllite_helper.get_battle_id_by_mission_id(mission_id)
+    if not battle_id:
+        await query.edit_message_text(
+            f"❌ Не найден бой для миссии #{mission_id}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("« Назад", callback_data="admin_pending_confirmations")
+            ]])
+        )
+        return MAIN_MENU
+    
+    # Get pending result
+    pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if not pending_result:
+        await query.edit_message_text(
+            f"❌ Не найден ожидающий результат для миссии #{mission_id}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("« Назад", callback_data="admin_pending_confirmations")
+            ]])
+        )
+        return MAIN_MENU
+    
+    # Get mission details
+    mission_details = await sqllite_helper.get_mission_details(mission_id)
+    if not mission_details:
+        await query.edit_message_text(f"❌ Миссия #{mission_id} не найдена")
+        return MAIN_MENU
+    
+    # Get participant names
+    participants = await sqllite_helper.get_battle_participants(battle_id)
+    if participants:
+        fstplayer_id, sndplayer_id = participants
+        fstplayer_name = await sqllite_helper.get_nickname_by_telegram_id(fstplayer_id)
+        sndplayer_name = await sqllite_helper.get_nickname_by_telegram_id(sndplayer_id)
+        submitter_name = await sqllite_helper.get_nickname_by_telegram_id(pending_result.submitter_id)
+        
+        participants_text = (
+            f"👥 Участники:\n"
+            f"  • {fstplayer_name} ({pending_result.fstplayer_score})\n"
+            f"  • {sndplayer_name} ({pending_result.sndplayer_score})\n"
+            f"📝 Результат введён: {submitter_name}\n"
+        )
+    else:
+        participants_text = "👥 Участники: неизвестны\n"
+    
+    # Determine winner
+    if pending_result.fstplayer_score > pending_result.sndplayer_score:
+        winner_text = f"🏆 Победитель: {fstplayer_name}"
+    elif pending_result.sndplayer_score > pending_result.fstplayer_score:
+        winner_text = f"🏆 Победитель: {sndplayer_name}"
+    else:
+        winner_text = "🤝 Ничья"
+    
+    message_text = (
+        f"📋 Миссия #{mission_id}\n"
+        f"📜 Правила: {mission_details.rules if mission_details else 'неизвестно'}\n"
+        f"📅 Создана: {mission_details.created_date if mission_details else 'неизвестно'}\n\n"
+        f"{participants_text}\n"
+        f"{winner_text}\n\n"
+        f"Подтвердить результат?"
+    )
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Подтвердить", callback_data=f"admin_do_confirm:{battle_id}"),
+            InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_do_reject:{battle_id}")
+        ],
+        [
+            InlineKeyboardButton("« Назад", callback_data="admin_pending_confirmations")
+        ]
+    ]
+    
+    await query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    return MAIN_MENU
+
+
+async def admin_do_confirm_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Admin actually confirms the mission result."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        await query.edit_message_text("❌ У вас нет прав администратора")
+        return MAIN_MENU
+    
+    # Extract battle_id from callback data
+    battle_id = int(query.data.split(':')[1])
+    
+    # Get pending result
+    pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if not pending_result:
+        await query.edit_message_text("❌ Результат не найден или уже обработан")
+        return MAIN_MENU
+    
+    # Get mission_id
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        await query.edit_message_text("❌ Миссия не найдена")
+        return MAIN_MENU
+    
+    # Construct user_reply for existing functions
+    user_reply = f"{pending_result.fstplayer_score} {pending_result.sndplayer_score}"
+    
+    try:
+        # Apply the battle result
+        await mission_helper.write_battle_result(battle_id, user_reply)
+        
+        # Apply mission-specific rewards
+        rewards = await mission_helper.apply_mission_rewards(
+            battle_id, user_reply, pending_result.submitter_id
+        )
+        
+        if rewards is None:
+            logger.warning(
+                "Could not apply mission rewards for battle %s - "
+                "check that both players are assigned to alliances",
+                battle_id
+            )
+        
+        # Update the map
+        mission_details = await sqllite_helper.get_mission_details(mission_id)
+        scenario = mission_details.rules if mission_details else None
+        
+        await map_helper.update_map(
+            battle_id,
+            user_reply,
+            pending_result.submitter_id,
+            scenario
+        )
+        
+        # Update mission status to 3 (confirmed)
+        await sqllite_helper.update_mission_status(mission_id, 3)
+        logger.info(f"Admin confirmed mission {mission_id}, status set to 3")
+        
+        # Delete the pending result
+        await sqllite_helper.delete_pending_result(battle_id)
+        
+        # Notify participants
+        participants = await sqllite_helper.get_battle_participants(battle_id)
+        if participants:
+            for participant_id in participants:
+                try:
+                    await context.bot.send_message(
+                        chat_id=participant_id,
+                        text=f"✅ Администратор подтвердил результат миссии #{mission_id}\n"
+                             f"Счёт: {pending_result.fstplayer_score}:{pending_result.sndplayer_score}"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify participant {participant_id}: {e}")
+        
+        await query.edit_message_text(
+            f"✅ Результат миссии #{mission_id} подтверждён!\n"
+            f"Счёт: {pending_result.fstplayer_score}:{pending_result.sndplayer_score}\n"
+            f"Результаты применены.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("« К списку миссий", callback_data="admin_pending_confirmations")
+            ]])
+        )
+        
+    except Exception as e:
+        logger.error(f"Error confirming mission {mission_id}: {e}", exc_info=True)
+        await query.edit_message_text(f"❌ Ошибка при подтверждении: {str(e)}")
+    
+    return MAIN_MENU
+
+
+async def admin_do_reject_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Admin rejects a pending mission result."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        await query.edit_message_text("❌ У вас нет прав администратора")
+        return MAIN_MENU
+    
+    # Extract battle_id from callback data
+    battle_id = int(query.data.split(':')[1])
+    
+    # Get pending result
+    pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if not pending_result:
+        await query.edit_message_text("❌ Результат не найден или уже обработан")
+        return MAIN_MENU
+    
+    # Get mission_id
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        await query.edit_message_text("❌ Миссия не найдена")
+        return MAIN_MENU
+    
+    try:
+        # Delete the pending result
+        await sqllite_helper.delete_pending_result(battle_id)
+        
+        # Reset mission status to 1 (active)
+        await sqllite_helper.update_mission_status(mission_id, 1)
+        logger.info(f"Admin rejected mission {mission_id}, status reset to 1")
+        
+        # Notify participants
+        participants = await sqllite_helper.get_battle_participants(battle_id)
+        if participants:
+            for participant_id in participants:
+                try:
+                    await context.bot.send_message(
+                        chat_id=participant_id,
+                        text=f"❌ Администратор отклонил результат миссии #{mission_id}\n"
+                             "Вы можете ввести новый результат."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify participant {participant_id}: {e}")
+        
+        await query.edit_message_text(
+            f"❌ Результат миссии #{mission_id} отклонён.\n"
+            f"Миссия открыта для повторного ввода результата.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("« К списку миссий", callback_data="admin_pending_confirmations")
+            ]])
+        )
+        
+    except Exception as e:
+        logger.error(f"Error rejecting mission {mission_id}: {e}", exc_info=True)
+        await query.edit_message_text(f"❌ Ошибка при отклонении: {str(e)}")
+    
+    return MAIN_MENU
+
+
 async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Debug handler for unmatched callbacks"""
     query = update.callback_query
@@ -1194,6 +1759,14 @@ def start_bot():
                 CallbackQueryHandler(admin_delete_alliances, pattern='^admin_delete_alliances$'),
                 CallbackQueryHandler(admin_delete_alliance, pattern='^admin_delete_alliance:'),
                 CallbackQueryHandler(admin_confirm_delete, pattern='^admin_confirm_delete:'),
+                # Pending confirmations handlers
+                CallbackQueryHandler(admin_pending_confirmations, pattern='^admin_pending_confirmations$'),
+                CallbackQueryHandler(admin_confirm_mission, pattern='^admin_confirm_mission:'),
+                CallbackQueryHandler(admin_do_confirm_mission, pattern='^admin_do_confirm:'),
+                CallbackQueryHandler(admin_do_reject_mission, pattern='^admin_do_reject:'),
+                # Result confirmation handlers
+                CallbackQueryHandler(confirm_result, pattern='^confirm_result_'),
+                CallbackQueryHandler(cancel_result, pattern='^cancel_result_'),
                 # Back to main menu handler
                 CallbackQueryHandler(back_to_main_menu, pattern='^back_to_main$')
             ],

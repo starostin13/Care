@@ -118,7 +118,7 @@ function Test-Health {
     Start-Sleep -Seconds 10
     
     try {
-        $response = Invoke-WebRequest -Uri $HEALTH_URL -Method GET -TimeoutSec 10
+        $response = Invoke-WebRequest -Uri $HEALTH_URL -Method GET -TimeoutSec 10 -Proxy $null
         
         if ($response.StatusCode -eq 200) {
             $healthData = $response.Content | ConvertFrom-Json

@@ -180,12 +180,14 @@ def generate_new_one(rules):
         return (deploy, rules, None, description, None, None)
 
     elif rules == "wh40k":
-        deploy_types = ["Total Domination"]
+        deploy_types = ["Total Domination", "Braze Bridge"]
         missions = [
-            'Начиная со второго раунда битвы, в конце фазы командования каждого игрока, игрок, чей ход сейчас, получает ПО следующим образом: За каждый контролируемый ими маркер цели на нейтральной полосе они получают 5 ПО. Если они контролируют маркер цели в зоне развертывания противника, они получают 10 ПО. В пятом раунде битвы игрок, у которого второй ход, получает ПО, как описано выше, но делает это в конце хода, а не в конце своей фазы командования. Каждый игрок может получить максимум 90 ПО за выполнение этой цели миссии.'
+            'Начиная со второго раунда битвы, в конце фазы командования каждого игрока, игрок, чей ход сейчас, получает ПО следующим образом: За каждый контролируемый ими маркер цели на нейтральной полосе они получают 5 ПО. Если они контролируют маркер цели в зоне развертывания противника, они получают 10 ПО. В пятом раунде битвы игрок, у которого второй ход, получает ПО, как описано выше, но делает это в конце хода, а не в конце своей фазы командования. Каждый игрок может получить максимум 90 ПО за выполнение этой цели миссии.',
+            'Игрок получает 10 чоков в конце своего хода, если выполняется одно из двух условий: 1) Хотя бы один юнит игрока находится в Ничейной земле, в Ничейной земле нет юнитов оппонента; 2) Игрок имеет хотя бы один юнит в зоне Атакера, Ничейной земле и зоне Дефендера. В конце игры, Дефендер получает 20 очков если держит точку в своей деплойке. Атакер получает 40 очков если держит точку в деплойке оппонента. Если никто не держит точку в деплойке дефендера, то атакер получает 20 очков'
         ]
         winner_bonuses = [
             "Выбрать один юнит участвующий в битве. Этот юнит получает 3xp вместо 1xp за участие в битве.",
+            "Победитель может выбрать юнит находящийся на точке вефендера и выдать ему любой доступный Battle Trait"
         ]
         description = random.choice(missions)
         deploy = random.choice(deploy_types)
@@ -293,13 +295,12 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
 
     if rules == "killteam":
         if cell_id is not None:
-            await sqllite_helper.lock_mission(mission.id)
             state = await sqllite_helper.get_state(cell_id)
 
             # Получаем killzone для данного state гекса (или None)
             hex_state = state[0] if state is not None else None
             killzone = get_killzone_for_mission(hex_state)
-            
+
             # Build result tuple with extra info
             result = mission.to_tuple() + (f"Killzone: {killzone}",)
 
@@ -309,16 +310,14 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
             history = await sqllite_helper.get_cell_history(cell_id)
             for point in history:
                 result = result + tuple(point)  # Convert Row to tuple
-            
+
             return result
         else:
-            # For killteam without cell, just lock the mission
-            await sqllite_helper.lock_mission(mission.id)
+            # For killteam without cell, return mission tuple
             return mission.to_tuple()
 
     elif rules == "wh40k":
-        # Lock mission by id
-        await sqllite_helper.lock_mission(mission.id)
+        # Return mission info without locking
         if cell_id is not None:
             # If cell is assigned, add extra info
             number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)

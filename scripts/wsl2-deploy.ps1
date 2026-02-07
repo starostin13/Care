@@ -24,11 +24,10 @@ $PROJECT_PATH_WIN = Get-Location
 $PROJECT_PATH_WSL = $PROJECT_PATH_WIN.Path -replace '\\', '/' -replace 'C:', '/mnt/c' -replace 'c:', '/mnt/c'
 
 # Colors
-function Write-Success($text) { Write-Host "✅ SUCCESS: $text" -ForegroundColor Green }
-function Write-Error($text) { Write-Host "❌ ERROR: $text" -ForegroundColor Red }
-function Write-Info($text) { Write-Host "ℹ️  INFO: $text" -ForegroundColor Cyan }
-function Write-Warning($text) { Write-Host "⚠️  WARNING: $text" -ForegroundColor Yellow }
-function Write-Step($text) { Write-Host "📋 STEP: $text" -ForegroundColor Magenta }
+function Write-Success($text) { Write-Host "SUCCESS: $text" -ForegroundColor Green }
+function Write-Error($text) { Write-Host "ERROR: $text" -ForegroundColor Red }
+function Write-Info($text) { Write-Host "INFO: $text" -ForegroundColor Cyan }
+function Write-Warning($text) { Write-Host "WARNING: $text" -ForegroundColor Yellow }
 
 # Check WSL2
 function Test-WSL2 {
@@ -123,7 +122,7 @@ function Test-Token {
 
 # Build Docker image in WSL2
 function Build-Image {
-    Write-Step "Building Docker image in WSL2..."
+    Write-Info "Building Docker image in WSL2..."
     
     if (-not (Test-WSL2)) { return $false }
     if (-not (Test-DockerWSL)) { return $false }
@@ -154,7 +153,7 @@ function Build-Image {
 
 # Inspect image contents
 function Show-ImageInspect {
-    Write-Step "Inspecting image contents..."
+    Write-Info "Inspecting image contents..."
     
     if (-not (Test-DockerWSL)) { return }
     
@@ -194,7 +193,7 @@ function Show-ImageInspect {
 
 # Test image locally
 function Test-ImageLocally {
-    Write-Step "Testing image locally..."
+    Write-Info "Testing image locally..."
     
     if (-not (Test-DockerWSL)) { return $false }
     if (-not (Test-Token)) { return $false }
@@ -270,7 +269,7 @@ function Stop-TestContainer {
 function Save-Image {
     param([string]$OutputPath)
     
-    Write-Step "Saving image to tar file..."
+    Write-Info "Saving image to tar file..."
     
     $outputPathWSL = $OutputPath -replace '\\', '/' -replace 'C:', '/mnt/c' -replace 'c:', '/mnt/c'
     
@@ -289,7 +288,7 @@ function Save-Image {
 
 # Transfer image to production
 function Transfer-Image {
-    Write-Step "Transferring image to production..."
+    Write-Info "Transferring image to production..."
     
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $tarFile = "carebot-${timestamp}.tar"
@@ -336,7 +335,7 @@ function Transfer-Image {
 
 # Deploy to production
 function Deploy-Production {
-    Write-Step "Deploying to production..."
+    Write-Info "Deploying to production..."
     
     # Create backup
     if (-not $Force) {
@@ -495,7 +494,7 @@ function Show-MigrationStatus {
 
 # Full workflow
 function Run-FullWorkflow {
-    Write-Step "Running full deployment workflow..."
+    Write-Info "Running full deployment workflow..."
     
     # Build
     if (-not (Build-Image)) {
