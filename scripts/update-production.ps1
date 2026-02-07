@@ -1,4 +1,4 @@
-# CareBot Production Update Script
+# CareBot Production Update Script (LEGACY - prefer scripts/wsl2-deploy.ps1)
 param(
     [string]$Action = "update",
     [switch]$Force,
@@ -141,7 +141,8 @@ function Test-Health {
 
 # Update production
 function Update-Production {
-    Write-Host "Starting CareBot Production Update" -ForegroundColor Yellow
+    Write-Host "Starting CareBot Production Update (LEGACY)" -ForegroundColor Yellow
+    Write-Warning "This legacy flow builds on the server. Prefer scripts/wsl2-deploy.ps1 for WSL2 builds."
     
     # КРИТИЧЕСКАЯ проверка безопасности перед деплоем
     if (-not (Test-ProductionSafety)) {
@@ -164,8 +165,8 @@ function Update-Production {
     
     if (-not (Sync-Files)) { return $false }
     
-    Write-Info "Rebuilding and restarting production service..."
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml build --no-cache && docker compose -f docker-compose.production.yml up -d"
+    Write-Info "Restarting production service (no server-side build)..."
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d"
     
     if (-not $SkipHealthCheck) {
         Test-Health
@@ -209,9 +210,9 @@ function Stop-Service {
 }
 
 function Restart-Service {
-    Write-Info "Rebuilding Docker image and restarting service..."
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml build --no-cache && docker compose -f docker-compose.production.yml up -d"
-    Write-Success "Service rebuilt and restarted"
+    Write-Info "Restarting service (no server-side build)..."
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d"
+    Write-Success "Service restarted"
 }
 
 # Sync only migrations

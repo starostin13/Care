@@ -352,6 +352,9 @@ function Deploy-Production {
     
     # Transfer image
     if (-not (Transfer-Image)) { return $false }
+
+    # Update image tag in production .env
+    Set-ProductionImageTag -ImageTag $Tag
     
     # Restart production container with new image
     Write-Info "Restarting production container..."
@@ -384,6 +387,16 @@ function Sync-ProductionFiles {
     }
     
     Write-Success "Files synced"
+}
+
+# Ensure production uses the intended image tag
+function Set-ProductionImageTag {
+    param([string]$ImageTag)
+
+    Write-Info "Setting production image tag to $ImageTag..."
+    ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH"
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH && if [ -f .env ]; then sed -i '/^CAREBOT_IMAGE_TAG=/d' .env; fi; echo \"CAREBOT_IMAGE_TAG=$ImageTag\" >> .env"
+    Write-Success "Production image tag set"
 }
 
 # Test production health
