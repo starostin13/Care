@@ -1,5 +1,5 @@
 """
-Migration 020: Add map_description column to mission_stack table
+Migration 021: Add map_description column to mission_stack table
 This allows storing generated map descriptions for battlefleet missions.
 """
 from yoyo import step

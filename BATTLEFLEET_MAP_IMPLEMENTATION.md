@@ -6,7 +6,7 @@ This implementation adds automatic celestial phenomena map generation for Battle
 ## Changes Made
 
 ### 1. Database Schema
-- **Migration**: `020_add_map_description_to_mission_stack.py`
+- **Migration**: `021_add_map_description_to_mission_stack.py`
 - Added `map_description` TEXT column to `mission_stack` table
 - Column defaults to NULL for non-battlefleet missions
 
