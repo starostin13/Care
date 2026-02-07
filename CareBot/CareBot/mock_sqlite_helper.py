@@ -659,6 +659,22 @@ async def get_warmasters_opponents(against_alliance, rule, date):
         if w.get('alliance') != alliance_id
     ]
 
+async def get_other_rule_opponents(against_alliance, rule, date):
+    print(f"🧪 Mock: get_other_rule_opponents({against_alliance}, {rule}, {date})")
+    alliance_id = against_alliance[0] if isinstance(against_alliance, (list, tuple)) else against_alliance
+    date_key = str(datetime.datetime.strptime(str(date), "%c").date())
+    opponents = []
+    for record in MOCK_SCHEDULES.get(date_key, []):
+        user = await get_user_by_telegram_id(record.get('user_telegram'))
+        if not user:
+            continue
+        if user.get('alliance') == alliance_id:
+            continue
+        if record.get('rules') == rule:
+            continue
+        opponents.append((user.get('nickname'), user.get('registered_as'), record.get('rules')))
+    return opponents
+
 async def get_alliance_of_warmaster(telegram_user_id):
     """
     Mock реализация для получения альянса игрока.
@@ -671,6 +687,13 @@ async def get_alliance_of_warmaster(telegram_user_id):
 
 async def insert_to_schedule(date, rules, user_telegram):
     print(f"🧪 Mock: insert_to_schedule({date}, {rules}, {user_telegram})")
+    date_key = str(getattr(date, "date", lambda: date)())
+    # Сохраняем расписание, чтобы использовать его в тестовых выборках
+    MOCK_SCHEDULES.setdefault(date_key, []).append({
+        'date': date_key,
+        'rules': rules,
+        'user_telegram': str(user_telegram)
+    })
     return True
 
 async def has_route_to_warehouse(start_id, patron):

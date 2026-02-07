@@ -522,6 +522,22 @@ async def get_warmasters_opponents(against_alliance, rule, date):
             return await cursor.fetchall()
 
 
+async def get_other_rule_opponents(against_alliance, rule, date):
+    """Get opponents registered for other rules on the same date."""
+    date_str = str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d"))
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT DISTINCT warmasters.nickname, warmasters.registered_as, schedule.rules
+            FROM warmasters
+            JOIN schedule ON warmasters.telegram_id = schedule.user_telegram
+            WHERE warmasters.alliance <> ?
+            AND schedule.date = ?
+            AND schedule.rules <> ?
+        ''', (against_alliance[0], date_str, rule)
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def get_alliance_of_warmaster(telegram_user_id):
     logger.info(
         "get_alliance_of_warmaster(telegram_id=%s [type=%s])",
@@ -1664,4 +1680,3 @@ async def get_battle_id_by_mission_id(mission_id: int):
         ''', (mission_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
-
