@@ -188,7 +188,9 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if defender_id:
         try:
             defender_message = await build_mission_message(attacker_is_dominant, attacker_nickname)
-            new_mission_prefix = await localization.get_text("new_mission_prefix", 'ru')  # Use default language for defender
+            # Get defender's language preference
+            defender_lang = await localization.get_user_language(defender_id)
+            new_mission_prefix = await localization.get_text("new_mission_prefix", defender_lang)
             
             await context.bot.send_message(
                 chat_id=defender_id, 
@@ -511,31 +513,34 @@ async def handle_mission_reply(
     submitter_nickname = await sqllite_helper.get_nickname_by_telegram_id(submitter_id)
     opponent_nickname = await sqllite_helper.get_nickname_by_telegram_id(opponent_id)
     
+    # Get opponent's language for sending confirmation request
+    opponent_lang = await localization.get_user_language(opponent_id)
+    
     # Determine winner
     if submitter_score > opponent_score:
         winner_text = await localization.get_text(
-            "winner_text", 'ru',
+            "winner_text", opponent_lang,
             winner=submitter_nickname,
             my_score=submitter_score,
             opponent_score=opponent_score
         )
     elif opponent_score > submitter_score:
         winner_text = await localization.get_text(
-            "winner_text", 'ru',
+            "winner_text", opponent_lang,
             winner=opponent_nickname,
             my_score=submitter_score,
             opponent_score=opponent_score
         )
     else:
         winner_text = await localization.get_text(
-            "draw_text", 'ru',
+            "draw_text", opponent_lang,
             my_score=submitter_score,
             opponent_score=opponent_score
         )
     
     # Send confirmation request to opponent
-    btn_confirm_text = await localization.get_text("btn_confirm", 'ru')
-    btn_reject_text = await localization.get_text("btn_reject", 'ru')
+    btn_confirm_text = await localization.get_text("btn_confirm", opponent_lang)
+    btn_reject_text = await localization.get_text("btn_reject", opponent_lang)
     
     keyboard = InlineKeyboardMarkup([
         [
@@ -546,7 +551,7 @@ async def handle_mission_reply(
     
     confirmation_message = await localization.get_text(
         "result_confirm_question",
-        'ru',
+        opponent_lang,
         winner_text=winner_text,
         my_score=submitter_score,
         opponent_score=opponent_score

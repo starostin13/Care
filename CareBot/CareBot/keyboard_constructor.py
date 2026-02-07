@@ -369,11 +369,14 @@ async def admin_assign_alliance_list(userId, player_telegram_id):
     alliances = await sqllite_helper.get_all_alliances()
     buttons = []
     
+    # Get user language for localized text
+    user_lang = await localization.get_user_language(userId)
+    
     for alliance_id, alliance_name in alliances:
         player_count = await sqllite_helper.get_alliance_player_count(alliance_id)
         button_text = await localization.get_text(
             "alliance_player_count",
-            "ru",
+            user_lang,
             alliance_name=alliance_name,
             player_count=player_count
         )
@@ -459,9 +462,10 @@ async def get_admin_menu(userId):
     # Pending mission confirmations - only show if there are pending missions
     pending_count = await sqllite_helper.get_pending_missions_count()
     if pending_count > 0:
+        user_lang = await localization.get_user_language(userId)
         button_text = await localization.get_text(
             "admin_pending_count",
-            "ru",
+            user_lang,
             pending_count=pending_count
         )
         items.append([

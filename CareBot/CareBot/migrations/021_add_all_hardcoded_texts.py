@@ -42,13 +42,13 @@ def add_all_hardcoded_texts(conn):
         ("btn_back_to_missions", "ru", "⬅️ Назад к миссиям"),
         ("btn_back_to_missions", "en", "⬅️ Back to Missions"),
         
-        ("mission_score_instructions", "ru", "Что бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0"),
+        ("mission_score_instructions", "ru", "Чтобы указать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0"),
         ("mission_score_instructions", "en", "To submit the game result, 'reply' to this message with the score in format [your points] [opponent points], for example:\n20 0"),
         
         ("new_mission_prefix", "ru", "Новая миссия:"),
         ("new_mission_prefix", "en", "New Mission:"),
         
-        ("no_signups_today", "ru", "Ещё никто не запился на этот день"),
+        ("no_signups_today", "ru", "Ещё никто не записался на этот день"),
         ("no_signups_today", "en", "No one has signed up for this day yet"),
         
         ("error_score_format", "ru", "❌ Неверный формат. Используйте формат: [ваши очки] [очки оппонента]"),
