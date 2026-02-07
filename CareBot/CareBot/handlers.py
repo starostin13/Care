@@ -152,10 +152,14 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission_description = mission[3] or ''
     mission_rules = mission[1] or ''
     
+    # Get user languages for localized messages
+    attacker_lang = await localization.get_user_language(attacker_id)
+    defender_lang = await localization.get_user_language(defender_id)
+    
     # Helper function to build message for a player
-    async def build_mission_message(opponent_is_dominant, opponent_nickname):
+    async def build_mission_message(opponent_is_dominant, opponent_nickname, user_lang):
         builder = mission_message_builder.MissionMessageBuilder(
-            mission_id, mission_description, mission_rules
+            mission_id, mission_description, mission_rules, user_lang
         )
         
         # Add double exp bonus if opponent is dominant
@@ -169,7 +173,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return builder.build()
     
     # Build messages for both players
-    attacker_message = await build_mission_message(defender_is_dominant, defender_nickname)
+    attacker_message = await build_mission_message(defender_is_dominant, defender_nickname, attacker_lang)
     logger.info(f"Composed mission text for attacker: {attacker_message}")
 
     # Отправляем текст миссии текущему пользователю (атакующему)
@@ -187,9 +191,7 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Отправляем сообщение с миссией дефендеру
     if defender_id:
         try:
-            defender_message = await build_mission_message(attacker_is_dominant, attacker_nickname)
-            # Get defender's language preference
-            defender_lang = await localization.get_user_language(defender_id)
+            defender_message = await build_mission_message(attacker_is_dominant, attacker_nickname, defender_lang)
             new_mission_prefix = await localization.get_text("new_mission_prefix", defender_lang)
             
             await context.bot.send_message(
