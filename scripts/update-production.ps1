@@ -80,7 +80,10 @@ function Sync-Files {
         "CareBot/CareBot/migrate_db.py",
         "CareBot/CareBot/config.py",
         "CareBot/run_hybrid.py",
-        "CareBot/requirements.txt"
+        "CareBot/requirements.txt",
+        "Dockerfile",
+        "entrypoint.sh",
+        "docker-compose.production.yml"
     )
     
     # Синхронизируем основные файлы
