@@ -315,18 +315,62 @@ async def unlock_expired_missions():
         return cursor.rowcount
 
 
+async def fix_mission_null_id(db, mission_data):
+    """Fix a mission with NULL id by regenerating it.
+
+    Args:
+        db: Database connection
+        mission_data: Tuple of mission data (id, deploy, rules, cell, mission_description, winner_bonus, status, created_date)
+
+    Returns:
+        New mission_id
+    """
+    _, deploy, rules, cell, mission_description, winner_bonus, status, created_date = mission_data
+
+    logger.warning(
+        f"Found mission with NULL id: {rules}/{deploy}. Regenerating id..."
+    )
+
+    # Delete the NULL id mission
+    await db.execute("""
+        DELETE FROM mission_stack
+        WHERE id IS NULL
+        AND deploy = ?
+        AND rules = ?
+        AND ((cell IS NULL AND ? IS NULL) OR cell = ?)
+        AND mission_description = ?
+        LIMIT 1
+    """, (deploy, rules, cell, cell, mission_description))
+
+    # Re-insert to get auto-generated id
+    await db.execute("""
+        INSERT INTO mission_stack (deploy, rules, cell, mission_description, winner_bonus, status, created_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (deploy, rules, cell, mission_description, winner_bonus, status, created_date))
+
+    await db.commit()
+
+    # Get the new id
+    async with db.execute('SELECT last_insert_rowid()') as cursor:
+        result = await cursor.fetchone()
+        new_id = result[0] if result else None
+
+    logger.info(f"Generated new id {new_id} for mission {rules}/{deploy}")
+    return new_id
+
+
 async def get_mission(rules) -> Optional[Mission]:
     """Get an available mission by rules.
-    
+
     Args:
         rules: Mission ruleset (killteam, wh40k, etc.)
-    
+
     Returns:
         Mission object or None if no mission found
     """
     # Unlock any expired missions before fetching
     await unlock_expired_missions()
-    
+
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
@@ -334,6 +378,21 @@ async def get_mission(rules) -> Optional[Mission]:
             WHERE status=0 AND rules=?
         ''', (rules,)) as cursor:
             row = await cursor.fetchone()
+
+            if not row:
+                return None
+
+            # Check if id is NULL and fix it
+            if row[0] is None:
+                new_id = await fix_mission_null_id(db, row)
+                # Re-fetch the mission with the new id
+                async with db.execute('''
+                    SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
+                    FROM mission_stack
+                    WHERE id=?
+                ''', (new_id,)) as new_cursor:
+                    row = await new_cursor.fetchone()
+
             return Mission.from_db_row(row)
 
 async def get_schedule_by_user(user_telegram, date=None):
@@ -862,7 +921,7 @@ async def get_mission_details(mission_id) -> Optional[Mission]:
 
     Args:
         mission_id: The mission ID
-    
+
     Returns:
         Mission object or None if not found
     """
@@ -873,6 +932,24 @@ async def get_mission_details(mission_id) -> Optional[Mission]:
             FROM mission_stack WHERE id = ?
         ''', (mission_id,)) as cursor:
             row = await cursor.fetchone()
+
+            if not row:
+                return None
+
+            # Check if id is NULL and fix it (shouldn't happen since we query by id, but defensive)
+            if row[0] is None:
+                logger.error(
+                    f"Unexpected NULL id in get_mission_details for mission_id={mission_id}. "
+                    "This should not happen as we query by id."
+                )
+                new_id = await fix_mission_null_id(db, row)
+                # Re-fetch with new id
+                async with db.execute('''
+                    SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
+                    FROM mission_stack WHERE id = ?
+                ''', (new_id,)) as new_cursor:
+                    row = await new_cursor.fetchone()
+
             mission = Mission.from_db_row(row)
             logger.info("mission_details result: %s", mission)
             return mission
