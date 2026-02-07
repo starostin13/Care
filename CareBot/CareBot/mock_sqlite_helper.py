@@ -364,7 +364,7 @@ async def save_mission(mission_data):
         **mission_data, 
         'id': mission_id,
         'created_date': today,
-        'locked': 0
+        'status': 0
     }
     return mission_id
 
@@ -539,7 +539,7 @@ async def get_mission(rules):
         cell=cell_id,
         mission_description=f"Тестовая миссия для {rules}",
         winner_bonus=None,
-        locked=0,
+        status=0,
         created_date=today,
         map_description=map_description
     )
@@ -773,7 +773,7 @@ async def get_mission_details(mission_id):
         cell=None,
         mission_description='Test mission details',
         winner_bonus=None,
-        locked=0,
+        status=0,
         created_date=today,
         map_description=None
     )

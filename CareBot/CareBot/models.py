@@ -109,14 +109,9 @@ class MissionDetails:
             cell=mission.cell,
             mission_description=mission.mission_description,
             winner_bonus=mission.winner_bonus,
-<<<<<<< HEAD
-            locked=mission.locked,
+            status=mission.status,
             created_date=mission.created_date,
             map_description=mission.map_description
-=======
-            status=mission.status,
-            created_date=mission.created_date
->>>>>>> origin/main
         )
 
 
