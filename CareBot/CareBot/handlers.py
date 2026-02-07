@@ -69,7 +69,8 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Validate callback data - it should start with 'mission_sch_'
     if not query.data.startswith("mission_sch_"):
         logger.error(f"Invalid mission callback data: {query.data}")
-        await query.edit_message_text("❌ Ошибка: неверный формат запроса. Пожалуйста, попробуйте снова.")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_invalid_request")
+        await query.edit_message_text(error_msg)
         return MISSIONS
     
     try:
@@ -79,7 +80,8 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         defender_id = str(data_parts[1])  # Opponent telegram_id from callback
     except (ValueError, AttributeError, IndexError) as e:
         logger.error(f"Failed to parse mission callback data '{query.data}': {e}")
-        await query.edit_message_text("❌ Ошибка: не удалось получить информацию о миссии. Пожалуйста, попробуйте снова.")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_mission_info_failed")
+        await query.edit_message_text(error_msg)
         return MISSIONS
     
     rules = await schedule_helper.get_mission_rules(mission_number)
@@ -101,14 +103,16 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not defender_id:
         logger.error(
             f"Cannot start battle: no defender found for attacker {attacker_id}")
-        await query.edit_message_text("Ошибка: не удалось найти противника для битвы")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_no_opponent")
+        await query.edit_message_text(error_msg)
         return MISSIONS
     
     try:
         battle_id = await mission_helper.start_battle(mission_id, attacker_id, defender_id)
     except ValueError as e:
         logger.error(f"Failed to start battle: {e}")
-        await query.edit_message_text(f"Ошибка при создании битвы: {str(e)}")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_battle_creation", error=str(e))
+        await query.edit_message_text(error_msg)
         return MISSIONS
 
     # Lock the mission now that battle has been successfully created
@@ -149,14 +153,14 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     mission_rules = mission[1] or ''
     
     # Helper function to build message for a player
-    def build_mission_message(opponent_is_dominant, opponent_nickname):
+    async def build_mission_message(opponent_is_dominant, opponent_nickname):
         builder = mission_message_builder.MissionMessageBuilder(
             mission_id, mission_description, mission_rules
         )
         
         # Add double exp bonus if opponent is dominant
         if opponent_is_dominant:
-            builder.add_double_exp_bonus(opponent_nickname)
+            await builder.add_double_exp_bonus(opponent_nickname)
         
         # Add common components
         builder.add_situation(situation)
@@ -165,27 +169,30 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return builder.build()
     
     # Build messages for both players
-    attacker_message = build_mission_message(defender_is_dominant, defender_nickname)
+    attacker_message = await build_mission_message(defender_is_dominant, defender_nickname)
     logger.info(f"Composed mission text for attacker: {attacker_message}")
 
     # Отправляем текст миссии текущему пользователю (атакующему)
     # Create Back button to return to missions list
-    back_button = [[InlineKeyboardButton("⬅️ Назад к миссиям", callback_data="back_to_missions")]]
+    btn_text = await localization.get_text_for_user(update.effective_user.id, "btn_back_to_missions")
+    back_button = [[InlineKeyboardButton(btn_text, callback_data="back_to_missions")]]
     back_markup = InlineKeyboardMarkup(back_button)
     
+    score_instructions = await localization.get_text_for_user(update.effective_user.id, "mission_score_instructions")
     await query.edit_message_text(
-        f"{attacker_message}\nЧто бы укзать результат игры 'ответьте' на это сообщение указав счёт в формате [ваши очки] [очки оппонента], например:\n20 0",
+        f"{attacker_message}\n{score_instructions}",
         reply_markup=back_markup
     )
 
     # Отправляем сообщение с миссией дефендеру
     if defender_id:
         try:
-            defender_message = build_mission_message(attacker_is_dominant, attacker_nickname)
+            defender_message = await build_mission_message(attacker_is_dominant, attacker_nickname)
+            new_mission_prefix = await localization.get_text("new_mission_prefix", 'ru')  # Use default language for defender
             
             await context.bot.send_message(
                 chat_id=defender_id, 
-                text=f"Новая миссия:\n{defender_message}"
+                text=f"{new_mission_prefix}\n{defender_message}"
             )
         except Exception as e:
             logger.error(
@@ -349,7 +356,8 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     # Send response to the player who just registered
     if len(opponents) == 0:
-        await query.edit_message_text('Ещё никто не запился на этот день')
+        no_signups_msg = await localization.get_text_for_user(user_id, "no_signups_today")
+        await query.edit_message_text(no_signups_msg)
     else:
         await query.edit_message_text('You will faced with')
         for opponent in opponents:
@@ -412,9 +420,8 @@ async def handle_mission_reply(
 
     if original_message is None:
         logger.error("Reply has no original message context (reply_to_message is None)")
-        await update.message.reply_text(
-            "Ответ должен быть на сообщение с миссией. Пожалуйста, нажмите 'Ответить' на сообщение миссии и укажите счёт в формате '20 0'."
-        )
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_score_format")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
 
     # Validate score format
@@ -425,9 +432,8 @@ async def handle_mission_reply(
         submitter_score = int(counts[0])
         opponent_score = int(counts[1])
     except (ValueError, IndexError):
-        await update.message.reply_text(
-            "Неверный формат счёта. Пожалуйста, используйте формат '20 0' (ваш_счёт счёт_противника)."
-        )
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_score_format")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
 
     # Разделяем текст на строки
@@ -437,7 +443,8 @@ async def handle_mission_reply(
     mission_id_line = next(
         (line for line in lines if line.startswith('#')), None)
     if not mission_id_line:
-        await update.message.reply_text("Не удалось определить миссию.")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_mission_not_found")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
         
     # Извлекаем значение после решётки - это реальный mission_id из базы
@@ -449,16 +456,15 @@ async def handle_mission_reply(
     
     if not battle_id:
         logger.error(f"No active battle found for mission {mission_id} and user {update.effective_user.id}")
-        await update.message.reply_text("Не найден активный бой для этой миссии.")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_no_active_battle")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
     
     # Check if there's already a pending result for this battle
     existing_pending = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
     if existing_pending:
-        await update.message.reply_text(
-            "Для этой миссии уже ожидается подтверждение результата. "
-            "Дождитесь подтверждения или отмены от противника."
-        )
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_already_submitted")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
     
     logger.info(f"Found battle_id {battle_id} for mission_id {mission_id}")
@@ -466,7 +472,8 @@ async def handle_mission_reply(
     # Get battle participants
     participants = await sqllite_helper.get_battle_participants(battle_id)
     if not participants:
-        await update.message.reply_text("Ошибка: не удалось найти участников битвы.")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_not_participant")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
     
     fstplayer_id, sndplayer_id = participants
@@ -483,7 +490,8 @@ async def handle_mission_reply(
         sndplayer_score = submitter_score
         opponent_id = fstplayer_id
     else:
-        await update.message.reply_text("Ошибка: вы не являетесь участником этой битвы.")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_not_participant")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
     
     # Create pending result
@@ -512,19 +520,23 @@ async def handle_mission_reply(
         winner_text = f"Ничья ({submitter_score}:{opponent_score})"
     
     # Send confirmation request to opponent
-    confirmation_message = (
-        f"🎲 Результат миссии #{mission_id}\n\n"
-        f"Игрок {submitter_nickname} ввёл результат:\n"
-        f"{winner_text}\n\n"
-        f"Подтвердите или отмените результат:"
-    )
+    btn_confirm_text = await localization.get_text("btn_confirm", 'ru')
+    btn_reject_text = await localization.get_text("btn_reject", 'ru')
     
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_result_{battle_id}"),
-            InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_result_{battle_id}")
+            InlineKeyboardButton(btn_confirm_text, callback_data=f"confirm_result_{battle_id}"),
+            InlineKeyboardButton(btn_reject_text, callback_data=f"cancel_result_{battle_id}")
         ]
     ])
+    
+    confirmation_message = await localization.get_text(
+        "result_confirm_question",
+        'ru',
+        winner_text=winner_text,
+        my_score=submitter_score,
+        opponent_score=opponent_score
+    )
     
     try:
         await context.bot.send_message(
@@ -538,9 +550,13 @@ async def handle_mission_reply(
         # Still allow the flow to continue
     
     # Respond to submitter
-    await update.message.reply_text(
-        f"✅ Результат отправлен на подтверждение противнику.\n{winner_text}"
+    pending_msg = await localization.get_text_for_user(
+        update.effective_user.id,
+        "result_pending_confirmation",
+        my_score=submitter_score,
+        opponent_score=opponent_score
     )
+    await update.message.reply_text(pending_msg)
     
     return MAIN_MENU
 
@@ -558,18 +574,21 @@ async def confirm_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Get the pending result
     pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
     if not pending_result:
-        await query.edit_message_text("❌ Ошибка: результат не найден или уже обработан.")
+        error_msg = await localization.get_text_for_user(user_id, "error_pending_not_found")
+        await query.edit_message_text(error_msg)
         return MAIN_MENU
     
     # Verify that the user is not the submitter
     if pending_result.submitter_id == user_id:
-        await query.edit_message_text("❌ Вы не можете подтвердить свой собственный результат.")
+        error_msg = await localization.get_text_for_user(user_id, "error_no_permission_confirm")
+        await query.edit_message_text(error_msg)
         return MAIN_MENU
     
     # Get battle participants
     participants = await sqllite_helper.get_battle_participants(battle_id)
     if not participants:
-        await query.edit_message_text("❌ Ошибка: не удалось найти участников битвы.")
+        error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
+        await query.edit_message_text(error_msg)
         return MAIN_MENU
     
     fstplayer_id, sndplayer_id = participants
@@ -627,24 +646,36 @@ async def confirm_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         submitter_nickname = await sqllite_helper.get_nickname_by_telegram_id(pending_result.submitter_id)
         
         # Send success message
-        await query.edit_message_text(
-            f"✅ Результат подтверждён!\n"
-            f"Счёт: {pending_result.fstplayer_score}:{pending_result.sndplayer_score}"
+        success_msg = await localization.get_text_for_user(
+            user_id,
+            "result_confirmed",
+            my_score=pending_result.fstplayer_score,
+            opponent_score=pending_result.sndplayer_score
         )
+        await query.edit_message_text(success_msg)
         
         # Notify the submitter that result was confirmed
         try:
             confirmer_nickname = await sqllite_helper.get_nickname_by_telegram_id(user_id)
+            notification_msg = await localization.get_text_for_user(
+                pending_result.submitter_id,
+                "result_confirmed_notification",
+                mission_id=mission_id,
+                confirmer_name=confirmer_nickname,
+                fst_score=pending_result.fstplayer_score,
+                snd_score=pending_result.sndplayer_score
+            )
             await context.bot.send_message(
                 chat_id=pending_result.submitter_id,
-                text=f"✅ Ваш результат для миссии #{mission_id} подтверждён игроком {confirmer_nickname}!"
+                text=notification_msg
             )
         except Exception as e:
             logger.error(f"Failed to notify submitter {pending_result.submitter_id}: {e}")
         
     except Exception as e:
         logger.error(f"Error confirming result for battle {battle_id}: {e}", exc_info=True)
-        await query.edit_message_text(f"❌ Ошибка при применении результата: {str(e)}")
+        error_msg = await localization.get_text_for_user(user_id, "error_result_application", error=str(e))
+        await query.edit_message_text(error_msg)
         return MAIN_MENU
     
     return MAIN_MENU
@@ -768,8 +799,9 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         )
     ]])
     
+    name_prompt = await localization.get_text_for_user(user_id, "prompt_enter_name")
     await query.edit_message_text(
-        f"{prompt_text}\n\n⚠️ Просто напишите ваше имя следующим сообщением",
+        f"{prompt_text}\n\n{name_prompt}",
         reply_markup=back_button
     )
     
@@ -1393,17 +1425,20 @@ async def admin_pending_confirmations(update: Update, context: ContextTypes.DEFA
     # Check if user is admin
     is_admin = await sqllite_helper.is_user_admin(user_id)
     if not is_admin:
-        await query.edit_message_text("❌ У вас нет прав администратора")
+        error_msg = await localization.get_text_for_user(user_id, "error_no_admin_rights")
+        await query.edit_message_text(error_msg)
         return MAIN_MENU
     
     # Get all pending missions
     pending_missions = await sqllite_helper.get_all_pending_missions()
     
     if not pending_missions:
+        no_pending_msg = await localization.get_text_for_user(user_id, "admin_no_pending_missions")
+        btn_back_text = await localization.get_text_for_user(user_id, "btn_back")
         await query.edit_message_text(
-            "✅ Нет миссий ожидающих подтверждения.",
+            no_pending_msg,
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("« Назад", callback_data="admin_menu")
+                InlineKeyboardButton(btn_back_text, callback_data="admin_menu")
             ]])
         )
         return MAIN_MENU
@@ -1433,14 +1468,19 @@ async def admin_pending_confirmations(update: Update, context: ContextTypes.DEFA
             )
         ])
     
+    btn_back_admin_text = await localization.get_text_for_user(user_id, "btn_back_admin_menu")
     keyboard.append([
-        InlineKeyboardButton("« Назад в админ меню", callback_data="admin_menu")
+        InlineKeyboardButton(btn_back_admin_text, callback_data="admin_menu")
     ])
     
     markup = InlineKeyboardMarkup(keyboard)
+    pending_title = await localization.get_text_for_user(
+        user_id,
+        "admin_pending_missions_title",
+        count=len(pending_missions)
+    )
     await query.edit_message_text(
-        f"⏳ Миссии ожидающие подтверждения ({len(pending_missions)}):\n\n"
-        "Выберите миссию для подтверждения результата:",
+        pending_title,
         reply_markup=markup
     )
     return MAIN_MENU
