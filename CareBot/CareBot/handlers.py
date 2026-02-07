@@ -154,6 +154,13 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             mission_id, mission_description, mission_rules
         )
         
+        # Add extra info from mission tuple (Killzone, PTS info, etc)
+        # Indices after 5 are extra info appended by mission_helper.get_mission
+        if len(mission) > 6:
+            for extra_info in mission[6:]:
+                if isinstance(extra_info, str):
+                    builder.add_custom_info(extra_info)
+        
         # Add double exp bonus if opponent is dominant
         if opponent_is_dominant:
             builder.add_double_exp_bonus(opponent_nickname)

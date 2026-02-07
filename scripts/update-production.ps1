@@ -72,6 +72,8 @@ function Sync-Files {
         "CareBot/CareBot/players_helper.py",
         "CareBot/CareBot/map_helper.py",
         "CareBot/CareBot/sqllite_helper.py",
+        "CareBot/CareBot/models.py",
+        "CareBot/CareBot/mission_message_builder.py",
         "CareBot/CareBot/keyboard_constructor.py",
         "CareBot/CareBot/localization.py",
         "CareBot/CareBot/notification_service.py",
