@@ -502,7 +502,8 @@ async def handle_mission_reply(
     )
     
     if not pending_id:
-        await update.message.reply_text("Ошибка при сохранении результата.")
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_saving_result")
+        await update.message.reply_text(error_msg)
         return MAIN_MENU
     
     # Update mission status to 2 (pending confirmation)
@@ -614,13 +615,15 @@ async def confirm_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Verify that the user is a participant
     if user_id not in [fstplayer_id, sndplayer_id]:
-        await query.edit_message_text("❌ Вы не являетесь участником этой битвы.")
+        error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
+        await query.edit_message_text(error_msg)
         return MAIN_MENU
     
     # Get mission_id
     mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
     if not mission_id:
-        await query.edit_message_text("❌ Ошибка: миссия не найдена.")
+        error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
+        await query.edit_message_text(error_msg)
         return MAIN_MENU
     
     # Construct user_reply for existing functions

@@ -82,6 +82,9 @@ def add_all_hardcoded_texts(conn):
         ("result_confirmed_notification", "ru", "✅ Ваш результат для миссии #{mission_id} подтверждён игроком {confirmer_name}.\n\nСчёт: {fst_score} - {snd_score}"),
         ("result_confirmed_notification", "en", "✅ Your result for mission #{mission_id} has been confirmed by player {confirmer_name}.\n\nScore: {fst_score} - {snd_score}"),
         
+        ("error_saving_result", "ru", "Ошибка при сохранении результата."),
+        ("error_saving_result", "en", "Error saving result."),
+        
         ("error_pending_not_found", "ru", "❌ Ожидающий результат не найден."),
         ("error_pending_not_found", "en", "❌ Pending result not found."),
         
