@@ -180,6 +180,57 @@ def add_all_hardcoded_texts(conn):
         
         ("mission_double_xp_bonus_generic", "ru", "⚔️ Ваш оппонент является членом доминирующего альянса! За убийство их юнитов вы получаете опыт в 2 раза быстрее!"),
         ("mission_double_xp_bonus_generic", "en", "⚔️ Your opponent is a member of the dominant alliance! You gain experience twice as fast for killing their units!"),
+        
+        # Winner display texts
+        ("winner_text", "ru", "Победитель: {winner} ({my_score}:{opponent_score})"),
+        ("winner_text", "en", "Winner: {winner} ({my_score}:{opponent_score})"),
+        
+        ("draw_text", "ru", "Ничья ({my_score}:{opponent_score})"),
+        ("draw_text", "en", "Draw ({my_score}:{opponent_score})"),
+        
+        # Cancel result messages
+        ("error_cancel_not_found", "ru", "❌ Ошибка: результат не найден или уже обработан."),
+        ("error_cancel_not_found", "en", "❌ Error: Result not found or already processed."),
+        
+        ("error_cannot_cancel_own", "ru", "❌ Вы не можете отменить свой собственный результат. Попросите противника сделать это."),
+        ("error_cannot_cancel_own", "en", "❌ You cannot cancel your own result. Ask your opponent to do it."),
+        
+        ("result_cancelled_success", "ru", "❌ Результат отменён.\nВы можете ввести новый результат."),
+        ("result_cancelled_success", "en", "❌ Result cancelled.\nYou can submit a new result."),
+        
+        ("result_cancelled_by_opponent", "ru", "❌ Ваш результат для миссии #{mission_id} был отменён игроком {canceler_name}. Вы можете ввести новый результат."),
+        ("result_cancelled_by_opponent", "en", "❌ Your result for mission #{mission_id} was cancelled by player {canceler_name}. You can submit a new result."),
+        
+        # Admin confirmation messages
+        ("admin_battle_not_found", "ru", "❌ Не найден бой для миссии #{mission_id}"),
+        ("admin_battle_not_found", "en", "❌ Battle not found for mission #{mission_id}"),
+        
+        ("admin_pending_not_found", "ru", "❌ Не найден ожидающий результат для миссии #{mission_id}"),
+        ("admin_pending_not_found", "en", "❌ Pending result not found for mission #{mission_id}"),
+        
+        ("admin_participants_label", "ru", "👥 Участники:"),
+        ("admin_participants_label", "en", "👥 Participants:"),
+        
+        ("admin_result_submitted_label", "ru", "📝 Результат введён:"),
+        ("admin_result_submitted_label", "en", "📝 Result submitted by:"),
+        
+        ("admin_confirm_result_success", "ru", "✅ Результат миссии #{mission_id} подтверждён!\nСчёт: {fst_score}:{snd_score}"),
+        ("admin_confirm_result_success", "en", "✅ Mission #{mission_id} result confirmed!\nScore: {fst_score}:{snd_score}"),
+        
+        ("admin_confirmed_by_admin", "ru", "✅ Администратор подтвердил результат миссии #{mission_id}\nСчёт: {fst_score}:{snd_score}"),
+        ("admin_confirmed_by_admin", "en", "✅ Administrator confirmed result of mission #{mission_id}\nScore: {fst_score}:{snd_score}"),
+        
+        ("admin_reject_result_success", "ru", "❌ Результат миссии #{mission_id} отклонён.\nПожалуйста, введите корректный результат."),
+        ("admin_reject_result_success", "en", "❌ Mission #{mission_id} result rejected.\nPlease submit correct result."),
+        
+        ("admin_rejected_by_admin", "ru", "❌ Администратор отклонил результат миссии #{mission_id}\nПожалуйста, введите корректный результат."),
+        ("admin_rejected_by_admin", "en", "❌ Administrator rejected result of mission #{mission_id}\nPlease submit correct result."),
+        
+        ("error_confirm_failed", "ru", "❌ Ошибка при подтверждении: {error}"),
+        ("error_confirm_failed", "en", "❌ Error confirming: {error}"),
+        
+        ("error_reject_failed", "ru", "❌ Ошибка при отклонении: {error}"),
+        ("error_reject_failed", "en", "❌ Error rejecting: {error}"),
     ]
     
     for key, language, text in texts:
