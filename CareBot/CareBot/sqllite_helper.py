@@ -122,6 +122,11 @@ async def get_nicknamane(telegram_id):
                 result = await cursor.fetchone()
                 return result[0] if result else None
 
+
+async def get_nickname_by_telegram_id(telegram_id):
+    """Return nickname for a user by telegram_id (compat alias)."""
+    return await get_nicknamane(telegram_id)
+
 async def get_number_of_safe_next_cells(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
@@ -636,7 +641,7 @@ async def save_mission(mission):
         today = datetime.date.today().isoformat()
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
-                                     mission_description, winner_bonus, locked, created_date)
+                                     mission_description, winner_bonus, status, created_date)
             VALUES(?, ?, ?, ?, ?, 0, ?)
         ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None, today))
         await db.commit()
