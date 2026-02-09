@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   carebot-production:
-    image: carebot:latest
+    image: carebot:${CAREBOT_IMAGE_TAG:-latest}
     container_name: carebot_production
     ports:
       - "5555:5555"
