@@ -1,37 +1,41 @@
 """Mission message builder for constructing mission messages with modular information."""
+import localization
 
 
 class MissionMessageBuilder:
     """Builder class for constructing mission messages with various information components."""
     
-    def __init__(self, mission_id, description, rules):
+    def __init__(self, mission_id, description, rules, language='ru'):
         """Initialize the mission message builder.
         
         Args:
             mission_id: Mission ID
             description: Mission description
             rules: Mission rules/type
+            language: Language code for localized messages
         """
         self.mission_id = mission_id
         self.description = description
         self.rules = rules
+        self.language = language
         self.components = []
         
-    def add_double_exp_bonus(self, opponent_name=None):
+    async def add_double_exp_bonus(self, opponent_name=None):
         """Add information about double experience bonus.
         
         Args:
             opponent_name: Optional name of the opponent (for context)
         """
         if opponent_name:
-            message = (
-                f"⚔️ {opponent_name} является членом доминирующего альянса! "
-                f"За убийство их юнитов вы получаете опыт в 2 раза быстрее!"
+            message = await localization.get_text(
+                "mission_double_xp_bonus",
+                self.language,
+                opponent_name=opponent_name
             )
         else:
-            message = (
-                "⚔️ Ваш оппонент является членом доминирующего альянса! "
-                "За убийство их юнитов вы получаете опыт в 2 раза быстрее!"
+            message = await localization.get_text(
+                "mission_double_xp_bonus_generic",
+                self.language
             )
         self.components.append(message)
         return self

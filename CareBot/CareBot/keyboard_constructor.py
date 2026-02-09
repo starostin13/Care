@@ -24,11 +24,23 @@ EMOJI_5_PERSONS = ['👫👫👤', '👥👤', '5️⃣']
 EMOJI_6_PERSONS = ['👫👫👫', '👥👥👥', '6️⃣']
 EMOJI_7_PLUS = ['🎉', '🎊', '🎈', '👥👥👥👥', '🎪', '🎆', '🎇', '6️⃣➕']
 
-# Short weekday labels by language (default to English)
-DAY_ABBR = {
-    'ru': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-    'en': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-}
+# Short weekday labels are now loaded from database via localization
+async def get_day_abbreviations(language='ru'):
+    """Get localized day abbreviations from database."""
+    days = []
+    day_keys = [
+        'day_monday_short',
+        'day_tuesday_short', 
+        'day_wednesday_short',
+        'day_thursday_short',
+        'day_friday_short',
+        'day_saturday_short',
+        'day_sunday_short'
+    ]
+    for key in day_keys:
+        day_text = await localization.get_text(key, language)
+        days.append(day_text)
+    return days
 
 
 def get_participant_count_emoji(count: int) -> str:
@@ -185,7 +197,7 @@ async def this_week(rule, user_id):
 
     # Определяем язык и короткие названия дней недели
     user_lang = await localization.get_user_language(user_id)
-    day_abbr = DAY_ABBR.get(user_lang, DAY_ABBR['en'])
+    day_abbr = await get_day_abbreviations(user_lang)
 
     def format_day(date_obj):
         return f"{day_abbr[date_obj.weekday()]} {date_obj.strftime('%d.%m')}"
@@ -292,9 +304,10 @@ async def today_schedule(user_id):
 
 
 async def language_selection(userId):
+    russian_label = await localization.get_text("btn_language_russian", "ru")
     languages = [
         [InlineKeyboardButton("🇬🇧 English", callback_data="lang:en")],
-        [InlineKeyboardButton("🇷🇺 Русский", callback_data="lang:ru")],
+        [InlineKeyboardButton(russian_label, callback_data="lang:ru")],
         [InlineKeyboardButton(
             await localization.get_text_for_user(userId, "button_back"),
             callback_data="back_to_settings")]
@@ -356,11 +369,20 @@ async def admin_assign_alliance_list(userId, player_telegram_id):
     alliances = await sqllite_helper.get_all_alliances()
     buttons = []
     
+    # Get user language for localized text
+    user_lang = await localization.get_user_language(userId)
+    
     for alliance_id, alliance_name in alliances:
         player_count = await sqllite_helper.get_alliance_player_count(alliance_id)
+        button_text = await localization.get_text(
+            "alliance_player_count",
+            user_lang,
+            alliance_name=alliance_name,
+            player_count=player_count
+        )
         buttons.append([
             InlineKeyboardButton(
-                f"{alliance_name} ({player_count} игроков)",
+                button_text,
                 callback_data=f"admin_alliance:{player_telegram_id}:{alliance_id}"
             )
         ])
@@ -440,9 +462,15 @@ async def get_admin_menu(userId):
     # Pending mission confirmations - only show if there are pending missions
     pending_count = await sqllite_helper.get_pending_missions_count()
     if pending_count > 0:
+        user_lang = await localization.get_user_language(userId)
+        button_text = await localization.get_text(
+            "admin_pending_count",
+            user_lang,
+            pending_count=pending_count
+        )
         items.append([
             InlineKeyboardButton(
-                f"⏳ Подтверждение миссий ({pending_count})",
+                button_text,
                 callback_data="admin_pending_confirmations")
         ])
     
