@@ -151,6 +151,12 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Формируем текст для пользователя используя message builder
     mission_description = mission[3] or ''
     mission_rules = mission[1] or ''
+    # Check if map_description is available (for battlefleet missions)
+    # For battlefleet missions, the tuple is: (deploy, rules, cell, description, id, winner_bonus, map_description)
+    # So map_description would be at index 6
+    map_description = None
+    if len(mission) > 6 and mission_rules == "battlefleet":
+        map_description = mission[6]
     
     # Get user languages for localized messages
     attacker_lang = await localization.get_user_language(attacker_id)
@@ -162,6 +168,13 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             mission_id, mission_description, mission_rules, user_lang
         )
         
+        # Add extra info from mission tuple (Killzone, PTS info, etc)
+        # Indices after 5 are extra info appended by mission_helper.get_mission
+        if len(mission) > 6:
+            for extra_info in mission[6:]:
+                if isinstance(extra_info, str):
+                    builder.add_custom_info(extra_info)
+        
         # Add double exp bonus if opponent is dominant
         if opponent_is_dominant:
             await builder.add_double_exp_bonus(opponent_nickname)
@@ -169,6 +182,10 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Add common components
         builder.add_situation(situation)
         builder.add_reinforcement_message(reinforcement_message)
+        
+        # Add map description for battlefleet missions
+        if map_description:
+            builder.add_custom_info(f"\n{map_description}")
         
         return builder.build()
     
@@ -361,6 +378,24 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Send response to the player who just registered
     if len(opponents) == 0:
         no_signups_msg = await localization.get_text_for_user(user_id, "no_signups_today")
+        await query.edit_message_text(no_signups_msg)
+        alt_opponents = await players_helper.get_opponents_other_formats(user_id, data)
+        if alt_opponents:
+            message_lines = [
+                'Ещё никто не запился на этот формат.',
+                'Но на этот день будут игроки в другие форматы:'
+            ]
+            for opponent in alt_opponents:
+                message_lines.append(f"- {opponent[0]} ({opponent[2]})")
+            await query.edit_message_text('\n'.join(message_lines))
+            for opponent in alt_opponents:
+                if len(opponent) > 1 and opponent[1]:
+                    await update.effective_chat.send_contact(
+                        first_name=str(opponent[0]),
+                        phone_number=opponent[1]
+                    )
+        else:
+            no_signups_msg = await localization.get_text_for_user(user_id, "no_signups_today")
         await query.edit_message_text(no_signups_msg)
     else:
         await query.edit_message_text('You will faced with')

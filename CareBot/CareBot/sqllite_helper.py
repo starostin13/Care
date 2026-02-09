@@ -122,6 +122,11 @@ async def get_nicknamane(telegram_id):
                 result = await cursor.fetchone()
                 return result[0] if result else None
 
+
+async def get_nickname_by_telegram_id(telegram_id):
+    """Return nickname for a user by telegram_id (compat alias)."""
+    return await get_nicknamane(telegram_id)
+
 async def get_number_of_safe_next_cells(cell_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
@@ -329,7 +334,7 @@ async def get_mission(rules) -> Optional[Mission]:
     
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description
             FROM mission_stack
             WHERE status=0 AND rules=?
         ''', (rules,)) as cursor:
@@ -522,6 +527,22 @@ async def get_warmasters_opponents(against_alliance, rule, date):
             return await cursor.fetchall()
 
 
+async def get_other_rule_opponents(against_alliance, rule, date):
+    """Get opponents registered for other rules on the same date."""
+    date_str = str(datetime.datetime.strptime(date, "%c").strftime("%Y-%m-%d"))
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT DISTINCT warmasters.nickname, warmasters.registered_as, schedule.rules
+            FROM warmasters
+            JOIN schedule ON warmasters.telegram_id = schedule.user_telegram
+            WHERE warmasters.alliance <> ?
+            AND schedule.date = ?
+            AND schedule.rules <> ?
+        ''', (against_alliance[0], date_str, rule)
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def get_alliance_of_warmaster(telegram_user_id):
     logger.info(
         "get_alliance_of_warmaster(telegram_id=%s [type=%s])",
@@ -636,9 +657,12 @@ async def save_mission(mission):
         today = datetime.date.today().isoformat()
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
-                                     mission_description, winner_bonus, locked, created_date)
-            VALUES(?, ?, ?, ?, ?, 0, ?)
-        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None, today))
+                                     mission_description, winner_bonus, status, created_date, map_description)
+            VALUES(?, ?, ?, ?, ?, 0, ?, ?)
+        ''', (mission[0], mission[1], mission[2], mission[3], 
+              mission[4] if len(mission) > 4 else None, 
+              today,
+              mission[5] if len(mission) > 5 else None))
         await db.commit()
 
 
@@ -869,7 +893,7 @@ async def get_mission_details(mission_id) -> Optional[Mission]:
     logger.info("get_mission_details(mission_id=%s)", mission_id)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description
             FROM mission_stack WHERE id = ?
         ''', (mission_id,)) as cursor:
             row = await cursor.fetchone()
@@ -1664,4 +1688,3 @@ async def get_battle_id_by_mission_id(mission_id: int):
         ''', (mission_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
-

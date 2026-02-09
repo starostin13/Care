@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (for better caching)
-COPY requirements.txt .
+COPY CareBot/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -28,6 +28,12 @@ EXPOSE 5555
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=5555
 ENV DATABASE_PATH=/app/data/game_database.db
+
+# Fix line endings (in case of Windows) and make executable
+RUN sed -i 's/\r$//' entrypoint.sh && chmod +x entrypoint.sh
+
+# Set entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Health check (проверяем Flask сервер)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

@@ -19,6 +19,7 @@ class Mission:
     winner_bonus: Optional[str]
     status: int  # 0=available, 1=active/locked, 2=pending_confirmation, 3=confirmed
     created_date: str
+    map_description: Optional[str] = None
     
     @classmethod
     def from_db_row(cls, row):
@@ -26,7 +27,7 @@ class Mission:
         
         Args:
             row: tuple from SELECT * FROM mission_stack
-                 (id, deploy, rules, cell, mission_description, winner_bonus, status, created_date)
+                 (id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description)
         """
         if not row:
             return None
@@ -38,16 +39,20 @@ class Mission:
             mission_description=row[4],
             winner_bonus=row[5],
             status=row[6],
-            created_date=row[7]
+            created_date=row[7],
+            map_description=row[8] if len(row) > 8 else None
         )
     
     def to_tuple(self):
         """Convert to tuple for backwards compatibility.
         
-        Returns tuple in old format:
-        (deploy, rules, cell, mission_description, winner_bonus)
+        Returns tuple in format:
+        (deploy, rules, cell, mission_description, id, winner_bonus)
+        
+        Note: map_description is NOT included in the base tuple. It's added
+        separately by mission_helper.get_mission() for specific mission types.
         """
-        return (self.deploy, self.rules, self.cell, self.mission_description, self.winner_bonus)
+        return (self.deploy, self.rules, self.cell, self.mission_description, self.id, self.winner_bonus)
 
 
 @dataclass
@@ -87,6 +92,7 @@ class MissionDetails:
     winner_bonus: Optional[str]
     status: int  # 0=available, 1=active/locked, 2=pending_confirmation, 3=confirmed
     created_date: str
+    map_description: Optional[str] = None
     # Extended fields added by mission_helper
     killzone: Optional[str] = None
     hex_state: Optional[str] = None
@@ -104,7 +110,8 @@ class MissionDetails:
             mission_description=mission.mission_description,
             winner_bonus=mission.winner_bonus,
             status=mission.status,
-            created_date=mission.created_date
+            created_date=mission.created_date,
+            map_description=mission.map_description
         )
 
 
