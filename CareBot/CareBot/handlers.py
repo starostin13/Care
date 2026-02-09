@@ -2031,7 +2031,8 @@ async def handle_notification_message(update: Update, context: ContextTypes.DEFA
     recipients = []
     if notification_type == 'warmaster':
         recipients = [recipient]
-        recipient_description = (await sqllite_helper.get_settings(recipient))[0] if await sqllite_helper.get_settings(recipient) else recipient
+        warmaster_settings = await sqllite_helper.get_settings(recipient)
+        recipient_description = warmaster_settings[0] if warmaster_settings else recipient
     elif notification_type == 'alliance':
         alliance_players = await sqllite_helper.get_players_by_alliance(recipient)
         recipients = [player[0] for player in alliance_players]
