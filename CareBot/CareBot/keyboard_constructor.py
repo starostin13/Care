@@ -96,6 +96,8 @@ async def get_main_menu(userId):
     # Check if user has a nickname set
     user_settings = await settings_helper.get_user_settings(userId)
     has_nickname = user_settings and user_settings[0]  # nickname is the first field
+    alliance = await sqllite_helper.get_alliance_of_warmaster(userId)
+    has_alliance = alliance and alliance[0] not in (None, 0)
     
     if has_nickname:
         # If user has nickname, show missions and games
@@ -108,6 +110,13 @@ async def get_main_menu(userId):
             InlineKeyboardButton(
                 await localization.get_text_for_user(userId, "button_games"),
                 callback_data="games")
+        ])
+
+    if has_alliance:
+        items.append([
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_alliance_resources"),
+                callback_data="alliance_resources")
         ])
 
     # Check if user is admin and add admin buttons
@@ -458,6 +467,13 @@ async def get_admin_menu(userId):
             await localization.get_text_for_user(userId, "button_admin_alliance_management"),
             callback_data="admin_alliance_management")
     ])
+
+    # Alliance resource adjustments
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_admin_adjust_resources"),
+            callback_data="admin_adjust_resources")
+    ])
     
     # Pending mission confirmations - only show if there are pending missions
     pending_count = await sqllite_helper.get_pending_missions_count()
@@ -570,6 +586,28 @@ async def get_alliance_list_for_delete(userId):
         InlineKeyboardButton(
             await localization.get_text_for_user(userId, "button_back"),
             callback_data="admin_alliance_management")
+    ])
+    
+    return items
+
+
+async def get_alliance_list_for_resources(userId):
+    """Generate keyboard for selecting alliance to adjust resources."""
+    items = []
+    
+    alliances = await sqllite_helper.get_all_alliances_with_resources()
+    for alliance_id, alliance_name, resource_amount in alliances:
+        display_text = f"{alliance_name} ({resource_amount})"
+        items.append([
+            InlineKeyboardButton(
+                display_text,
+                callback_data=f"admin_adjust_alliance:{alliance_id}")
+        ])
+    
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="admin_menu")
     ])
     
     return items

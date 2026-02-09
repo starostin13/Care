@@ -50,11 +50,11 @@ MOCK_MISSIONS = {}
 MOCK_BATTLES = {}
 MOCK_SCHEDULES = {}
 MOCK_ALLIANCES = {
-    1: {'id': 1, 'name': 'Crimson Legion', 'color': 'red'},
-    2: {'id': 2, 'name': 'Shadow Pact', 'color': 'black'},
-    3: {'id': 3, 'name': 'Iron Brotherhood', 'color': 'gray'},
-    4: {'id': 4, 'name': 'Storm Guard', 'color': 'blue'},
-    5: {'id': 5, 'name': 'Void Seekers', 'color': 'purple'}
+    1: {'id': 1, 'name': 'Crimson Legion', 'color': 'red', 'common_resource': 0},
+    2: {'id': 2, 'name': 'Shadow Pact', 'color': 'black', 'common_resource': 0},
+    3: {'id': 3, 'name': 'Iron Brotherhood', 'color': 'gray', 'common_resource': 0},
+    4: {'id': 4, 'name': 'Storm Guard', 'color': 'blue', 'common_resource': 0},
+    5: {'id': 5, 'name': 'Void Seekers', 'color': 'purple', 'common_resource': 0}
 }
 
 print("🧪 Mock SQLite Helper loaded for TEST MODE")
@@ -92,12 +92,23 @@ async def set_cell_patron(cell_id, winner_alliance_id):
 # Alliance functions
 async def get_alliance_by_id(alliance_id):
     print(f"🧪 Mock: get_alliance_by_id({alliance_id})")
-    return MOCK_ALLIANCES.get(alliance_id, MOCK_ALLIANCES[1])
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    if not alliance:
+        return None
+    return (alliance['id'], alliance['name'], alliance.get('common_resource', 0))
 
 async def get_all_alliances():
     print("🧪 Mock: get_all_alliances()")
     # Возвращаем (id, name) как ожидает keyboard_constructor
     return [(alliance['id'], alliance['name']) for alliance in MOCK_ALLIANCES.values()]
+
+
+async def get_all_alliances_with_resources():
+    print("🧪 Mock: get_all_alliances_with_resources()")
+    return [
+        (alliance['id'], alliance['name'], alliance.get('common_resource', 0))
+        for alliance in MOCK_ALLIANCES.values()
+    ]
 
 
 async def create_alliance(name, initial_resources=0):
@@ -129,6 +140,7 @@ async def create_alliance(name, initial_resources=0):
     MOCK_ALLIANCES[new_id] = {
         'id': new_id,
         'name': name,
+        'color': random.choice(['red', 'black', 'gray', 'blue', 'purple']),
         'common_resource': initial_resources
     }
     
@@ -453,7 +465,15 @@ async def get_localized_text(key, language='ru'):
         'enter_name': 'Введите ваше имя (тест):',
         'invalid_name': 'Неверное имя (тест)',
         'admin_menu': 'Админ меню (тест)',
-        'access_denied': 'Доступ запрещен (тест)'
+        'access_denied': 'Доступ запрещен (тест)',
+        'button_alliance_resources': 'Ресурсы альянса (тест)',
+        'alliance_resources_message': 'Ресурсы альянса {alliance_name}: {resources}',
+        'alliance_no_alliance': 'У вас пока нет альянса (тест)',
+        'button_admin_adjust_resources': 'Ресурсы альянсов (тест)',
+        'admin_adjust_resources_title': 'Выберите альянс для изменения ресурсов (тест)',
+        'admin_adjust_resource_prompt': 'Введите изменение ресурсов для {alliance_name} (текущее: {current})',
+        'admin_adjust_resource_success': 'Ресурсы изменены на {delta}, теперь {new_value}',
+        'admin_adjust_resource_invalid': 'Введите целое число'
     }
     
     return mock_texts.get(key, f'[ТЕСТ] {key}')
@@ -486,7 +506,8 @@ async def update_alliance_resources(alliance_id, change):
 
 async def get_alliance_resources(alliance_id):
     print(f"🧪 Mock: get_alliance_resources({alliance_id})")
-    return random.randint(5, 20)
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    return alliance.get('common_resource', 0) if alliance else 0
 
 # Complete function implementations for all sqllite_helper functions
 async def add_warmaster(telegram_id):
@@ -541,7 +562,8 @@ async def get_mission(rules):
         winner_bonus=None,
         status=0,
         created_date=today,
-        map_description=map_description
+        map_description=map_description,
+        resource_bonus=0
     )
 
 async def get_schedule_by_user(user_telegram, date=None):
@@ -755,11 +777,19 @@ async def toggle_notifications(user_telegram_id):
 
 async def increase_common_resource(alliance_id, amount=1):
     print(f"🧪 Mock: increase_common_resource({alliance_id}, {amount})")
-    return True
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    if not alliance:
+        return 0
+    alliance['common_resource'] = alliance.get('common_resource', 0) + amount
+    return alliance['common_resource']
 
 async def decrease_common_resource(alliance_id, amount=1):
     print(f"🧪 Mock: decrease_common_resource({alliance_id}, {amount})")
-    return True
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    if not alliance:
+        return 0
+    alliance['common_resource'] = max(0, alliance.get('common_resource', 0) - amount)
+    return alliance['common_resource']
 
 async def create_warehouse(cell_id):
     print(f"🧪 Mock: create_warehouse({cell_id})")
@@ -798,7 +828,8 @@ async def get_mission_details(mission_id):
         winner_bonus=None,
         status=0,
         created_date=today,
-        map_description=None
+        map_description=None,
+        resource_bonus=0
     )
 
 async def destroy_warehouse_by_alliance(alliance_id):
