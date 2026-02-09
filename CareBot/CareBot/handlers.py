@@ -366,7 +366,23 @@ async def im_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     # Send response to the player who just registered
     if len(opponents) == 0:
-        await query.edit_message_text('Ещё никто не запился на этот день')
+        alt_opponents = await players_helper.get_opponents_other_formats(user_id, data)
+        if alt_opponents:
+            message_lines = [
+                'Ещё никто не запился на этот формат.',
+                'Но на этот день будут игроки в другие форматы:'
+            ]
+            for opponent in alt_opponents:
+                message_lines.append(f"- {opponent[0]} ({opponent[2]})")
+            await query.edit_message_text('\n'.join(message_lines))
+            for opponent in alt_opponents:
+                if len(opponent) > 1 and opponent[1]:
+                    await update.effective_chat.send_contact(
+                        first_name=str(opponent[0]),
+                        phone_number=opponent[1]
+                    )
+        else:
+            await query.edit_message_text('Ещё никто не запился на этот день')
     else:
         await query.edit_message_text('You will faced with')
         for opponent in opponents:
