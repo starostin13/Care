@@ -334,7 +334,7 @@ async def get_mission(rules) -> Optional[Mission]:
     
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description
             FROM mission_stack
             WHERE status=0 AND rules=?
         ''', (rules,)) as cursor:
@@ -641,9 +641,12 @@ async def save_mission(mission):
         today = datetime.date.today().isoformat()
         await db.execute('''
             INSERT INTO mission_stack(deploy, rules, cell,
-                                     mission_description, winner_bonus, status, created_date)
-            VALUES(?, ?, ?, ?, ?, 0, ?)
-        ''', (mission[0], mission[1], mission[2], mission[3], mission[4] if len(mission) > 4 else None, today))
+                                     mission_description, winner_bonus, status, created_date, map_description)
+            VALUES(?, ?, ?, ?, ?, 0, ?, ?)
+        ''', (mission[0], mission[1], mission[2], mission[3], 
+              mission[4] if len(mission) > 4 else None, 
+              today,
+              mission[5] if len(mission) > 5 else None))
         await db.commit()
 
 
@@ -874,7 +877,7 @@ async def get_mission_details(mission_id) -> Optional[Mission]:
     logger.info("get_mission_details(mission_id=%s)", mission_id)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
+            SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description
             FROM mission_stack WHERE id = ?
         ''', (mission_id,)) as cursor:
             row = await cursor.fetchone()
