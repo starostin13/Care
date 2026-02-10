@@ -1,11 +1,13 @@
 import os
 import sys
 import asyncio
+import types
 
 MODULE_DIR = os.path.join(os.path.dirname(__file__), '..', 'CareBot')
 sys.path.insert(0, os.path.abspath(MODULE_DIR))
 
 os.environ['CAREBOT_TEST_MODE'] = 'true'
+sys.modules.setdefault("config", types.SimpleNamespace(TEST_MODE=True))
 
 import mission_helper  # noqa: E402
 
@@ -21,7 +23,7 @@ class DummyMissionDetails:
         self.status = 0
         self.created_date = "2025-01-01"
         self.map_description = None
-        self.resource_bonus = 3
+        self.reward_config = "COMMON_RESOURCE: 3"
 
 
 def test_apply_mission_rewards_adds_base_and_bonus(monkeypatch):

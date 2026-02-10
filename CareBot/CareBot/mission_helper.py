@@ -70,6 +70,25 @@ BATTLEZONE_GENERATORS = {
 }
 
 
+def _parse_reward_config(reward_config):
+    """Return normalized reward entries from mission reward_config text."""
+    rewards = {}
+    if not reward_config:
+        return rewards
+    normalized = reward_config.replace("\n", ";")
+    for part in normalized.split(";"):
+        if ":" not in part:
+            continue
+        key, value = part.split(":", 1)
+        key = key.strip().upper()
+        try:
+            amount = int(value.strip())
+        except (TypeError, ValueError):
+            continue
+        rewards[key] = amount
+    return rewards
+
+
 def generate_battlefleet_map():
     """Generate celestial phenomena map for Battlefleet Gothica missions.
     
@@ -697,14 +716,10 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
 
         # Add more mission types as needed
 
-    # Apply mission-specific common resource bonus for the winner
-    resource_bonus = getattr(mission_details, "resource_bonus", 0) or 0
-    try:
-        resource_bonus_value = int(resource_bonus)
-    except (TypeError, ValueError):
-        resource_bonus_value = 0
-
-    if resource_bonus_value > 0 and winner_alliance_id:
+    # Apply mission-specific rewards from reward_config
+    rewards = _parse_reward_config(getattr(mission_details, "reward_config", None))
+    resource_bonus_value = rewards.get("COMMON_RESOURCE", 0)
+    if resource_bonus_value and winner_alliance_id:
         await sqllite_helper.increase_common_resource(
             winner_alliance_id, resource_bonus_value)
         logger.info(

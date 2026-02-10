@@ -20,7 +20,7 @@ class Mission:
     status: int  # 0=available, 1=active/locked, 2=pending_confirmation, 3=confirmed
     created_date: str
     map_description: Optional[str] = None
-    resource_bonus: int = 0
+    reward_config: Optional[str] = None
     
     @classmethod
     def from_db_row(cls, row):
@@ -28,7 +28,7 @@ class Mission:
         
         Args:
             row: tuple from SELECT * FROM mission_stack
-                 (id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description, resource_bonus)
+                 (id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description, reward_config)
         """
         if not row:
             return None
@@ -42,7 +42,7 @@ class Mission:
             status=row[6],
             created_date=row[7],
             map_description=row[8] if len(row) > 8 else None,
-            resource_bonus=row[9] if len(row) > 9 and row[9] is not None else 0
+            reward_config=row[9] if len(row) > 9 and row[9] is not None else None
         )
     
     def to_tuple(self):
@@ -95,7 +95,7 @@ class MissionDetails:
     status: int  # 0=available, 1=active/locked, 2=pending_confirmation, 3=confirmed
     created_date: str
     map_description: Optional[str] = None
-    resource_bonus: int = 0
+    reward_config: Optional[str] = None
     # Extended fields added by mission_helper
     killzone: Optional[str] = None
     hex_state: Optional[str] = None
@@ -115,7 +115,7 @@ class MissionDetails:
             status=mission.status,
             created_date=mission.created_date,
             map_description=mission.map_description,
-            resource_bonus=mission.resource_bonus
+            reward_config=mission.reward_config
         )
 
 

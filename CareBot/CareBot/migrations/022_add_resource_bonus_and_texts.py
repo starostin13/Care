@@ -1,22 +1,22 @@
 """
-Migration 022: Add resource bonus column for missions and localization texts
+Migration 022: Add reward_config column for missions and localization texts
 for alliance resource features.
 """
 from yoyo import step
 
 
-def add_resource_bonus_column(conn):
+def add_reward_config_column(conn):
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(mission_stack)")
     columns = [col[1] for col in cursor.fetchall()]
 
-    if 'resource_bonus' not in columns:
+    if 'reward_config' not in columns:
         cursor.execute(
-            "ALTER TABLE mission_stack ADD COLUMN resource_bonus INTEGER DEFAULT 0"
+            "ALTER TABLE mission_stack ADD COLUMN reward_config TEXT"
         )
-        print("✅ Добавлена колонка resource_bonus в таблицу mission_stack")
+        print("✅ Добавлена колонка reward_config в таблицу mission_stack")
     else:
-        print("✅ Колонка resource_bonus уже существует в mission_stack")
+        print("✅ Колонка reward_config уже существует в mission_stack")
 
 
 def add_common_resource_texts(conn):
@@ -47,6 +47,6 @@ def add_common_resource_texts(conn):
 
 
 steps = [
-    step(add_resource_bonus_column),
+    step(add_reward_config_column),
     step(add_common_resource_texts)
 ]

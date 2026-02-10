@@ -563,7 +563,7 @@ async def get_mission(rules):
         status=0,
         created_date=today,
         map_description=map_description,
-        resource_bonus=0
+        reward_config=None
     )
 
 async def get_schedule_by_user(user_telegram, date=None):
@@ -829,7 +829,7 @@ async def get_mission_details(mission_id):
         status=0,
         created_date=today,
         map_description=None,
-        resource_bonus=0
+        reward_config=None
     )
 
 async def destroy_warehouse_by_alliance(alliance_id):
