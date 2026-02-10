@@ -459,6 +459,13 @@ async def get_admin_menu(userId):
             callback_data="admin_alliance_management")
     ])
     
+    # Custom notifications (new functionality)
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_admin_custom_notification"),
+            callback_data="admin_custom_notification")
+    ])
+    
     # Pending mission confirmations - only show if there are pending missions
     pending_count = await sqllite_helper.get_pending_missions_count()
     if pending_count > 0:

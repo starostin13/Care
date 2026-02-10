@@ -100,6 +100,21 @@ async def get_all_alliances():
     return [(alliance['id'], alliance['name']) for alliance in MOCK_ALLIANCES.values()]
 
 
+async def get_players_by_alliance(alliance_id):
+    """Get all players in a specific alliance (mock version)."""
+    print(f"🧪 Mock: get_players_by_alliance({alliance_id})")
+    # Возвращаем список (telegram_id, nickname, alliance) для игроков в альянсе
+    players = []
+    for warmaster in MOCK_WARMASTERS.values():
+        if warmaster.get('alliance') == alliance_id:
+            players.append((
+                warmaster['telegram_id'],
+                warmaster['nickname'],
+                warmaster['alliance']
+            ))
+    return players
+
+
 async def create_alliance(name, initial_resources=0):
     """Create a new alliance (mock version)."""
     print(f"🧪 Mock: create_alliance({name}, {initial_resources})")
