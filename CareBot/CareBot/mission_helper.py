@@ -70,6 +70,25 @@ BATTLEZONE_GENERATORS = {
 }
 
 
+def _parse_reward_config(reward_config):
+    """Return normalized reward entries from mission reward_config text."""
+    rewards = {}
+    if not reward_config:
+        return rewards
+    normalized = reward_config.replace("\n", ";")
+    for part in normalized.split(";"):
+        if ":" not in part:
+            continue
+        key, value = part.split(":", 1)
+        key = key.strip().upper()
+        try:
+            amount = int(value.strip())
+        except (TypeError, ValueError):
+            continue
+        rewards[key] = amount
+    return rewards
+
+
 def generate_battlefleet_map():
     """Generate celestial phenomena map for Battlefleet Gothica missions.
     
@@ -516,6 +535,17 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
             "Opponent %s has no alliance (alliance=0) in battle %s",
             opponent_telegram_id, battle_id)
 
+    # Base resource gain for participating alliances
+    participant_alliances = []
+    if user_alliance not in (None, 0):
+        participant_alliances.append(user_alliance)
+    if opponent_alliance not in (None, 0):
+        participant_alliances.append(opponent_alliance)
+
+    for alliance_id in set(participant_alliances):
+        await sqllite_helper.increase_common_resource(alliance_id, 1)
+        logger.info("Alliance %s received 1 common resource for participation", alliance_id)
+
     # Determine winner
     logger.info("Determining winner...")
     if user_score > opponent_score:
@@ -685,6 +715,16 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
                     loser_alliance_id, resource_loss)
 
         # Add more mission types as needed
+
+    # Apply mission-specific rewards from reward_config
+    rewards = _parse_reward_config(getattr(mission_details, "reward_config", None))
+    resource_bonus_value = rewards.get("COMMON_RESOURCE", 0)
+    if resource_bonus_value and winner_alliance_id:
+        await sqllite_helper.increase_common_resource(
+            winner_alliance_id, resource_bonus_value)
+        logger.info(
+            "Applied mission resource bonus: +%s to alliance %s",
+            resource_bonus_value, winner_alliance_id)
 
     # Check if loser alliance has any hexes remaining after battle
     logger.info("Checking for alliance elimination...")

@@ -311,6 +311,46 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return MAIN_MENU
 
 
+async def show_alliance_resources(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Display alliance resource amount for the user's alliance."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    alliance = await sqllite_helper.get_alliance_of_warmaster(user_id)
+    alliance_id = alliance[0] if alliance else None
+
+    if not alliance_id or alliance_id == 0:
+        no_alliance_msg = await localization.get_text_for_user(user_id, "alliance_no_alliance")
+        back_text = await localization.get_text_for_user(user_id, "button_back")
+        await query.edit_message_text(
+            no_alliance_msg,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(back_text, callback_data="back_to_main")]
+            ])
+        )
+        return MAIN_MENU
+
+    alliance_info = await sqllite_helper.get_alliance_by_id(alliance_id)
+    alliance_name = alliance_info[1] if alliance_info else str(alliance_id)
+    resources = await sqllite_helper.get_alliance_resources(alliance_id)
+
+    info_text = await localization.get_text_for_user(
+        user_id,
+        "alliance_resources_message",
+        alliance_name=alliance_name,
+        resources=resources
+    )
+    back_text = await localization.get_text_for_user(user_id, "button_back")
+    await query.edit_message_text(
+        info_text,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(back_text, callback_data="back_to_main")]
+        ])
+    )
+    return MAIN_MENU
+
+
 async def appoint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     userId = update.effective_user.id
     query = update.callback_query
@@ -1218,6 +1258,61 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return MAIN_MENU
 
 
+async def admin_adjust_resources_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of alliances for resource adjustments."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+
+    context.user_data.pop('resource_adjust_alliance_id', None)
+    menu = await keyboard_constructor.get_alliance_list_for_resources(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    title = await localization.get_text_for_user(user_id, "admin_adjust_resources_title")
+    await query.edit_message_text(title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_select_resource_alliance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Prompt admin to enter resource delta for selected alliance."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+
+    alliance_id = int(query.data.split(':')[1])
+    context.user_data['resource_adjust_alliance_id'] = alliance_id
+
+    alliance_info = await sqllite_helper.get_alliance_by_id(alliance_id)
+    alliance_name = alliance_info[1] if alliance_info else str(alliance_id)
+    current_resources = await sqllite_helper.get_alliance_resources(alliance_id)
+
+    prompt_text = await localization.get_text_for_user(
+        user_id,
+        "admin_adjust_resource_prompt",
+        alliance_name=alliance_name,
+        current=current_resources
+    )
+    back_text = await localization.get_text_for_user(user_id, "button_back")
+    await query.edit_message_text(
+        prompt_text,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(back_text, callback_data="admin_adjust_resources")]
+        ])
+    )
+    return ALLIANCE_INPUT
+
+
 async def admin_alliance_management(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show alliance management menu."""
     user_id = update.effective_user.id
@@ -1476,7 +1571,38 @@ async def admin_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_alliance_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Route text input to appropriate alliance handler based on context."""
     user_id = update.effective_user.id
-    
+
+    if 'resource_adjust_alliance_id' in context.user_data:
+        alliance_id = context.user_data['resource_adjust_alliance_id']
+        try:
+            delta = int(update.message.text.strip())
+        except ValueError:
+            error_text = await localization.get_text_for_user(user_id, "admin_adjust_resource_invalid")
+            await update.message.reply_text(error_text)
+            return ALLIANCE_INPUT
+
+        if delta >= 0:
+            new_value = await sqllite_helper.increase_common_resource(alliance_id, delta)
+        else:
+            new_value = await sqllite_helper.decrease_common_resource(alliance_id, abs(delta))
+
+        alliance_info = await sqllite_helper.get_alliance_by_id(alliance_id)
+        alliance_name = alliance_info[1] if alliance_info else str(alliance_id)
+        success_text = await localization.get_text_for_user(
+            user_id,
+            "admin_adjust_resource_success",
+            alliance_name=alliance_name,
+            delta=delta,
+            new_value=new_value
+        )
+
+        context.user_data.pop('resource_adjust_alliance_id', None)
+        menu = await keyboard_constructor.get_admin_menu(user_id)
+        markup = InlineKeyboardMarkup(menu)
+
+        await update.message.reply_text(success_text, reply_markup=markup)
+        return MAIN_MENU
+
     # Check if we're in a renaming operation
     if 'renaming_alliance_id' in context.user_data:
         return await handle_alliance_rename_input(update, context)
@@ -2123,6 +2249,7 @@ def start_bot():
                 CallbackQueryHandler(appoint, pattern='^games$'),
                 CallbackQueryHandler(appoint, pattern="^" + 'callgame' + "$"),
                 CallbackQueryHandler(show_missions, pattern='^missions$'),
+                CallbackQueryHandler(show_alliance_resources, pattern='^alliance_resources$'),
                 CallbackQueryHandler(registration_call, pattern='^registration$'),
                 CallbackQueryHandler(show_missions, pattern='^callmissions$'),
                 CallbackQueryHandler(change_language, pattern='^changelanguage$'),
@@ -2138,6 +2265,8 @@ def start_bot():
                 CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:'),
                 CallbackQueryHandler(admin_appoint_admin, pattern='^admin_appoint_admin$'),
                 CallbackQueryHandler(admin_make_user_admin, pattern='^admin_make_admin:'),
+                CallbackQueryHandler(admin_adjust_resources_menu, pattern='^admin_adjust_resources$'),
+                CallbackQueryHandler(admin_select_resource_alliance, pattern='^admin_adjust_alliance:'),
                 # Alliance management handlers
                 CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
                 CallbackQueryHandler(admin_create_alliance, pattern='^admin_create_alliance$'),
@@ -2192,6 +2321,7 @@ def start_bot():
             ALLIANCE_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_alliance_text_input),
                 CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
+                CallbackQueryHandler(admin_adjust_resources_menu, pattern='^admin_adjust_resources$')
                 CallbackQueryHandler(admin_edit_alliances, pattern='^admin_edit_alliances$')
             ],
             CUSTOM_NOTIFICATION: [
