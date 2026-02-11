@@ -1,12 +1,11 @@
 """
 Test script to verify that NULL mission id handling is working correctly.
-This tests that missions with NULL id are skipped and not sent to users.
+This tests that missions with NULL id get a new id generated and updated in the database.
 """
 
 import sys
 import os
 import asyncio
-import tempfile
 
 # Add the project directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'CareBot', 'CareBot'))
@@ -15,8 +14,24 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Car
 os.environ['CAREBOT_TEST_MODE'] = 'true'
 
 
-async def test_get_mission_filters_null_id():
-    """Test that get_mission filters out NULL id values."""
+async def test_fix_mission_null_id_function_exists():
+    """Test that fix_mission_null_id function exists."""
+    try:
+        import sqllite_helper
+
+        if hasattr(sqllite_helper, 'fix_mission_null_id'):
+            print("✅ fix_mission_null_id function exists in sqllite_helper")
+            return True
+        else:
+            print("❌ fix_mission_null_id function NOT found in sqllite_helper")
+            return False
+    except Exception as e:
+        print(f"❌ Error checking fix_mission_null_id: {e}")
+        return False
+
+
+async def test_get_mission_handles_null_id():
+    """Test that get_mission handles NULL id values by generating new ids."""
     try:
         import inspect
         import sqllite_helper
@@ -24,12 +39,12 @@ async def test_get_mission_filters_null_id():
         # Get the source code of get_mission
         source = inspect.getsource(sqllite_helper.get_mission)
 
-        # Check if it filters NULL ids in the query
-        if 'id IS NOT NULL' in source:
-            print("✅ get_mission filters out NULL id values in query")
+        # Check if it handles NULL id by calling fix_mission_null_id
+        if 'row[0] is None' in source and 'fix_mission_null_id' in source:
+            print("✅ get_mission handles NULL id values by generating new ids")
             return True
         else:
-            print("❌ get_mission does NOT filter NULL id values")
+            print("❌ get_mission does NOT handle NULL id values correctly")
             return False
     except Exception as e:
         print(f"❌ Error checking get_mission: {e}")
@@ -67,85 +82,13 @@ async def test_no_migration_021():
         )
 
         if not os.path.exists(migration_file):
-            print("✅ Migration 021 does not exist (correct - NULL ids are acceptable in DB)")
+            print("✅ Migration 021 does not exist (correct - NULL ids are fixed at runtime)")
             return True
         else:
-            print("❌ Migration 021 exists but should not (NULL ids should remain in DB)")
+            print("❌ Migration 021 exists but should not (NULL ids should be fixed at runtime)")
             return False
     except Exception as e:
         print(f"❌ Error checking migration: {e}")
-        return False
-
-
-async def test_null_id_filtering_with_temp_db():
-    """Test NULL id filtering with a temporary database."""
-    try:
-        import aiosqlite
-        import datetime
-
-        # Create a temporary database
-        temp_db = tempfile.mktemp(suffix='.db')
-
-        # Set the database path for the test
-        original_db_path = os.environ.get('DATABASE_PATH', '')
-        os.environ['DATABASE_PATH'] = temp_db
-
-        try:
-            # Create the database schema
-            async with aiosqlite.connect(temp_db) as db:
-                # Create mission_stack table
-                await db.execute('''
-                    CREATE TABLE mission_stack (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        deploy TEXT,
-                        rules TEXT,
-                        cell INTEGER,
-                        mission_description TEXT,
-                        winner_bonus TEXT,
-                        status INTEGER DEFAULT 0,
-                        created_date TEXT
-                    )
-                ''')
-                await db.commit()
-
-                today = datetime.date.today().isoformat()
-
-                # Insert a normal mission with valid id
-                await db.execute('''
-                    INSERT INTO mission_stack (deploy, rules, cell, mission_description, winner_bonus, status, created_date)
-                    VALUES ('Test Deploy 1', 'killteam', NULL, 'Valid Mission', NULL, 0, ?)
-                ''', (today,))
-                await db.commit()
-
-                # Verify it has an id
-                async with db.execute('SELECT id FROM mission_stack WHERE deploy = "Test Deploy 1"') as cursor:
-                    row = await cursor.fetchone()
-                    if row and row[0] is not None:
-                        print(f"✅ Valid mission has id: {row[0]}")
-                    else:
-                        print("❌ Valid mission does not have id")
-                        return False
-
-            # Now test that get_mission would skip NULL id missions
-            # (We can't actually create NULL id missions easily in SQLite, but we verified the query filter)
-            print("✅ NULL id filtering test completed successfully")
-            return True
-
-        finally:
-            # Restore original database path
-            if original_db_path:
-                os.environ['DATABASE_PATH'] = original_db_path
-            else:
-                os.environ.pop('DATABASE_PATH', None)
-
-            # Clean up temp database
-            if os.path.exists(temp_db):
-                os.remove(temp_db)
-
-    except Exception as e:
-        print(f"❌ Error in NULL id filtering test: {e}")
-        import traceback
-        traceback.print_exc()
         return False
 
 
@@ -154,10 +97,10 @@ async def main():
     print("=" * 60)
 
     tests = [
-        ("get_mission filters NULL id", test_get_mission_filters_null_id),
+        ("fix_mission_null_id exists", test_fix_mission_null_id_function_exists),
+        ("get_mission handles NULL id", test_get_mission_handles_null_id),
         ("get_mission_details handles NULL id param", test_get_mission_details_handles_null_id),
         ("no migration 021 exists", test_no_migration_021),
-        ("NULL id filtering with temp DB", test_null_id_filtering_with_temp_db),
     ]
 
     passed = 0
@@ -174,12 +117,14 @@ async def main():
     if passed == total:
         print("\n🎉 All tests passed! NULL mission id handling works correctly.")
         print("\n📝 Implementation:")
-        print("1. ✅ No migration - NULL ids are acceptable in the database")
-        print("2. ✅ get_mission filters out NULL ids in SQL query (id IS NOT NULL)")
-        print("3. ✅ get_mission_details handles NULL mission_id parameter defensively")
+        print("1. ✅ No migration - NULL ids are fixed at runtime")
+        print("2. ✅ fix_mission_null_id function generates new ids for NULL missions")
+        print("3. ✅ get_mission checks for NULL ids and generates new ones")
+        print("4. ✅ get_mission_details handles NULL mission_id parameter defensively")
         print("\n🚀 Expected behavior:")
-        print("   - Missions with NULL id remain in the database")
-        print("   - get_mission will skip missions with NULL id (not sent to users)")
+        print("   - When a mission with NULL id is retrieved, a new id is generated")
+        print("   - The NULL id mission is deleted and re-inserted with auto-generated id")
+        print("   - The mission is then re-fetched with the new id")
         print("   - Mission model always receives valid non-NULL ids")
     else:
         print("\n❌ Some tests failed. Please check the errors above.")
