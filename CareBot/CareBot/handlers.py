@@ -38,7 +38,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS, ALLIANCE_INPUT = range(6)
+MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS, ALLIANCE_INPUT, CUSTOM_NOTIFICATION = range(7)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
@@ -1982,6 +1982,250 @@ async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer(f"Debug: Callback '{query.data}' not handled")
     return ConversationHandler.END
 
+
+# ============================================================================
+# Custom Notification Handlers
+# ============================================================================
+
+async def admin_custom_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start custom notification process - select recipient type."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+    
+    # Show recipient type selection menu
+    menu_text = await localization.get_text_for_user(user_id, "custom_notification_select_recipient_type")
+    
+    keyboard = [
+        [InlineKeyboardButton(
+            await localization.get_text_for_user(user_id, "button_notify_warmaster"),
+            callback_data="notify_type_warmaster")],
+        [InlineKeyboardButton(
+            await localization.get_text_for_user(user_id, "button_notify_alliance"),
+            callback_data="notify_type_alliance")],
+        [InlineKeyboardButton(
+            await localization.get_text_for_user(user_id, "button_back"),
+            callback_data="admin_menu")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(menu_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_select_notification_warmaster(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of warmasters to select recipient."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Get all warmasters with nicknames
+    warmasters = await sqllite_helper.get_warmasters_with_nicknames()
+    
+    if not warmasters:
+        error_text = await localization.get_text_for_user(user_id, "no_warmasters_found")
+        back_button = await localization.get_text_for_user(user_id, "button_back")
+        keyboard = [[InlineKeyboardButton(back_button, callback_data="admin_custom_notification")]]
+        await query.edit_message_text(error_text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return MAIN_MENU
+    
+    menu_text = await localization.get_text_for_user(user_id, "custom_notification_select_warmaster")
+    
+    keyboard = []
+    for warmaster in warmasters:
+        telegram_id = warmaster[0]
+        nickname = warmaster[1]
+        keyboard.append([InlineKeyboardButton(
+            nickname,
+            callback_data=f"notify_warmaster:{telegram_id}")])
+    
+    # Add back button
+    back_button = await localization.get_text_for_user(user_id, "button_back")
+    keyboard.append([InlineKeyboardButton(back_button, callback_data="admin_custom_notification")])
+    
+    markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(menu_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_select_notification_alliance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of alliances to select recipients."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Get all alliances
+    alliances = await sqllite_helper.get_all_alliances()
+    
+    if not alliances:
+        error_text = await localization.get_text_for_user(user_id, "no_alliances_found")
+        back_button = await localization.get_text_for_user(user_id, "button_back")
+        keyboard = [[InlineKeyboardButton(back_button, callback_data="admin_custom_notification")]]
+        await query.edit_message_text(error_text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return MAIN_MENU
+    
+    menu_text = await localization.get_text_for_user(user_id, "custom_notification_select_alliance")
+    
+    keyboard = []
+    for alliance in alliances:
+        alliance_id = alliance[0]
+        alliance_name = alliance[1]
+        keyboard.append([InlineKeyboardButton(
+            alliance_name,
+            callback_data=f"notify_alliance:{alliance_id}")])
+    
+    # Add back button
+    back_button = await localization.get_text_for_user(user_id, "button_back")
+    keyboard.append([InlineKeyboardButton(back_button, callback_data="admin_custom_notification")])
+    
+    markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(menu_text, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_request_notification_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Request the admin to send the message content."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    callback_data = query.data
+    
+    # Parse recipient info from callback data
+    if callback_data.startswith("notify_warmaster:"):
+        recipient_id = callback_data.replace("notify_warmaster:", "")
+        context.user_data['notification_type'] = 'warmaster'
+        context.user_data['notification_recipient'] = recipient_id
+        
+        # Get warmaster nickname for confirmation
+        warmaster = await sqllite_helper.get_settings(recipient_id)
+        recipient_name = warmaster[0] if warmaster else recipient_id
+        
+    elif callback_data.startswith("notify_alliance:"):
+        alliance_id = int(callback_data.replace("notify_alliance:", ""))
+        context.user_data['notification_type'] = 'alliance'
+        context.user_data['notification_recipient'] = alliance_id
+        
+        # Get alliance name for confirmation
+        alliances = await sqllite_helper.get_all_alliances()
+        recipient_name = next((a[1] for a in alliances if a[0] == alliance_id), str(alliance_id))
+    else:
+        return MAIN_MENU
+    
+    # Show instructions to admin
+    instruction_text = await localization.get_text_for_user(
+        user_id, 
+        "custom_notification_send_message",
+        recipient_name=recipient_name
+    )
+    
+    # Add cancel button
+    cancel_button = await localization.get_text_for_user(user_id, "button_cancel")
+    keyboard = [[InlineKeyboardButton(cancel_button, callback_data="admin_menu")]]
+    markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(instruction_text, reply_markup=markup)
+    return CUSTOM_NOTIFICATION
+
+
+async def handle_notification_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the message that admin wants to send to recipients."""
+    user_id = update.effective_user.id
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        return MAIN_MENU
+    
+    # Check if we have recipient info
+    if 'notification_type' not in context.user_data or 'notification_recipient' not in context.user_data:
+        error_text = await localization.get_text_for_user(user_id, "error_notification_session_expired")
+        await update.message.reply_text(error_text)
+        return MAIN_MENU
+    
+    notification_type = context.user_data['notification_type']
+    recipient = context.user_data['notification_recipient']
+    
+    # Determine recipients list
+    recipients = []
+    if notification_type == 'warmaster':
+        recipients = [recipient]
+        warmaster_settings = await sqllite_helper.get_settings(recipient)
+        recipient_description = warmaster_settings[0] if warmaster_settings else recipient
+    elif notification_type == 'alliance':
+        alliance_players = await sqllite_helper.get_players_by_alliance(recipient)
+        recipients = [player[0] for player in alliance_players]
+        alliances = await sqllite_helper.get_all_alliances()
+        recipient_description = next((a[1] for a in alliances if a[0] == recipient), str(recipient))
+    
+    if not recipients:
+        error_text = await localization.get_text_for_user(user_id, "error_no_recipients")
+        await update.message.reply_text(error_text)
+        return MAIN_MENU
+    
+    # Send the message to all recipients
+    success_count = 0
+    failure_count = 0
+    
+    for recipient_id in recipients:
+        try:
+            # Check if message has photo
+            if update.message.photo:
+                # Get the largest photo
+                photo = update.message.photo[-1]
+                caption = update.message.caption if update.message.caption else ""
+                
+                await context.bot.send_photo(
+                    chat_id=recipient_id,
+                    photo=photo.file_id,
+                    caption=caption
+                )
+            elif update.message.text:
+                # Send text message
+                await context.bot.send_message(
+                    chat_id=recipient_id,
+                    text=update.message.text
+                )
+            else:
+                # Unsupported message type
+                continue
+                
+            success_count += 1
+            logger.info(f"Custom notification sent to {recipient_id}")
+            
+        except Exception as e:
+            failure_count += 1
+            logger.error(f"Failed to send custom notification to {recipient_id}: {e}")
+    
+    # Send confirmation to admin
+    confirmation_text = await localization.get_text_for_user(
+        user_id,
+        "custom_notification_sent",
+        recipient_name=recipient_description,
+        success_count=success_count,
+        failure_count=failure_count
+    )
+    
+    # Return to main menu
+    menu = await keyboard_constructor.main_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    await update.message.reply_text(confirmation_text, reply_markup=markup)
+    
+    # Clear user data
+    context.user_data.pop('notification_type', None)
+    context.user_data.pop('notification_recipient', None)
+    
+    return MAIN_MENU
+
+
 def start_bot():
     """Initialize and start the Telegram bot."""
     # Run database migrations before starting the bot
@@ -2037,6 +2281,12 @@ def start_bot():
                 CallbackQueryHandler(admin_confirm_mission, pattern='^admin_confirm_mission:'),
                 CallbackQueryHandler(admin_do_confirm_mission, pattern='^admin_do_confirm:'),
                 CallbackQueryHandler(admin_do_reject_mission, pattern='^admin_do_reject:'),
+                # Custom notification handlers
+                CallbackQueryHandler(admin_custom_notification, pattern='^admin_custom_notification$'),
+                CallbackQueryHandler(admin_select_notification_warmaster, pattern='^notify_type_warmaster$'),
+                CallbackQueryHandler(admin_select_notification_alliance, pattern='^notify_type_alliance$'),
+                CallbackQueryHandler(admin_request_notification_message, pattern='^notify_warmaster:'),
+                CallbackQueryHandler(admin_request_notification_message, pattern='^notify_alliance:'),
                 # Result confirmation handlers
                 CallbackQueryHandler(confirm_result, pattern='^confirm_result_'),
                 CallbackQueryHandler(cancel_result, pattern='^cancel_result_'),
@@ -2071,8 +2321,12 @@ def start_bot():
             ALLIANCE_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_alliance_text_input),
                 CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
-                CallbackQueryHandler(admin_edit_alliances, pattern='^admin_edit_alliances$'),
                 CallbackQueryHandler(admin_adjust_resources_menu, pattern='^admin_adjust_resources$')
+                CallbackQueryHandler(admin_edit_alliances, pattern='^admin_edit_alliances$')
+            ],
+            CUSTOM_NOTIFICATION: [
+                MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_notification_message),
+                CallbackQueryHandler(admin_menu, pattern='^admin_menu$')
             ]
         },
         fallbacks=[CommandHandler("start", hello)],
