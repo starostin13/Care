@@ -312,7 +312,7 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def show_alliance_resources(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Display alliance resource amount for the user's alliance."""
+    """Display alliance information including resources, player count, and territories."""
     user_id = update.effective_user.id
     query = update.callback_query
     await query.answer()
@@ -331,15 +331,22 @@ async def show_alliance_resources(update: Update, context: ContextTypes.DEFAULT_
         )
         return MAIN_MENU
 
+    # Get alliance information
     alliance_info = await sqllite_helper.get_alliance_by_id(alliance_id)
     alliance_name = alliance_info[1] if alliance_info else str(alliance_id)
+
+    # Get alliance statistics
     resources = await sqllite_helper.get_alliance_resources(alliance_id)
+    player_count = await sqllite_helper.get_alliance_player_count(alliance_id)
+    territory_count = await sqllite_helper.get_alliance_territory_count(alliance_id)
 
     info_text = await localization.get_text_for_user(
         user_id,
-        "alliance_resources_message",
+        "alliance_info_message",
         alliance_name=alliance_name,
-        resources=resources
+        resources=resources,
+        player_count=player_count,
+        territory_count=territory_count
     )
     back_text = await localization.get_text_for_user(user_id, "button_back")
     await query.edit_message_text(
