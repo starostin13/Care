@@ -1682,6 +1682,103 @@ async def get_pending_missions_count():
             return result[0] if result else 0
 
 
+async def get_user_game_counts_last_month(alliance_id: int = None):
+    """Get game counts per user for the last 30 days.
+    
+    Args:
+        alliance_id: Optional alliance filter. If provided, only users from
+            this alliance are included.
+    
+    Returns:
+        List of tuples: (telegram_id, nickname, alliance_id, games_count)
+    """
+    cutoff_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+    query = """
+        WITH recent_missions AS (
+            SELECT id
+            FROM mission_stack
+            WHERE status = 3
+              AND created_date IS NOT NULL
+              AND created_date >= ?
+        ),
+        mission_battles AS (
+            SELECT rm.id AS mission_id,
+                   (
+                       SELECT id FROM battles b
+                       WHERE b.mission_id = rm.id
+                       ORDER BY id DESC
+                       LIMIT 1
+                   ) AS battle_id
+            FROM recent_missions rm
+        )
+        SELECT ba.attender_id,
+               w.nickname,
+               w.alliance,
+               COUNT(*) AS games_count
+        FROM mission_battles mb
+        JOIN battle_attenders ba ON ba.battle_id = mb.battle_id
+        LEFT JOIN warmasters w ON w.telegram_id = ba.attender_id
+        WHERE mb.battle_id IS NOT NULL
+    """
+    params = [cutoff_date]
+    if alliance_id is not None:
+        query += " AND w.alliance = ?"
+        params.append(alliance_id)
+    query += """
+        GROUP BY ba.attender_id, w.nickname, w.alliance
+        ORDER BY games_count DESC,
+                 w.nickname IS NULL,
+                 COALESCE(w.nickname, CAST(ba.attender_id AS TEXT)),
+                 ba.attender_id
+    """
+
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute(query, params) as cursor:
+            return await cursor.fetchall()
+
+
+async def get_alliance_game_counts_last_month():
+    """Get game counts per alliance for the last 30 days.
+    
+    Returns:
+        List of tuples: (alliance_id, alliance_name, games_count)
+    """
+    cutoff_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("""
+            WITH recent_missions AS (
+                SELECT id
+                FROM mission_stack
+                WHERE status = 3
+                  AND created_date IS NOT NULL
+                  AND created_date >= ?
+            ),
+            mission_battles AS (
+                SELECT rm.id AS mission_id,
+                       (
+                           SELECT id FROM battles b
+                           WHERE b.mission_id = rm.id
+                           ORDER BY id DESC
+                           LIMIT 1
+                       ) AS battle_id
+                FROM recent_missions rm
+            )
+            SELECT w.alliance,
+                   a.name,
+                   COUNT(*) AS games_count
+            FROM mission_battles mb
+            JOIN battle_attenders ba ON ba.battle_id = mb.battle_id
+            JOIN warmasters w ON w.telegram_id = ba.attender_id
+            JOIN alliances a ON a.id = w.alliance
+            WHERE mb.battle_id IS NOT NULL
+              AND w.alliance IS NOT NULL
+              AND w.alliance != 0
+            GROUP BY w.alliance, a.name
+            ORDER BY games_count DESC, a.name
+        """, (cutoff_date,)) as cursor:
+            return await cursor.fetchall()
+
+
 async def get_battle_id_by_mission_id(mission_id: int):
     """Get the most recent battle_id for a given mission_id.
     

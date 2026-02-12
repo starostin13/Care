@@ -481,6 +481,13 @@ async def get_admin_menu(userId):
             await localization.get_text_for_user(userId, "button_admin_custom_notification"),
             callback_data="admin_custom_notification")
     ])
+
+    # Statistics menu
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_admin_stats"),
+            callback_data="admin_stats_menu")
+    ])
     
     # Pending mission confirmations - only show if there are pending missions
     pending_count = await sqllite_helper.get_pending_missions_count()
@@ -505,6 +512,27 @@ async def get_admin_menu(userId):
     ])
     
     return items
+
+
+async def get_admin_stats_menu(userId):
+    """Generate admin statistics submenu keyboard."""
+    return [
+        [
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_admin_stats_users"),
+                callback_data="admin_stats_users")
+        ],
+        [
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_admin_stats_alliances"),
+                callback_data="admin_stats_alliances")
+        ],
+        [
+            InlineKeyboardButton(
+                await localization.get_text_for_user(userId, "button_back"),
+                callback_data="admin_menu")
+        ]
+    ]
 
 
 async def get_alliance_management_menu(userId):

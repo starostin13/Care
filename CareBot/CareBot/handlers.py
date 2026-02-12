@@ -1265,6 +1265,148 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return MAIN_MENU
 
 
+async def admin_stats_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show statistics submenu for admins."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+
+    menu = await keyboard_constructor.get_admin_stats_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    title = await localization.get_text_for_user(user_id, "admin_stats_title")
+    await query.edit_message_text(title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_stats_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of users sorted by games played in last month."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    if not await sqllite_helper.is_user_admin(user_id):
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+
+    alliances = await sqllite_helper.get_all_alliances()
+    alliance_map = {a_id: name for a_id, name in alliances}
+    stats = await sqllite_helper.get_user_game_counts_last_month()
+    games_label = await localization.get_text_for_user(user_id, "admin_stats_games_label")
+    back_text = await localization.get_text_for_user(user_id, "button_back")
+
+    if not stats:
+        no_data = await localization.get_text_for_user(user_id, "admin_stats_no_data")
+        await query.edit_message_text(
+            no_data,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(back_text, callback_data="admin_stats_menu")]])
+        )
+        return MAIN_MENU
+
+    lines = []
+    for idx, (telegram_id, nickname, alliance_id, games_count) in enumerate(stats, 1):
+        display_name = nickname or str(telegram_id)
+        alliance_suffix = ""
+        if alliance_id and alliance_id in alliance_map:
+            alliance_suffix = f" ({alliance_map[alliance_id]})"
+        lines.append(f"{idx}. {display_name}{alliance_suffix} — {games_count} {games_label}")
+
+    title = await localization.get_text_for_user(user_id, "admin_stats_users_title")
+    message = f"{title}\n\n" + "\n".join(lines)
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(back_text, callback_data="admin_stats_menu")]])
+    )
+    return MAIN_MENU
+
+
+async def admin_stats_alliances(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of alliances sorted by games played in last month."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    if not await sqllite_helper.is_user_admin(user_id):
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+
+    stats = await sqllite_helper.get_alliance_game_counts_last_month()
+    games_label = await localization.get_text_for_user(user_id, "admin_stats_games_label")
+    back_text = await localization.get_text_for_user(user_id, "button_back")
+
+    keyboard = []
+    for alliance_id, alliance_name, games_count in stats:
+        button_text = f"{alliance_name} — {games_count} {games_label}"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"admin_stats_alliance:{alliance_id}")])
+    keyboard.append([InlineKeyboardButton(back_text, callback_data="admin_stats_menu")])
+
+    title = await localization.get_text_for_user(user_id, "admin_stats_alliances_title")
+    markup = InlineKeyboardMarkup(keyboard)
+
+    if not stats:
+        no_data = await localization.get_text_for_user(user_id, "admin_stats_no_data")
+        await query.edit_message_text(no_data, reply_markup=markup)
+        return MAIN_MENU
+
+    await query.edit_message_text(title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_stats_alliance_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of users for a specific alliance sorted by games."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    if not await sqllite_helper.is_user_admin(user_id):
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+
+    alliance_id = int(query.data.split(':')[1])
+    alliance_info = await sqllite_helper.get_alliance_by_id(alliance_id)
+    alliance_name = alliance_info[1] if alliance_info else str(alliance_id)
+
+    stats = await sqllite_helper.get_user_game_counts_last_month(alliance_id=alliance_id)
+    games_label = await localization.get_text_for_user(user_id, "admin_stats_games_label")
+    back_text = await localization.get_text_for_user(user_id, "button_back")
+    back_admin_text = await localization.get_text_for_user(user_id, "btn_back_admin_menu")
+
+    if not stats:
+        no_data = await localization.get_text_for_user(user_id, "admin_stats_no_data")
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(back_text, callback_data="admin_stats_alliances")],
+            [InlineKeyboardButton(back_admin_text, callback_data="admin_menu")]
+        ])
+        await query.edit_message_text(no_data, reply_markup=markup)
+        return MAIN_MENU
+
+    lines = []
+    for idx, (telegram_id, nickname, _alliance_id, games_count) in enumerate(stats, 1):
+        display_name = nickname or str(telegram_id)
+        lines.append(f"{idx}. {display_name} — {games_count} {games_label}")
+
+    title = await localization.get_text_for_user(
+        user_id,
+        "admin_stats_alliance_users_title",
+        alliance_name=alliance_name
+    )
+    message = f"{title}\n\n" + "\n".join(lines)
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton(back_text, callback_data="admin_stats_alliances")],
+        [InlineKeyboardButton(back_admin_text, callback_data="admin_menu")]
+    ])
+    await query.edit_message_text(message, reply_markup=markup)
+    return MAIN_MENU
+
+
 async def admin_adjust_resources_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show list of alliances for resource adjustments."""
     user_id = update.effective_user.id
@@ -2272,6 +2414,10 @@ def start_bot():
                 CallbackQueryHandler(admin_assign_alliance_to_player, pattern='^admin_alliance:'),
                 CallbackQueryHandler(admin_appoint_admin, pattern='^admin_appoint_admin$'),
                 CallbackQueryHandler(admin_make_user_admin, pattern='^admin_make_admin:'),
+                CallbackQueryHandler(admin_stats_menu, pattern='^admin_stats_menu$'),
+                CallbackQueryHandler(admin_stats_users, pattern='^admin_stats_users$'),
+                CallbackQueryHandler(admin_stats_alliances, pattern='^admin_stats_alliances$'),
+                CallbackQueryHandler(admin_stats_alliance_users, pattern='^admin_stats_alliance:'),
                 CallbackQueryHandler(admin_adjust_resources_menu, pattern='^admin_adjust_resources$'),
                 CallbackQueryHandler(admin_select_resource_alliance, pattern='^admin_adjust_alliance:'),
                 # Alliance management handlers
