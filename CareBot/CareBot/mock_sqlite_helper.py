@@ -474,7 +474,16 @@ async def get_localized_text(key, language='ru'):
         'admin_adjust_resources_title': 'Выберите альянс для изменения ресурсов (тест)',
         'admin_adjust_resource_prompt': 'Введите изменение ресурсов для {alliance_name} (текущее: {current})',
         'admin_adjust_resource_success': 'Ресурсы изменены на {delta}, теперь {new_value}',
-        'admin_adjust_resource_invalid': 'Введите целое число'
+        'admin_adjust_resource_invalid': 'Введите целое число',
+        'button_admin_stats': 'Статистика (тест)',
+        'button_admin_stats_users': 'Список пользователей (тест)',
+        'button_admin_stats_alliances': 'Список альянсов (тест)',
+        'admin_stats_title': 'Статистика (тест)',
+        'admin_stats_users_title': 'Игроки за месяц (тест)',
+        'admin_stats_alliances_title': 'Альянсы за месяц (тест)',
+        'admin_stats_alliance_users_title': 'Игроки альянса {alliance_name} (тест)',
+        'admin_stats_no_data': 'Нет данных за последний месяц (тест)',
+        'admin_stats_games_label': 'игр'
     }
     
     return mock_texts.get(key, f'[ТЕСТ] {key}')
@@ -880,6 +889,25 @@ async def get_alliance_territory_count(alliance_id):
     if alliance_id == 0 or alliance_id is None:
         return 0
     return random.randint(1, 5)  # Mock alliances have some territories
+
+async def get_user_game_counts_last_month(alliance_id: int = None):
+    print(f"🧪 Mock: get_user_game_counts_last_month(alliance_id={alliance_id})")
+    sample_stats = [
+        ('325313837', 'TestUser1', 1, 5),
+        ('123456789', 'TestUser2', 2, 3),
+        ('987654321', 'NoAlliance', 0, 1)
+    ]
+    if alliance_id is not None:
+        sample_stats = [row for row in sample_stats if row[2] == alliance_id]
+    return sample_stats
+
+
+async def get_alliance_game_counts_last_month():
+    print("🧪 Mock: get_alliance_game_counts_last_month()")
+    return [
+        (aid, alliance['name'], random.randint(1, 5))
+        for aid, alliance in MOCK_ALLIANCES.items()
+    ]
 
 async def get_dominant_alliance():
     """Mock: Get the alliance with the most territories (cells) on the map."""
