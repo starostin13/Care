@@ -2122,6 +2122,76 @@ async def admin_do_reject_mission(update: Update, context: ContextTypes.DEFAULT_
     return MAIN_MENU
 
 
+# ============================================================================
+# Feature Flags Handlers
+# ============================================================================
+
+async def admin_feature_flags(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show feature flags management menu."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+    
+    menu = await keyboard_constructor.get_admin_feature_flags_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    title = await localization.get_text_for_user(user_id, "admin_feature_flags_title")
+    await query.edit_message_text(title, reply_markup=markup)
+    return MAIN_MENU
+
+
+async def admin_toggle_feature(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Toggle a feature flag on/off."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_text = await localization.get_text_for_user(user_id, "error_not_admin")
+        await query.edit_message_text(error_text)
+        return MAIN_MENU
+    
+    # Extract flag name from callback data
+    import feature_flags_helper
+    flag_name = query.data.split(':')[1]
+    
+    # Toggle the flag
+    new_state = await feature_flags_helper.toggle_feature_flag(flag_name)
+    
+    # Get localized feature name
+    feature_name_key = f"feature_{flag_name}_name"
+    feature_name = await localization.get_text_for_user(user_id, feature_name_key)
+    
+    # Get status text
+    status_key = "feature_flag_enabled" if new_state else "feature_flag_disabled"
+    status_text = await localization.get_text_for_user(user_id, status_key)
+    
+    # Show confirmation message
+    message = await localization.get_text_for_user(
+        user_id,
+        "feature_flag_toggled",
+        feature_name=feature_name,
+        status=status_text
+    )
+    
+    # Rebuild menu with updated state
+    menu = await keyboard_constructor.get_admin_feature_flags_menu(user_id)
+    markup = InlineKeyboardMarkup(menu)
+    
+    title = await localization.get_text_for_user(user_id, "admin_feature_flags_title")
+    await query.edit_message_text(f"{message}\n\n{title}", reply_markup=markup)
+    return MAIN_MENU
+
+
 async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Debug handler for unmatched callbacks"""
     query = update.callback_query
@@ -2434,6 +2504,9 @@ def start_bot():
                 CallbackQueryHandler(admin_confirm_mission, pattern='^admin_confirm_mission:'),
                 CallbackQueryHandler(admin_do_confirm_mission, pattern='^admin_do_confirm:'),
                 CallbackQueryHandler(admin_do_reject_mission, pattern='^admin_do_reject:'),
+                # Feature flags handlers
+                CallbackQueryHandler(admin_feature_flags, pattern='^admin_feature_flags$'),
+                CallbackQueryHandler(admin_toggle_feature, pattern='^admin_toggle_feature:'),
                 # Custom notification handlers
                 CallbackQueryHandler(admin_custom_notification, pattern='^admin_custom_notification$'),
                 CallbackQueryHandler(admin_select_notification_warmaster, pattern='^notify_type_warmaster$'),
@@ -2474,7 +2547,7 @@ def start_bot():
             ALLIANCE_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_alliance_text_input),
                 CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
-                CallbackQueryHandler(admin_adjust_resources_menu, pattern='^admin_adjust_resources$')
+                CallbackQueryHandler(admin_adjust_resources_menu, pattern='^admin_adjust_resources$'),
                 CallbackQueryHandler(admin_edit_alliances, pattern='^admin_edit_alliances$')
             ],
             CUSTOM_NOTIFICATION: [

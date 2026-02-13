@@ -6,6 +6,7 @@ import logging
 import sqllite_helper
 import map_helper
 import notification_service
+import feature_flags_helper
 from database.killzone_manager import get_killzone_for_mission
 from models import Mission, MissionDetails
 
@@ -542,9 +543,11 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
     if opponent_alliance not in (None, 0):
         participant_alliances.append(opponent_alliance)
 
-    for alliance_id in set(participant_alliances):
-        await sqllite_helper.increase_common_resource(alliance_id, 1)
-        logger.info("Alliance %s received 1 common resource for participation", alliance_id)
+    # Award participation resources if feature is enabled
+    if await feature_flags_helper.is_feature_enabled('common_resource'):
+        for alliance_id in set(participant_alliances):
+            await sqllite_helper.increase_common_resource(alliance_id, 1)
+            logger.info("Alliance %s received 1 common resource for participation", alliance_id)
 
     # Determine winner
     logger.info("Determining winner...")
@@ -583,28 +586,29 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         logger.info("Processing Kill Team mission type: %s", mission_type)
         if mission_type.lower() == "loot":
             # Both players get 1 resource (only if they have alliances)
-            if user_alliance != 0:
-                await sqllite_helper.increase_common_resource(
-                    user_alliance, 1)
-            if opponent_alliance != 0:
-                await sqllite_helper.increase_common_resource(
-                    opponent_alliance, 1)
+            if await feature_flags_helper.is_feature_enabled('common_resource'):
+                if user_alliance != 0:
+                    await sqllite_helper.increase_common_resource(
+                        user_alliance, 1)
+                if opponent_alliance != 0:
+                    await sqllite_helper.increase_common_resource(
+                        opponent_alliance, 1)
 
-            # Winner gets additional resources based on score ratio
-            if winner_alliance_id:
-                # Calculate additional resources (minimum 1)
-                if loser_score == 0:
-                    additional_resources = 3  # To avoid division by zero
-                else:
-                    score_ratio = winner_score / loser_score
-                    additional_resources = max(1, int(score_ratio))
+                # Winner gets additional resources based on score ratio
+                if winner_alliance_id:
+                    # Calculate additional resources (minimum 1)
+                    if loser_score == 0:
+                        additional_resources = 3  # To avoid division by zero
+                    else:
+                        score_ratio = winner_score / loser_score
+                        additional_resources = max(1, int(score_ratio))
 
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, additional_resources)
+                    await sqllite_helper.increase_common_resource(
+                        winner_alliance_id, additional_resources)
 
-                logger.info(
-                    "Loot mission: Winner %s received %s resources total",
-                    winner_alliance_id, additional_resources + 1)
+                    logger.info(
+                        "Loot mission: Winner %s received %s resources total",
+                        winner_alliance_id, additional_resources + 1)
                 logger.info(
                     "Loot mission: Loser %s received 1 resource",
                     loser_alliance_id)
@@ -612,37 +616,39 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         elif mission_type.lower() == "transmission":
             # Winner gets resources equal to opponent's resources but
             # limited by own resources
-            if winner_alliance_id and loser_alliance_id:
-                # Get current resource amounts
-                winner_resources = await sqllite_helper.get_alliance_resources(
-                    winner_alliance_id)
-                loser_resources = await sqllite_helper.get_alliance_resources(
-                    loser_alliance_id)
+            if await feature_flags_helper.is_feature_enabled('common_resource'):
+                if winner_alliance_id and loser_alliance_id:
+                    # Get current resource amounts
+                    winner_resources = await sqllite_helper.get_alliance_resources(
+                        winner_alliance_id)
+                    loser_resources = await sqllite_helper.get_alliance_resources(
+                        loser_alliance_id)
 
-                # Calculate transfer amount (minimum of loser's and winner's
-                # resources)
-                transfer_amount = min(loser_resources, winner_resources)
+                    # Calculate transfer amount (minimum of loser's and winner's
+                    # resources)
+                    transfer_amount = min(loser_resources, winner_resources)
 
-                if transfer_amount > 0:
-                    await sqllite_helper.increase_common_resource(
-                        winner_alliance_id, transfer_amount)
-                    logger.info(
-                        "Transmission mission: Winner %s received %s "
-                        "resources",
-                        winner_alliance_id, transfer_amount)
-                else:
-                    logger.info(
-                        "Transmission mission: No resources transferred "
-                        "(either winner or loser has 0 resources)")
+                    if transfer_amount > 0:
+                        await sqllite_helper.increase_common_resource(
+                            winner_alliance_id, transfer_amount)
+                        logger.info(
+                            "Transmission mission: Winner %s received %s "
+                            "resources",
+                            winner_alliance_id, transfer_amount)
+                    else:
+                        logger.info(
+                            "Transmission mission: No resources transferred "
+                            "(either winner or loser has 0 resources)")
 
         elif mission_type.lower() == "secure":
             # Winner gets resources, may create warehouse
-            if winner_alliance_id:
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, 2)
-                logger.info(
-                    "Secure mission: Winner %s received 2 resources",
-                    winner_alliance_id)
+            if await feature_flags_helper.is_feature_enabled('common_resource'):
+                if winner_alliance_id:
+                    await sqllite_helper.increase_common_resource(
+                        winner_alliance_id, 2)
+                    logger.info(
+                        "Secure mission: Winner %s received 2 resources",
+                        winner_alliance_id)
 
         elif mission_type.lower() == "intel":
             # Creates warehouse in the hex where the mission took place
@@ -661,57 +667,61 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         elif mission_type.lower() == "resource collection":
             # Winner gets 1 resource from eliminated alliance reserves
             logger.info("Processing Resource Collection mission")
-            if winner_alliance_id:
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, 1)
-                logger.info(
-                    "Resource Collection mission: Winner %s gained 1 resource",
-                    winner_alliance_id)
+            if await feature_flags_helper.is_feature_enabled('common_resource'):
+                if winner_alliance_id:
+                    await sqllite_helper.increase_common_resource(
+                        winner_alliance_id, 1)
+                    logger.info(
+                        "Resource Collection mission: Winner %s gained 1 resource",
+                        winner_alliance_id)
 
         elif mission_type.lower() == "extraction":
             # Winner gets 1 resource, loser loses 1 resource
-            if winner_alliance_id and loser_alliance_id:
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, 1)
-                await sqllite_helper.decrease_common_resource(
-                    loser_alliance_id, 1)
-                logger.info(
-                    "Extraction mission: Winner %s gained 1 resource, "
-                    "loser %s lost 1 resource",
-                    winner_alliance_id, loser_alliance_id)
+            if await feature_flags_helper.is_feature_enabled('common_resource'):
+                if winner_alliance_id and loser_alliance_id:
+                    await sqllite_helper.increase_common_resource(
+                        winner_alliance_id, 1)
+                    await sqllite_helper.decrease_common_resource(
+                        loser_alliance_id, 1)
+                    logger.info(
+                        "Extraction mission: Winner %s gained 1 resource, "
+                        "loser %s lost 1 resource",
+                        winner_alliance_id, loser_alliance_id)
 
         elif mission_type.lower() == "power surge":
             # Loser loses resources equal to number of warehouses (minimum 1)
-            if winner_alliance_id and loser_alliance_id:
-                warehouse_count = await (
-                    sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
-                )
-                resource_loss = max(1, warehouse_count)
-                
-                await sqllite_helper.decrease_common_resource(
-                    loser_alliance_id, resource_loss)
-                logger.info(
-                    "Power Surge mission: Loser %s lost %s resources "
-                    "(based on %s warehouses)",
-                    loser_alliance_id, resource_loss, warehouse_count)
+            if await feature_flags_helper.is_feature_enabled('common_resource'):
+                if winner_alliance_id and loser_alliance_id:
+                    warehouse_count = await (
+                        sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
+                    )
+                    resource_loss = max(1, warehouse_count)
+                    
+                    await sqllite_helper.decrease_common_resource(
+                        loser_alliance_id, resource_loss)
+                    logger.info(
+                        "Power Surge mission: Loser %s lost %s resources "
+                        "(based on %s warehouses)",
+                        loser_alliance_id, resource_loss, warehouse_count)
 
         elif mission_type.lower() == "coordinates":
             # Loser loses resources equal to number of warehouses (minimum 1)
             # Winner destroys enemy warehouse
-            if winner_alliance_id and loser_alliance_id:
-                warehouse_count = await (
-                    sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
-                )
-                resource_loss = max(1, warehouse_count)
-                
-                await sqllite_helper.decrease_common_resource(
-                    loser_alliance_id, resource_loss)
-                
-                # Destroy one enemy warehouse if exists
-                await sqllite_helper.destroy_warehouse_by_alliance(loser_alliance_id)
-                
-                logger.info(
-                    "Coordinates mission: Loser %s lost %s resources and one warehouse",
+            if await feature_flags_helper.is_feature_enabled('common_resource'):
+                if winner_alliance_id and loser_alliance_id:
+                    warehouse_count = await (
+                        sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
+                    )
+                    resource_loss = max(1, warehouse_count)
+                    
+                    await sqllite_helper.decrease_common_resource(
+                        loser_alliance_id, resource_loss)
+                    
+                    # Destroy one enemy warehouse if exists
+                    await sqllite_helper.destroy_warehouse_by_alliance(loser_alliance_id)
+                    
+                    logger.info(
+                        "Coordinates mission: Loser %s lost %s resources and one warehouse",
                     loser_alliance_id, resource_loss)
 
         # Add more mission types as needed
@@ -720,11 +730,12 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
     rewards = _parse_reward_config(getattr(mission_details, "reward_config", None))
     resource_bonus_value = rewards.get("COMMON_RESOURCE", 0)
     if resource_bonus_value and winner_alliance_id:
-        await sqllite_helper.increase_common_resource(
-            winner_alliance_id, resource_bonus_value)
-        logger.info(
-            "Applied mission resource bonus: +%s to alliance %s",
-            resource_bonus_value, winner_alliance_id)
+        if await feature_flags_helper.is_feature_enabled('common_resource'):
+            await sqllite_helper.increase_common_resource(
+                winner_alliance_id, resource_bonus_value)
+            logger.info(
+                "Applied mission resource bonus: +%s to alliance %s",
+                resource_bonus_value, winner_alliance_id)
 
     # Check if loser alliance has any hexes remaining after battle
     logger.info("Checking for alliance elimination...")

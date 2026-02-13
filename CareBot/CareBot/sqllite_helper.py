@@ -1797,3 +1797,76 @@ async def get_battle_id_by_mission_id(mission_id: int):
         ''', (mission_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
+
+
+# ==================== Feature Flags Functions ====================
+
+async def is_feature_enabled(flag_name: str) -> bool:
+    """
+    Check if a feature flag is enabled.
+    
+    Args:
+        flag_name: Name of the feature flag to check
+        
+    Returns:
+        True if feature is enabled, False otherwise.
+        Returns True by default if flag doesn't exist (fail-safe).
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT enabled FROM feature_flags WHERE flag_name = ?
+        ''', (flag_name,)) as cursor:
+            result = await cursor.fetchone()
+            # Return True by default if flag doesn't exist (fail-safe)
+            return bool(result[0]) if result else True
+
+
+async def toggle_feature_flag(flag_name: str) -> bool:
+    """
+    Toggle a feature flag between enabled and disabled.
+    
+    Args:
+        flag_name: Name of the feature flag to toggle
+        
+    Returns:
+        New state of the flag (True=enabled, False=disabled)
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get current state
+        async with db.execute('''
+            SELECT enabled FROM feature_flags WHERE flag_name = ?
+        ''', (flag_name,)) as cursor:
+            result = await cursor.fetchone()
+            
+        if result:
+            current_state = bool(result[0])
+            new_state = not current_state
+            
+            # Update the flag
+            await db.execute('''
+                UPDATE feature_flags 
+                SET enabled = ?, updated_at = datetime('now')
+                WHERE flag_name = ?
+            ''', (int(new_state), flag_name))
+            await db.commit()
+            
+            return new_state
+        else:
+            # Flag doesn't exist, return True (enabled by default)
+            return True
+
+
+async def get_all_feature_flags() -> list:
+    """
+    Get all feature flags with their current status.
+    
+    Returns:
+        List of tuples: [(flag_name, enabled, description), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT flag_name, enabled, description 
+            FROM feature_flags 
+            ORDER BY flag_name
+        ''') as cursor:
+            return await cursor.fetchall()

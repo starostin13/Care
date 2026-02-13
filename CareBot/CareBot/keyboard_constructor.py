@@ -489,6 +489,13 @@ async def get_admin_menu(userId):
             callback_data="admin_stats_menu")
     ])
     
+    # Feature flags management
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_admin_feature_flags"),
+            callback_data="admin_feature_flags")
+    ])
+    
     # Pending mission confirmations - only show if there are pending missions
     pending_count = await sqllite_helper.get_pending_missions_count()
     if pending_count > 0:
@@ -688,5 +695,43 @@ async def get_alliance_confirmation_keyboard(userId, action, alliance_id, allian
                 await localization.get_text_for_user(userId, "button_back"),
                 callback_data="admin_edit_alliances")
         ])
+    
+    return items
+
+
+async def get_admin_feature_flags_menu(userId):
+    """Generate feature flags management keyboard"""
+    import feature_flags_helper
+    
+    items = []
+    
+    # Get all feature flags
+    flags = await feature_flags_helper.get_all_feature_flags()
+    
+    for flag_name, enabled, description in flags:
+        # Get localized name for the feature
+        feature_name_key = f"feature_{flag_name}_name"
+        feature_name = await localization.get_text_for_user(userId, feature_name_key)
+        
+        # Create status indicator
+        if enabled:
+            status_text = await localization.get_text_for_user(userId, "feature_flag_enabled")
+        else:
+            status_text = await localization.get_text_for_user(userId, "feature_flag_disabled")
+        
+        button_text = f"{feature_name}: {status_text}"
+        
+        items.append([
+            InlineKeyboardButton(
+                button_text,
+                callback_data=f"admin_toggle_feature:{flag_name}")
+        ])
+    
+    # Back button
+    items.append([
+        InlineKeyboardButton(
+            await localization.get_text_for_user(userId, "button_back"),
+            callback_data="admin_menu")
+    ])
     
     return items
