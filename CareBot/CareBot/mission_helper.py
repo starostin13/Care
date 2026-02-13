@@ -3,7 +3,16 @@
 from typing import Optional, Tuple
 import random
 import logging
-import sqllite_helper
+import config
+
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Mission Helper using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Mission Helper using REAL SQLite helper")
+
 import map_helper
 import notification_service
 import feature_flags_helper
