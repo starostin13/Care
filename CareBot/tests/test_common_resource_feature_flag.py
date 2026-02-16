@@ -52,26 +52,22 @@ def test_feature_flag_affects_resource_checks():
     """Test that checking feature flag works correctly."""
     
     async def run():
-        # Test when enabled
-        await feature_flags_helper.toggle_feature_flag('common_resource')  # Ensure it's on
-        enabled = await feature_flags_helper.is_feature_enabled('common_resource')
-        
-        if not enabled:
-            # If it was off, toggle to turn on
-            await feature_flags_helper.toggle_feature_flag('common_resource')
-            enabled = await feature_flags_helper.is_feature_enabled('common_resource')
-        
-        print(f"Feature enabled: {enabled}")
-        assert enabled is True, "Feature should be enabled"
-        
-        # Toggle off
-        await feature_flags_helper.toggle_feature_flag('common_resource')
+        # Test when disabled (default)
         disabled = await feature_flags_helper.is_feature_enabled('common_resource')
-        print(f"Feature disabled: {disabled}")
-        assert disabled is False, "Feature should be disabled"
+        print(f"Feature disabled (default): {disabled}")
+        assert disabled is False, "Feature should be disabled by default"
         
-        # Toggle back on for other tests
+        # Toggle on
         await feature_flags_helper.toggle_feature_flag('common_resource')
+        enabled = await feature_flags_helper.is_feature_enabled('common_resource')
+        print(f"Feature enabled: {enabled}")
+        assert enabled is True, "Feature should be enabled after toggle"
+        
+        # Toggle back off for other tests
+        await feature_flags_helper.toggle_feature_flag('common_resource')
+        disabled_again = await feature_flags_helper.is_feature_enabled('common_resource')
+        print(f"Feature disabled again: {disabled_again}")
+        assert disabled_again is False, "Feature should be disabled after second toggle"
         
         return True
     

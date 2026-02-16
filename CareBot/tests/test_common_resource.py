@@ -10,6 +10,7 @@ os.environ['CAREBOT_TEST_MODE'] = 'true'
 sys.modules.setdefault("config", types.SimpleNamespace(TEST_MODE=True))
 
 import mission_helper  # noqa: E402
+import mock_sqlite_helper  # noqa: E402
 
 
 class DummyMissionDetails:
@@ -66,11 +67,19 @@ def test_apply_mission_rewards_adds_base_and_bonus(monkeypatch):
     monkeypatch.setattr(mission_helper.sqllite_helper, "get_hexes_by_alliance", get_hexes_by_alliance)
 
     async def run():
-        return await mission_helper.apply_mission_rewards(
+        # Enable the common_resource feature for this test
+        await mock_sqlite_helper.toggle_feature_flag('common_resource')
+        
+        result = await mission_helper.apply_mission_rewards(
             battle_id=10,
             user_reply="10 5",
             user_telegram_id="user"
         )
+        
+        # Toggle back to disabled after test
+        await mock_sqlite_helper.toggle_feature_flag('common_resource')
+        
+        return result
 
     result = asyncio.run(run())
 

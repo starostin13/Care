@@ -19,14 +19,14 @@ sys.modules.setdefault("config", types.SimpleNamespace(TEST_MODE=True))
 import feature_flags_helper  # noqa: E402
 
 
-def test_feature_flag_enabled_by_default():
-    """Test that common_resource flag is enabled by default."""
+def test_feature_flag_disabled_by_default():
+    """Test that common_resource flag is disabled by default."""
     async def run():
         enabled = await feature_flags_helper.is_feature_enabled('common_resource')
         return enabled
     
     result = asyncio.run(run())
-    assert result is True, "common_resource should be enabled by default"
+    assert result is False, "common_resource should be disabled by default"
 
 
 def test_toggle_feature_flag():
@@ -93,8 +93,8 @@ def test_unknown_flag_returns_true():
 if __name__ == "__main__":
     print("Running feature flags tests...")
     
-    print("✓ Testing feature enabled by default...")
-    test_feature_flag_enabled_by_default()
+    print("✓ Testing feature disabled by default...")
+    test_feature_flag_disabled_by_default()
     
     print("✓ Testing toggle feature flag...")
     test_toggle_feature_flag()
