@@ -988,7 +988,7 @@ print("🧪 Mock SQLite Helper fully initialized")
 
 # In-memory feature flags storage for testing
 _feature_flags = {
-    'common_resource': {'enabled': True, 'description': 'Alliance resource mechanics'}
+    'common_resource': {'enabled': False, 'description': 'Alliance resource mechanics'}
 }
 
 async def is_feature_enabled(flag_name: str) -> bool:

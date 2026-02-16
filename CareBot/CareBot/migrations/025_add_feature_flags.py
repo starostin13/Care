@@ -37,9 +37,9 @@ def create_feature_flags_table(conn):
         cursor.execute("""
             INSERT INTO feature_flags (flag_name, enabled, description, updated_at)
             VALUES (?, ?, ?, datetime('now'))
-        """, ('common_resource', 1, 'Alliance resource mechanics'))
+        """, ('common_resource', 0, 'Alliance resource mechanics'))
         
-        print("✅ Added common_resource feature flag (enabled by default)")
+        print("✅ Added common_resource feature flag (disabled by default)")
     else:
         print("✅ feature_flags table already exists")
     

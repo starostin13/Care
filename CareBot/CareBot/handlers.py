@@ -14,6 +14,7 @@ import warmaster_helper
 import settings_helper
 import schedule_helper
 import mission_message_builder
+import feature_flags_helper
 # Автоматическое переключение на mock версию в тестовом режиме
 if config.TEST_MODE:
     import mock_sqlite_helper as sqllite_helper
@@ -2161,7 +2162,6 @@ async def admin_toggle_feature(update: Update, context: ContextTypes.DEFAULT_TYP
         return MAIN_MENU
     
     # Extract flag name from callback data
-    import feature_flags_helper
     flag_name = query.data.split(':')[1]
     
     # Toggle the flag

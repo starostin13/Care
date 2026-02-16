@@ -6,6 +6,7 @@ import settings_helper
 import schedule_helper
 import localization
 import config
+import feature_flags_helper
 
 # Автоматическое переключение на mock версию в тестовом режиме
 if config.TEST_MODE:
@@ -701,8 +702,6 @@ async def get_alliance_confirmation_keyboard(userId, action, alliance_id, allian
 
 async def get_admin_feature_flags_menu(userId):
     """Generate feature flags management keyboard"""
-    import feature_flags_helper
-    
     items = []
     
     # Get all feature flags
