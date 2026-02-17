@@ -983,3 +983,60 @@ async def add_battle_result(mission_id, counts1, counts2):
     return True
 
 print("🧪 Mock SQLite Helper fully initialized")
+
+# ==================== Feature Flags Functions ====================
+
+# In-memory feature flags storage for testing
+_feature_flags = {
+    'common_resource': {'enabled': False, 'description': 'Alliance resource mechanics'}
+}
+
+async def is_feature_enabled(flag_name: str) -> bool:
+    """
+    Mock: Check if a feature flag is enabled.
+    
+    Args:
+        flag_name: Name of the feature flag to check
+        
+    Returns:
+        True if feature is enabled, False otherwise.
+        Returns True by default if flag doesn't exist (fail-safe).
+    """
+    print(f"🧪 Mock: is_feature_enabled({flag_name})")
+    flag = _feature_flags.get(flag_name, {})
+    return flag.get('enabled', True)
+
+
+async def toggle_feature_flag(flag_name: str) -> bool:
+    """
+    Mock: Toggle a feature flag between enabled and disabled.
+    
+    Args:
+        flag_name: Name of the feature flag to toggle
+        
+    Returns:
+        New state of the flag (True=enabled, False=disabled)
+    """
+    print(f"🧪 Mock: toggle_feature_flag({flag_name})")
+    if flag_name not in _feature_flags:
+        _feature_flags[flag_name] = {'enabled': True, 'description': flag_name}
+    
+    current_state = _feature_flags[flag_name]['enabled']
+    new_state = not current_state
+    _feature_flags[flag_name]['enabled'] = new_state
+    
+    return new_state
+
+
+async def get_all_feature_flags() -> list:
+    """
+    Mock: Get all feature flags with their current status.
+    
+    Returns:
+        List of tuples: [(flag_name, enabled, description), ...]
+    """
+    print("🧪 Mock: get_all_feature_flags()")
+    return [
+        (flag_name, int(flag['enabled']), flag['description'])
+        for flag_name, flag in _feature_flags.items()
+    ]
