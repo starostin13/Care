@@ -323,6 +323,20 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
             await sqllite_helper.update_mission_cell(mission.id, cell_id)
             mission.cell = cell_id  # Update local object
 
+    # Call feature hooks after cell is determined
+    if cell_id is not None:
+        mission_data = {
+            'mission_id': mission.id,
+            'rules': rules,
+            'cell': cell_id,
+            'description': mission.mission_description,
+            'attacker_id': attacker_id,
+            'defender_id': defender_id
+        }
+        await feature_registry.on_create_mission(mission_data)
+        # Re-fetch mission to get updated description
+        mission = await sqllite_helper.get_mission_details(mission.id)
+
     if rules == "killteam":
         if cell_id is not None:
             state = await sqllite_helper.get_state(cell_id)
