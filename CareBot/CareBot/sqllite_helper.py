@@ -1859,14 +1859,55 @@ async def toggle_feature_flag(flag_name: str) -> bool:
 async def get_all_feature_flags() -> list:
     """
     Get all feature flags with their current status.
-    
+
     Returns:
         List of tuples: [(flag_name, enabled, description), ...]
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT flag_name, enabled, description 
-            FROM feature_flags 
+            SELECT flag_name, enabled, description
+            FROM feature_flags
             ORDER BY flag_name
         ''') as cursor:
             return await cursor.fetchall()
+
+
+async def get_adjacent_cells(cell_id):
+    """
+    Get all cells adjacent to a given cell.
+
+    Args:
+        cell_id: The cell ID to find neighbors for
+
+    Returns:
+        List of adjacent cell IDs
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT DISTINCT
+                CASE
+                    WHEN left_hexagon = ? THEN right_hexagon
+                    ELSE left_hexagon
+                END AS adjacent_id
+            FROM edges
+            WHERE left_hexagon = ? OR right_hexagon = ?
+        ''', (cell_id, cell_id, cell_id)) as cursor:
+            results = await cursor.fetchall()
+            return [row[0] for row in results]
+
+
+async def update_mission_description(mission_id, new_description):
+    """
+    Update mission description.
+
+    Args:
+        mission_id: Mission ID
+        new_description: New description text
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE mission_stack
+            SET mission_description = ?
+            WHERE id = ?
+        ''', (new_description, mission_id))
+        await db.commit()
