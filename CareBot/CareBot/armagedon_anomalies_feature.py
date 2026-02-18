@@ -71,14 +71,15 @@ class ArmagedonAnomaliesFeature(Feature):
         """
         cell_id = mission_data.get('cell')
 
-        # Only apply to missions with assigned cells
-        if cell_id is None:
-            logger.debug("No cell assigned, skipping anomalies")
-            return
-
         # Determine warp status
-        warp_status = await self._get_warp_status(cell_id)
-        logger.info(f"Mission on cell {cell_id} has warp status: {warp_status}")
+        if cell_id is None:
+            # No cell assigned - apply random anomalies from full range
+            # (future support for crusades without map)
+            warp_status = 'no_cell'
+            logger.debug("No cell assigned, applying random anomalies")
+        else:
+            warp_status = await self._get_warp_status(cell_id)
+            logger.info(f"Mission on cell {cell_id} has warp status: {warp_status}")
 
         # Generate anomalies based on warp status
         anomaly_text, hellscape_text = await self._generate_anomalies(warp_status)
@@ -134,7 +135,7 @@ class ArmagedonAnomaliesFeature(Feature):
         Generate anomaly and hellscape text based on warp status.
 
         Args:
-            warp_status: Warp proximity ('on_warp', 'adjacent_warp', 'no_warp')
+            warp_status: Warp proximity ('on_warp', 'adjacent_warp', 'no_warp', 'no_cell')
 
         Returns:
             Tuple of (anomaly_text, hellscape_text)
@@ -157,6 +158,16 @@ class ArmagedonAnomaliesFeature(Feature):
 
             # Random hellscape from last 4
             hellscape_text = random.choice(HELLSCAPES[4:])
+
+        elif warp_status == 'no_cell':
+            # No cell assigned - random anomalies from full range
+            # Always apply anomalies (no 50% skip like no_warp case)
+            timing = random.randint(0, 2)
+            intensity = random.randint(0, 2)
+            anomaly_text = ANOMALY_MATRIX[timing][intensity]
+
+            # Random hellscape from all 8 options
+            hellscape_text = random.choice(HELLSCAPES)
 
         else:  # no_warp
             # 50% chance of no anomalies
