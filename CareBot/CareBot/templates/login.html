@@ -1,0 +1,131 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row" style="margin-top: 80px;">
+    <div class="col-md-4 col-md-offset-4">
+        <div class="panel panel-primary">
+            <div class="panel-heading">
+                <h3 class="panel-title">
+                    <span class="glyphicon glyphicon-lock"></span>
+                    Вход в админ-панель
+                </h3>
+            </div>
+            <div class="panel-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible" role="alert">
+                                <button type="button" class="close" data-dismiss="alert"  aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" action="{{ url_for('auth.login') }}">
+                    <div class="form-group">
+                        <label for="warmaster_id">
+                            <span class="glyphicon glyphicon-user"></span>
+                            Warmaster
+                        </label>
+                        <select class="form-control" id="warmaster_id" name="warmaster_id" required autofocus>
+                            <option value="">-- Выберите warmaster --</option>
+                            {% if warmasters %}
+                                {% for wm in warmasters %}
+                                    <option value="{{ wm[0] }}">
+                                        {{ wm[3] or 'ID: ' + wm[0]|string }}
+                                        {% if wm[2] %}
+                                            ({{ wm[2] }})
+                                        {% endif %}
+                                    </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        <small class="form-text text-muted">
+                            Выберите свой warmaster аккаунт
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">
+                            <span class="glyphicon glyphicon-lock"></span>
+                            Пароль
+                        </label>
+                        <input type="password" 
+                               class="form-control" 
+                               id="password" 
+                               name="password" 
+                               placeholder="Введите пароль"
+                               required>
+                    </div>
+
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox" name="remember" value="on">
+                            Запомнить меня
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <span class="glyphicon glyphicon-log-in"></span>
+                        Войти
+                    </button>
+                </form>
+
+                <hr>
+
+                <div class="text-center text-muted">
+                    <small>
+                        <span class="glyphicon glyphicon-info-sign"></span>
+                        Доступ только для администраторов<br>
+                        Crusade Campaign Admin Panel
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel panel-default">
+            <div class="panel-body text-center">
+                <small class="text-muted">
+                    <span class="glyphicon glyphicon-question-sign"></span>
+                    Нет доступа? Обратитесь к главному администратору
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-attachment: fixed;
+        min-height: 100vh;
+    }
+    
+    .panel {
+        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+    }
+    
+    .panel-primary > .panel-heading {
+        background-color: #667eea;
+        border-color: #667eea;
+    }
+    
+    .btn-primary {
+        background-color: #667eea;
+        border-color: #667eea;
+    }
+    
+    .btn-primary:hover {
+        background-color: #764ba2;
+        border-color: #764ba2;
+    }
+    
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+</style>
+{% endblock %}

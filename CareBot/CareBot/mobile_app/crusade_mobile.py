@@ -42,7 +42,7 @@ class OfflineDataManager:
         self.db_path = db_path
         self.init_database()
         self.mission_storage = MissionStorage("offline_missions.json")
-        self.sync_url = "http://192.168.1.100:5000"  # IP сервера в локальной сети
+        self.sync_url = "https://192.168.1.100:5000"  # IP сервера в локальной сети (HTTPS для PWA)
         
     def init_database(self):
         """Инициализация локальной базы данных"""

@@ -1870,3 +1870,160 @@ async def get_all_feature_flags() -> list:
             ORDER BY flag_name
         ''') as cursor:
             return await cursor.fetchall()
+
+
+# ============================================================================
+# ADMIN AUTHENTICATION FUNCTIONS
+# ============================================================================
+
+async def create_admin_user(warmaster_id: int, password_hash: str):
+    """
+    Create a new admin user.
+    
+    Args:
+        warmaster_id: ID of the warmaster to grant admin privileges
+        password_hash: Bcrypt hashed password
+    
+    Returns:
+        Admin user ID
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            INSERT INTO admin_users (warmaster_id, password_hash)
+            VALUES (?, ?)
+        ''', (warmaster_id, password_hash))
+        await db.commit()
+        async with db.execute('SELECT last_insert_rowid()') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def verify_admin_credentials(warmaster_id: int, password_hash: str) -> bool:
+    """
+    Verify admin login credentials.
+    
+    Args:
+        warmaster_id: Warmaster ID attempting to login
+        password_hash: Password hash to verify
+    
+    Returns:
+        True if credentials are valid and admin is active
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, is_active 
+            FROM admin_users 
+            WHERE warmaster_id = ? AND password_hash = ?
+        ''', (warmaster_id, password_hash)) as cursor:
+            result = await cursor.fetchone()
+            return result is not None and result[1] == 1  # exists and is_active
+
+
+async def get_admin_by_warmaster_id(warmaster_id: int):
+    """
+    Get admin user information by warmaster ID.
+    
+    Args:
+        warmaster_id: Warmaster ID
+    
+    Returns:
+        Tuple: (admin_id, warmaster_id, created_at, last_login, is_active) or None
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, warmaster_id, created_at, last_login, is_active
+            FROM admin_users
+            WHERE warmaster_id = ?
+        ''', (warmaster_id,)) as cursor:
+            return await cursor.fetchone()
+
+
+async def update_admin_last_login(warmaster_id: int):
+    """
+    Update last login timestamp for admin user.
+    
+    Args:
+        warmaster_id: Warmaster ID
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE admin_users 
+            SET last_login = datetime('now')
+            WHERE warmaster_id = ?
+        ''', (warmaster_id,))
+        await db.commit()
+
+
+async def get_all_admin_users():
+    """
+    Get all admin users with warmaster information.
+    
+    Returns:
+        List of tuples: [(admin_id, warmaster_id, nickname, alliance, created_at, is_active), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 
+                a.id,
+                a.warmaster_id,
+                w.nickname,
+                al.name as alliance_name,
+                a.created_at,
+                a.is_active
+            FROM admin_users a
+            JOIN warmasters w ON a.warmaster_id = w.id
+            LEFT JOIN alliances al ON w.alliance = al.id
+            ORDER BY a.created_at DESC
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def deactivate_admin_user(warmaster_id: int):
+    """
+    Deactivate admin user (soft delete).
+    
+    Args:
+        warmaster_id: Warmaster ID to deactivate
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE admin_users 
+            SET is_active = 0
+            WHERE warmaster_id = ?
+        ''', (warmaster_id,))
+        await db.commit()
+
+
+async def activate_admin_user(warmaster_id: int):
+    """
+    Activate/reactivate admin user.
+    
+    Args:
+        warmaster_id: Warmaster ID to activate
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE admin_users 
+            SET is_active = 1
+            WHERE warmaster_id = ?
+        ''', (warmaster_id,))
+        await db.commit()
+
+
+async def check_admin_exists(warmaster_id: int) -> bool:
+    """
+    Check if warmaster is an admin user.
+    
+    Args:
+        warmaster_id: Warmaster ID to check
+    
+    Returns:
+        True if warmaster has admin privileges
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 1 FROM admin_users 
+            WHERE warmaster_id = ? AND is_active = 1
+        ''', (warmaster_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result is not None

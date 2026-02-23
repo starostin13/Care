@@ -65,6 +65,10 @@ class Mission:
     completed: bool = False
     result: Optional[str] = None
     winner_id: Optional[str] = None
+    # Поля для отслеживания администраторского ввода
+    admin_entered: bool = False  # True если результат введен администратором
+    entered_by: Optional[str] = None  # ID warmaster который ввел результат
+    confirmation_required: bool = True  # False если подтверждение не требуется
     
     def to_dict(self) -> Dict:
         """Конвертация в словарь для JSON"""

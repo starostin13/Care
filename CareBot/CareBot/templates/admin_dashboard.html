@@ -1,0 +1,352 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid" style="margin-top: 70px;">
+    <!-- Header -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="page-header">
+                <h1>
+                    <span class="glyphicon glyphicon-dashboard"></span>
+                    Админ-панель Crusade
+                    <small class="pull-right">
+                        <span class="label label-success" id="online-status">
+                            <span class="glyphicon glyphicon-ok-circle"></span> Online
+                        </span>
+                    </small>
+                </h1>
+                <p class="text-muted">
+                    Добро пожаловать, <strong>{{ user.nickname }}</strong>
+                    {% if user.alliance %}
+                        <span class="label label-info">{{ user.alliance }}</span>
+                    {% endif %}
+                    |
+                    <a href="{{ url_for('auth.logout') }}" class="text-danger">
+                        <span class="glyphicon glyphicon-log-out"></span> Выход
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col-md-12">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible" role="alert">
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Statistics Row -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <div class="row">
+                        <div class="col-xs-3">
+                            <span class="glyphicon glyphicon-list-alt" style="font-size: 4em;"></span>
+                        </div>
+                        <div class="col-xs-9 text-right">
+                            <div style="font-size: 2em;">{{ stats.active_missions }}</div>
+                            <div>Активные миссии</div>
+                        </div>
+                    </div>
+                </div>
+                <a href="#active-missions">
+                    <div class="panel-footer">
+                        <span class="pull-left">Посмотреть</span>
+                        <span class="pull-right"><span class="glyphicon glyphicon-circle-arrow-right"></span></span>
+                        <div class="clearfix"></div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="panel panel-success">
+                <div class="panel-heading">
+                    <div class="row">
+                        <div class="col-xs-3">
+                            <span class="glyphicon glyphicon-ok" style="font-size: 4em;"></span>
+                        </div>
+                        <div class="col-xs-9 text-right">
+                            <div style="font-size: 2em;">{{ stats.completed_today }}</div>
+                            <div>Завершено сегодня</div>
+                        </div>
+                    </div>
+                </div>
+                <a href="{{ url_for('missions_view') }}">
+                    <div class="panel-footer">
+                        <span class="pull-left">Все миссии</span>
+                        <span class="pull-right"><span class="glyphicon glyphicon-circle-arrow-right"></span></span>
+                        <div class="clearfix"></div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="panel panel-warning">
+                <div class="panel-heading">
+                    <div class="row">
+                        <div class="col-xs-3">
+                            <span class="glyphicon glyphicon-calendar" style="font-size: 4em;"></span>
+                        </div>
+                        <div class="col-xs-9 text-right">
+                            <div style="font-size: 2em;">{{ stats.todays_missions }}</div>
+                            <div>Создано сегодня</div>
+                        </div>
+                    </div>
+                </div>
+                <a href="{{ url_for('admin_dashboard') }}">
+                    <div class="panel-footer">
+                        <span class="pull-left">Детали</span>
+                        <span class="pull-right"><span class="glyphicon glyphicon-circle-arrow-right"></span></span>
+                        <div class="clearfix"></div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <div class="row">
+                        <div class="col-xs-3">
+                            <span class="glyphicon glyphicon-stats" style="font-size: 4em;"></span>
+                        </div>
+                        <div class="col-xs-9 text-right">
+                            <div style="font-size: 2em;">{{ stats.total_missions }}</div>
+                            <div>Всего миссий</div>
+                        </div>
+                    </div>
+                </div>
+                <a href="{{ url_for('missions_view') }}">
+                    <div class="panel-footer">
+                        <span class="pull-left">История</span>
+                        <span class="pull-right"><span class="glyphicon glyphicon-circle-arrow-right"></span></span>
+                        <div class="clearfix"></div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons Row -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <span class="glyphicon glyphicon-edit"></span>
+                        Ввод результатов игры
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    <p>Введите результаты завершенной игры без необходимости подтверждения игроками.</p>
+                    <a href="#" class="btn btn-primary btn-lg btn-block" disabled>
+                        <span class="glyphicon glyphicon-pencil"></span>
+                        Ввести результат
+                        <small class="text-muted">(в разработке)</small>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <span class="glyphicon glyphicon-plus"></span>
+                        Создание миссий
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    <p>Создайте новую миссию для игроков с выбором участников и параметров.</p>
+                    <a href="#" class="btn btn-success btn-lg btn-block" disabled>
+                        <span class="glyphicon glyphicon-plus-sign"></span>
+                        Создать миссию
+                        <small class="text-muted">(в разработке)</small>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Missions List -->
+    <div class="row" id="active-missions">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <span class="glyphicon glyphicon-list"></span>
+                        Недавние активные миссии
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    {% if active_missions %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Название</th>
+                                        <th>Тип</th>
+                                        <th>Hex</th>
+                                        <th>Участники</th>
+                                        <th>Создана</th>
+                                        <th>Статус</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for mission in active_missions %}
+                                        <tr>
+                                            <td><code>{{ mission.short_id }}</code></td>
+                                            <td>{{ mission.title }}</td>
+                                            <td>
+                                                <span class="label label-default">
+                                                    {{ mission.mission_type.value }}
+                                                </span>
+                                            </td>
+                                            <td><strong>{{ mission.hex_id }}</strong></td>
+                                            <td>{{ mission.participants|length }}</td>
+                                            <td>
+                                                <small>{{ mission.created_at.strftime('%d.%m %H:%M') }}</small>
+                                            </td>
+                                            <td>
+                                                {% if mission.completed %}
+                                                    <span class="label label-success">Завершена</span>
+                                                {% else %}
+                                                    <span class="label label-warning">Активна</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-xs">
+                                                    <button class="btn btn-default" title="Просмотр">
+                                                        <span class="glyphicon glyphicon-eye-open"></span>
+                                                    </button>
+                                                    {% if not mission.completed %}
+                                                        <button class="btn btn-primary" title="Ввести результат" disabled>
+                                                            <span class="glyphicon glyphicon-edit"></span>
+                                                        </button>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <span class="glyphicon glyphicon-info-sign"></span>
+                            Нет активных миссий. Создайте новую миссию для начала.
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="panel-footer">
+                    <a href="{{ url_for('missions_view') }}">
+                        Посмотреть все миссии
+                        <span class="glyphicon glyphicon-arrow-right"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Links -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="well">
+                <h4>Быстрые ссылки</h4>
+                <ul class="list-inline">
+                    <li>
+                        <a href="{{ url_for('map_view') }}">
+                            <span class="glyphicon glyphicon-globe"></span> Карта
+                        </a>
+                    </li>
+                    <li>|</li>
+                    <li>
+                        <a href="{{ url_for('print_station') }}">
+                            <span class="glyphicon glyphicon-print"></span> Станция печати
+                        </a>
+                    </li>
+                    <li>|</li>
+                    <li>
+                        <a href="{{ url_for('missions_view') }}">
+                            <span class="glyphicon glyphicon-list-alt"></span> Все миссии
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .panel-footer a {
+        color: inherit;
+        text-decoration: none;
+    }
+    
+    .panel-footer a:hover {
+        background-color: #f5f5f5;
+    }
+    
+    #online-status {
+        font-size: 14px;
+        padding: 5px 10px;
+    }
+    
+    .page-header {
+        margin-top: 0;
+        border-bottom: 2px solid #667eea;
+    }
+    
+    .panel-primary .panel-heading,
+    .panel-success .panel-heading,
+    .panel-warning .panel-heading,
+    .panel-info .panel-heading {
+        color: white;
+    }
+</style>
+
+<script>
+    // Online/Offline status indicator
+    function updateOnlineStatus() {
+        const statusEl = document.getElementById('online-status');
+        if (navigator.onLine) {
+            statusEl.className = 'label label-success';
+            statusEl.innerHTML = '<span class="glyphicon glyphicon-ok-circle"></span> Online';
+        } else {
+            statusEl.className = 'label label-danger';
+            statusEl.innerHTML = '<span class="glyphicon glyphicon-remove-circle"></span> Offline';
+        }
+    }
+    
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    
+    // Initial check
+    updateOnlineStatus();
+    
+    // Auto-refresh status every 30 seconds (optional)
+    setInterval(function() {
+        fetch('/api/ping')
+            .then(r => r.json())
+            .then(data => console.log('Server ping:', data))
+            .catch(err => console.error('Server offline:', err));
+    }, 30000);
+</script>
+{% endblock %}

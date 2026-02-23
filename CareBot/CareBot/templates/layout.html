@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - My Flask Application</title>
+    <title>{{ title }} - Crusade Admin</title>
     <link rel="stylesheet" type="text/css" href="/static/content/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="/static/content/site.css" />
     <script src="/static/scripts/modernizr-2.6.2.js"></script>
@@ -11,30 +11,74 @@
 
 <body>
     <div class="navbar navbar-inverse navbar-fixed-top">
-        <div class="container">
+        <div class="container-fluid">
             <div class="navbar-header">
                 <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
                     <span class="icon-bar"></span>
                     <span class="icon-bar"></span>
                     <span class="icon-bar"></span>
                 </button>
-                <a href="/" class="navbar-brand">Application name</a>
+                <a href="/" class="navbar-brand">
+                    <span class="glyphicon glyphicon-tower"></span>
+                    Crusade Admin
+                </a>
             </div>
             <div class="navbar-collapse collapse">
                 <ul class="nav navbar-nav">
-                    <li><a href="{{ url_for('home') }}">Home</a></li>
-                    <li><a href="{{ url_for('about') }}">About</a></li>
-                    <li><a href="{{ url_for('contact') }}">Contact</a></li>
+                    <li><a href="{{ url_for('home') }}">
+                        <span class="glyphicon glyphicon-home"></span> Главная
+                    </a></li>
+                    {% if current_user.is_authenticated %}
+                        <li><a href="{{ url_for('admin_dashboard') }}">
+                            <span class="glyphicon glyphicon-dashboard"></span> Админ-панель
+                        </a></li>
+                        <li><a href="{{ url_for('missions_view') }}">
+                            <span class="glyphicon glyphicon-list-alt"></span> Миссии
+                        </a></li>
+                        <li><a href="{{ url_for('map_view') }}">
+                            <span class="glyphicon glyphicon-globe"></span> Карта
+                        </a></li>
+                    {% endif %}
+                </ul>
+                <ul class="nav navbar-nav navbar-right">
+                    {% if current_user.is_authenticated %}
+                        <li class="dropdown">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                                <span class="glyphicon glyphicon-user"></span>
+                                {{ current_user.nickname }}
+                                <span class="caret"></span>
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li class="dropdown-header">
+                                    {% if current_user.alliance %}
+                                        <span class="glyphicon glyphicon-flag"></span> {{ current_user.alliance }}
+                                    {% else %}
+                                        <span class="glyphicon glyphicon-user"></span> Администратор
+                                    {% endif %}
+                                </li>
+                                <li class="divider"></li>
+                                <li><a href="{{ url_for('auth.logout') }}">
+                                    <span class="glyphicon glyphicon-log-out"></span> Выход
+                                </a></li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li><a href="{{ url_for('auth.login') }}">
+                            <span class="glyphicon glyphicon-log-in"></span> Вход
+                        </a></li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
     </div>
 
-    <div class="container body-content">
+    <div class="container-fluid body-content">
         {% block content %}{% endblock %}
         <hr />
         <footer>
-            <p>&copy; {{ year }} - My Flask Application</p>
+            <p class="text-center text-muted">
+                &copy; {{ year }} - Crusade Campaign Management System
+            </p>
         </footer>
     </div>
 

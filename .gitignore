@@ -175,3 +175,11 @@ cython_debug/
 /CareBot/.vs/CareBot/CopilotIndices
 *.tar.gz
 carebot-latest.tar
+
+# SSL Certificates
+*.pem
+*.pfx
+*.crt
+*.key
+cert.pfx
+convert_cert.py

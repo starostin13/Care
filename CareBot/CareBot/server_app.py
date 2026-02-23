@@ -4,7 +4,7 @@
 Обновленное серверное приложение с поддержкой синхронизации и печати
 """
 
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, redirect, url_for
 from datetime import datetime
 import asyncio
 import os
@@ -13,9 +13,23 @@ import os
 from mission_engine import MissionGenerator, MissionStorage, MissionPrinter
 from sync_api import setup_sync_api
 import sqllite_helper
+import auth
 
 # Создаем Flask приложение
 app = Flask(__name__)
+
+# Configure secret key for sessions (required by Flask-Login)
+app.secret_key = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+app.config['SESSION_COOKIE_SECURE'] = True  # Require HTTPS for cookies
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour session timeout
+
+# Initialize Flask-Login
+login_manager = auth.init_login_manager(app)
+
+# Register authentication blueprint
+app.register_blueprint(auth.auth_bp)
 
 # Инициализируем компоненты
 mission_generator = MissionGenerator()
@@ -66,6 +80,53 @@ def print_station():
         title='Mission Print Station',
         year=datetime.now().year,
     )
+
+
+# ============================================================================
+# ADMIN ROUTES (Protected by @login_required)
+# ============================================================================
+
+@app.route('/admin')
+@app.route('/admin/dashboard')
+@auth.admin_required
+def admin_dashboard():
+    """Admin dashboard - main admin panel page"""
+    from flask_login import current_user
+    
+    try:
+        # Get statistics for dashboard
+        active_missions = mission_storage.get_active_missions()
+        completed_missions = [m for m in mission_storage.missions if m.completed]
+        
+        # Get today's missions
+        today = datetime.now().date()
+        todays_missions = [
+            m for m in active_missions 
+            if m.created_at.date() == today
+        ]
+        
+        stats = {
+            'active_missions': len(active_missions),
+            'completed_today': len([m for m in completed_missions if m.created_at.date() == today]),
+            'todays_missions': len(todays_missions),
+            'total_missions': len(mission_storage.missions)
+        }
+        
+        return render_template(
+            'admin_dashboard.html',
+            title='Админ-панель',
+            year=datetime.now().year,
+            user=current_user,
+            stats=stats,
+            active_missions=active_missions[:10],  # Last 10
+        )
+    except Exception as e:
+        return f"Error loading dashboard: {e}", 500
+
+
+# ============================================================================
+# API ROUTES
+# ============================================================================
 
 @app.route('/api/map-data')
 def get_map_data():
@@ -153,8 +214,13 @@ def print_mission_api(mission_id):
 
 if __name__ == '__main__':
     print("🚀 Starting Crusade Server with sync support...")
-    print("📱 Mobile devices can sync at: http://[your-ip]:5000/api/sync")
-    print("🗺️ Telegram Mini App at: http://[your-ip]:5000/map")
-    print("🖨️ Print station at: http://[your-ip]:5000/print-station")
+    print("� HTTPS enabled with adhoc SSL certificate")
+    print("📱 Mobile devices can sync at: https://[your-ip]:5000/api/sync")
+    print("🗺️ Telegram Mini App at: https://[your-ip]:5000/map")
+    print("🖨️ Print station at: https://[your-ip]:5000/print-station")
+    print("⚠️ Note: You may need to accept the self-signed certificate on first access")
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Use adhoc SSL for development (auto-generates certificate)
+    # For production, use: ssl_context=('cert.pem', 'key.pem')
+    app.run(host='0.0.0.0', port=5000, debug=True, ssl_context='adhoc')
+
