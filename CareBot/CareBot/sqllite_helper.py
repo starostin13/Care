@@ -10,7 +10,7 @@ import os
 import random
 import logging
 from typing import List, Dict, Optional
-from .models import Mission, Battle, MissionDetails, Warmaster, Alliance, MapCell, PendingResult
+from models import Mission, Battle, MissionDetails, Warmaster, Alliance, MapCell, PendingResult
 
 logger = logging.getLogger(__name__)
 
