@@ -84,7 +84,7 @@ def add_feature_flags_texts(conn):
         
         if not cursor.fetchone():
             cursor.execute("""
-                INSERT INTO texts (key, language, text)
+                INSERT INTO texts (key, language, value)
                 VALUES (?, ?, ?)
             """, (key, lang, text))
             print(f"✅ Added text: {key} ({lang})")

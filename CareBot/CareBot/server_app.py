@@ -170,33 +170,6 @@ def admin_dashboard():
 # API ROUTES
 # ============================================================================
 
-@app.route('/api/map-data')
-def get_map_data():
-    """API для получения данных карты"""
-    async def fetch_map_data():
-        return await sqllite_helper.get_all_map_cells()
-    
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        map_data = loop.run_until_complete(fetch_map_data())
-        loop.close()
-        
-        # Преобразуем данные в нужный формат
-        formatted_data = []
-        for cell in map_data:
-            formatted_data.append({
-                'id': cell[0],
-                'planet_id': cell[1],
-                'state': cell[2],
-                'patron': cell[3],
-                'has_warehouse': bool(cell[4]) if len(cell) > 4 else False
-            })
-        
-        return jsonify(formatted_data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/hex-info/<int:hex_id>')
 def get_hex_info(hex_id):
     """API для получения информации о hex"""

@@ -17,8 +17,8 @@ import sqllite_helper
 # Create Blueprint for auth routes
 auth_bp = Blueprint('auth', __name__)
 
-# Login manager will be initialized in server_app.py
-login_manager = None
+# Login manager is created at import time and initialized in server_app.py
+login_manager = LoginManager()
 
 
 class AdminUser(UserMixin):
@@ -207,7 +207,6 @@ def init_login_manager(app):
     Call this from server_app.py
     """
     global login_manager
-    login_manager = LoginManager()
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Пожалуйста, войдите для доступа к этой странице'
