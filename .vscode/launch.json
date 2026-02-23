@@ -1,0 +1,54 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "🧪 CareBot Test Mode",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/CareBot/run_bot.py",
+            "cwd": "${workspaceFolder}/CareBot",
+            "console": "integratedTerminal",
+            "env": {
+                "CAREBOT_TEST_MODE": "true"
+            },
+            "purpose": ["debug-test"],
+            "presentation": {
+                "hidden": false,
+                "group": "CareBot",
+                "order": 1
+            },
+            "preLaunchTask": "Install Dependencies"
+        },
+        {
+            "name": "🚀 CareBot Production Mode",
+            "type": "debugpy",
+            "request": "launch", 
+            "program": "${workspaceFolder}/CareBot/run_bot.py",
+            "cwd": "${workspaceFolder}/CareBot",
+            "console": "integratedTerminal",
+            "env": {
+                "CAREBOT_TEST_MODE": "false"
+            },
+            "purpose": ["debug-test"],
+            "presentation": {
+                "hidden": false,
+                "group": "CareBot", 
+                "order": 2
+            }
+        },
+        {
+            "name": "🔧 CareBot Hybrid Mode", 
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/CareBot/run_hybrid.py",
+            "cwd": "${workspaceFolder}/CareBot",
+            "console": "integratedTerminal",
+            "purpose": ["debug-test"],
+            "presentation": {
+                "hidden": false,
+                "group": "CareBot",
+                "order": 3
+            }
+        }
+    ]
+}

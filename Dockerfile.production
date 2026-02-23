@@ -1,0 +1,43 @@
+# Боевая версия CareBot с автоматическим восстановлением базы данных
+FROM python:3.11-slim
+
+# Установка рабочей директории
+WORKDIR /app
+
+# Установка системных зависимостей
+RUN apt-get update && apt-get install -y \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Копирование requirements для кэширования слоев
+COPY CareBot/requirements.txt .
+
+# Установка Python зависимостей
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копирование файлов приложения
+COPY CareBot/run_hybrid.py .
+COPY CareBot/run_bot.py .
+COPY CareBot/runserver.py .
+COPY CareBot/CareBot/ ./CareBot/
+
+# Копирование дампа базы данных и скрипта деплоя
+COPY CareBot/CareBot/db/ ./db_deploy/
+
+# Создание директории для данных
+RUN mkdir -p /app/data && chmod 755 /app/data
+
+# Переменные окружения
+ENV SERVER_HOST=0.0.0.0
+ENV SERVER_PORT=5555
+ENV DATABASE_PATH=/app/data/game_database.db
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:5555/health')" || exit 1
+
+# Порт
+EXPOSE 5555
+
+# Запуск напрямую без entrypoint
+CMD ["python", "run_hybrid.py"]

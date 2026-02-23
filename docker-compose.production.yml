@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  carebot-production:
+    image: carebot:${CAREBOT_IMAGE_TAG:-latest}
+    container_name: carebot_production
+    ports:
+      - "5555:5555"
+    volumes:
+      # Персистентное хранение базы данных
+      - ./data:/app/data
+      # Логи (опционально)
+      - ./logs:/app/logs
+      # Миграции как отдельный volume для чистоты архитектуры
+      - ./migrations:/app/CareBot/migrations
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=5555
+      - DATABASE_PATH=/app/data/game_database.db
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    restart: unless-stopped
+    networks:
+      - carebot-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5555/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # SQLite веб-интерфейс для администрирования базы данных
+  sqlite-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlite-web
+    container_name: carebot_sqlite_web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/game_database.db
+    networks:
+      - carebot-network
+    profiles:
+      - admin
+    depends_on:
+      - carebot-production
+    restart: unless-stopped
+
+networks:
+  carebot-network:
+    driver: bridge
+
+volumes:
+  carebot-data:
+    driver: local

@@ -1,0 +1,60 @@
+{
+    "python.defaultInterpreterPath": "python",
+    "python.terminal.activateEnvironment": true,
+    
+    // Настройки для CareBot проекта
+    "files.associations": {
+        "*.py": "python",
+        "*.sql": "sql"
+    },
+    
+    // Исключения для поиска (игнорируем временные файлы)
+    "search.exclude": {
+        "**/__pycache__": true,
+        "**/obj": true,
+        "**/bin": true,
+        "**/*.pyc": true,
+        "**/test_storage": true
+    },
+    
+    // Отладка
+    "python.logging.level": "info",
+    "debug.console.fontSize": 14,
+    "debug.inlineValues": "on",
+    
+    // Терминал
+    "terminal.integrated.fontSize": 12,
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    
+    // Рекомендуемые расширения для CareBot
+    "extensions.recommendations": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-vscode.powershell",
+        "mtxr.sqltools",
+        "alexcvzz.vscode-sqlite"
+    ],
+    
+    // Настройки для SQLite
+    "sqltools.connections": [
+        {
+            "name": "CareBot Database",
+            "driver": "SQLite",
+            "database": "${workspaceFolder}/CareBot/CareBot/db/database.db",
+            "group": "CareBot"
+        }
+    ],
+    
+    // Сниппеты и автодополнение
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.typeCheckingMode": "basic",
+    
+    // Форматирование
+    "python.formatting.provider": "none",
+    "[python]": {
+        "editor.formatOnSave": false,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    }
+}

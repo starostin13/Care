@@ -1,0 +1,298 @@
+# CareBot Production Deployment Scripts
+
+Набор скриптов для управления production развертыванием CareBot.
+
+## 🚀 Основные скрипты
+
+### 1. `update-production.ps1` - Полное обновление production
+
+Безопасное обновление с проверками, резервным копированием и возможностью отката.
+
+**Основное использование:**
+```powershell
+# Обычное обновление (с автоматическим бэкапом)
+.\scripts\update-production.ps1
+
+# Принудительное обновление без подтверждений (с бэкапом)
+.\scripts\update-production.ps1 update -Force
+
+# Обновление без проверки здоровья
+.\scripts\update-production.ps1 update -SkipHealthCheck
+```
+
+### Управление сервисом:**
+```powershell
+# Проверить статус
+.\scripts\update-production.ps1 status
+
+# Показать логи
+.\scripts\update-production.ps1 logs
+
+# Остановить/запустить
+.\scripts\update-production.ps1 stop
+.\scripts\update-production.ps1 start
+.\scripts\update-production.ps1 restart
+
+# Создать резервную копию
+.\scripts\update-production.ps1 backup
+
+# Запустить с sqlite-web интерфейсом (администраторский режим)
+.\scripts\update-production.ps1 admin
+```
+
+### 2. `quick-update.ps1` - Быстрое обновление
+
+Для экстренных случаев, когда нужно быстро обновить файл без полной процедуры.
+
+```powershell
+# Обновить один файл
+.\scripts\quick-update.ps1 -File CareBot/CareBot/handlers.py
+
+# Быстро синхронизировать все изменения
+.\scripts\quick-update.ps1 -All
+```
+
+## 📋 Что делает полное обновление
+
+1. **Проверки:**
+   - 🔐 Проверяет наличие Telegram токена
+   - 📁 Проверяет локальные несохраненные изменения
+   - ⚠️  Спрашивает подтверждение при необходимости
+
+2. **Резервное копирование:**
+   - 💾 Автоматически создает полную копию текущей версии перед обновлением
+   - 📅 Использует timestamp в имени backup'а (carebot-backup-YYYYMMDD-HHMMSS)
+   - ❓ Спрашивает подтверждение (кроме режима -Force)
+
+3. **Синхронизация:**
+   - 📤 Копирует измененные файлы на сервер
+   - 🔧 Создает необходимые директории
+
+4. **Обновление сервиса:**
+   - 🛑 Останавливает текущий контейнер
+   - 🔨 Пересобирает Docker образ
+   - ▶️  Запускает новую версию
+
+5. **Проверка здоровья:**
+   - 🏥 Проверяет health endpoint
+   - 📊 Показывает статус базы данных
+   - 🔄 При ошибке предлагает откат
+
+6. **Автоматический откат:**
+   - ⚡ При любой критической ошибке
+   - 🔙 Восстанавливает предыдущую версию
+   - ✅ Запускает откаченную версию
+
+## 🔧 Настройка
+
+### Требования:
+- PowerShell 5.1+
+- SSH доступ к Ubuntu серверу
+- SCP для копирования файлов
+- Файл `.env` с Telegram токеном
+
+### Конфигурация в скрипте:
+```powershell
+$SERVER_HOST = "ubuntu@192.168.1.125"
+$PRODUCTION_PATH = "/home/ubuntu/carebot-production"
+$HEALTH_URL = "http://192.168.1.125:5555/health"
+```
+
+## 📂 Какие файлы синхронизируются
+
+Автоматически синхронизируются:
+- `CareBot/CareBot/*.py` - Все Python модули
+- `CareBot/requirements.txt` - Зависимости
+- `Dockerfile.production` - Docker образ
+- `docker-compose.production.yml` - Конфигурация
+- `entrypoint.sh` - Скрипт запуска
+
+## 📂 Структура файлов на сервере
+
+### Основные директории:
+- **Production версия**: `/home/ubuntu/carebot-production/`
+- **Бэкапы**: `/home/ubuntu/carebot-backup-YYYYMMDD-HHMMSS/`
+- **Данные (база)**: `/home/ubuntu/carebot-production/data/`
+- **Логи**: `/home/ubuntu/carebot-production/logs/`
+
+### Соглашения именования бэкапов:
+```
+/home/ubuntu/carebot-backup-20251114-003209/  # Ручной бэкап
+/home/ubuntu/carebot-backup-20251114-003312/  # Автоматический при обновлении
+```
+
+**Формат**: `carebot-backup-YYYYMMDD-HHMMSS`
+- `YYYY` - год (4 цифры)
+- `MM` - месяц (2 цифры) 
+- `DD` - день (2 цифры)
+- `HH` - час (24-часовой формат)
+- `MM` - минута
+- `SS` - секунда
+
+## 🚨 Экстренные ситуации
+
+### Просмотр доступных бэкапов:
+```powershell
+ssh ubuntu@192.168.1.125 "ls -la /home/ubuntu/carebot-backup-*"
+```
+
+### Откат к предыдущей версии:
+```powershell
+# 1. Остановить текущую версию
+.\scripts\update-production.ps1 stop
+
+# 2. Найти нужный бэкап (выберите timestamp)
+ssh ubuntu@192.168.1.125 "ls -la /home/ubuntu/carebot-backup-*"
+
+# 3. Восстановить из бэкапа (замените TIMESTAMP на нужную дату)
+ssh ubuntu@192.168.1.125 "cd /home/ubuntu && mv carebot-production carebot-broken-$(date +%Y%m%d) && mv carebot-backup-TIMESTAMP carebot-production"
+
+# 4. Запустить восстановленную версию
+.\scripts\update-production.ps1 start
+```
+
+### Создание дополнительного бэкапа:
+```powershell
+# Создать бэкап в любой момент
+.\scripts\update-production.ps1 backup
+```
+
+### Только логи без обновления:
+```powershell
+ssh ubuntu@192.168.1.125 "cd /home/ubuntu/carebot-production && docker-compose -f docker-compose.production.yml logs -f"
+```
+
+### Принудительная пересборка:
+```powershell
+ssh ubuntu@192.168.1.125 "cd /home/ubuntu/carebot-production && docker-compose -f docker-compose.production.yml down && docker-compose -f docker-compose.production.yml build --no-cache && docker-compose -f docker-compose.production.yml up -d"
+```
+
+## 🗄️ SQLite веб-интерфейс
+
+### Запуск администраторского режима:
+```powershell
+# Запустить с sqlite-web интерфейсом
+ssh ubuntu@192.168.1.125 'cd /home/ubuntu/carebot-production && docker-compose -f docker-compose.production.yml --profile admin up -d'
+
+# Остановить sqlite-web
+ssh ubuntu@192.168.1.125 'cd /home/ubuntu/carebot-production && docker-compose -f docker-compose.production.yml --profile admin down'
+```
+
+### Доступ к веб-интерфейсу:
+- **URL**: http://192.168.1.125:8080
+- **База данных**: автоматически подключается к `/app/data/game_database.db`
+- **Функции**: просмотр таблиц, выполнение SQL запросов, экспорт данных
+
+### Безопасность:
+- SQLite-web доступен только в профиле `admin`
+- Интерфейс имеет read-only доступ к production базе
+- Рекомендуется использовать VPN или firewall для ограничения доступа
+
+## 🗄️ SQLite веб-интерфейс
+
+### Запуск администраторского режима:
+```powershell
+# Запустить с sqlite-web интерфейсом
+ssh ubuntu@192.168.1.125 'cd /home/ubuntu/carebot-production && docker-compose -f docker-compose.production.yml --profile admin up -d'
+
+# Остановить sqlite-web
+ssh ubuntu@192.168.1.125 'cd /home/ubuntu/carebot-production && docker-compose -f docker-compose.production.yml --profile admin down'
+```
+
+### Доступ к веб-интерфейсу:
+- **URL**: http://192.168.1.125:8080
+- **База данных**: автоматически подключается к `/app/data/game_database.db`
+- **Функции**: просмотр таблиц, выполнение SQL запросов, экспорт данных
+
+### Безопасность:
+- SQLite-web доступен только в профиле `admin`
+- Интерфейс имеет read-only доступ к production базе
+- Рекомендуется использовать VPN или firewall для ограничения доступа
+
+## 📥 Система миграций (ВАЖНО ДЛЯ РАЗРАБОТЧИКОВ!)
+
+### Архитектура миграций:
+- **Файлы**: `CareBot/CareBot/migrations/*.py` и `*.sql`
+- **Production volume**: `/home/ubuntu/carebot-production/migrations/`
+- **В контейнере**: `/app/CareBot/migrations/` (монтированный volume)
+
+### Работа с миграциями:
+```powershell
+# Синхронизировать миграции на production (БЕЗ перезапуска)
+.\scripts\update-production.ps1 migrations
+
+# Применить pending миграции
+.\scripts\update-production.ps1 apply-migrations
+
+# Проверить статус миграций
+.\scripts\update-production.ps1 migration-status
+
+# Полное обновление (код + миграции + restart)
+.\scripts\update-production.ps1 update
+```
+
+### Процесс добавления новой миграции:
+1. Создать файл `CareBot/CareBot/migrations/009_description.py`
+2. Синхронизировать: `.\scripts\update-production.ps1 migrations`
+3. Применить: `.\scripts\update-production.ps1 apply-migrations`
+4. Проверить: `.\scripts\update-production.ps1 migration-status`
+
+### КРИТИЧЕСКИ ВАЖНО:
+- ❌ **НЕ используйте** деструктивные SQL операции (`DROP`, `DELETE`, `TRUNCATE`)
+- ✅ **ВСЕГДА** проверяйте существование колонок перед добавлением
+- ✅ **ОБЯЗАТЕЛЬНО** создавайте бэкапы перед применением миграций
+- ✅ **ТЕСТИРУЙТЕ** миграции локально перед production
+
+## 💡 Советы по использованию
+
+1. **Обычные обновления:**
+   - Всегда используйте `update-production.ps1`
+   - Дайте скрипту создать backup
+   - Проверяйте health check
+
+2. **Экстренные исправления:**
+   - Используйте `quick-update.ps1 -File`
+   - Для hot-fix'ов одного файла
+
+3. **Массовые изменения:**
+   - Сначала тестируйте локально
+   - Коммитьте изменения в git
+   - Используйте `-Force` если уверены
+
+4. **Мониторинг:**
+   - Регулярно проверяйте `status`
+   - Следите за `logs` после обновления
+   - Bookmark: http://192.168.1.125:5555/health
+   - SQLite admin: http://192.168.1.125:8080 (только с профилем admin)
+
+## 🔍 Диагностика проблем
+
+### Скрипт не может подключиться к серверу:
+```powershell
+# Проверить SSH соединение
+ssh ubuntu@192.168.1.125 "echo 'Connection OK'"
+
+# Проверить путь на сервере
+ssh ubuntu@192.168.1.125 "ls -la /home/ubuntu/carebot-production"
+```
+
+### Health check не проходит:
+```powershell
+# Проверить контейнер
+ssh ubuntu@192.168.1.125 "docker ps"
+
+# Проверить логи
+.\scripts\update-production.ps1 logs
+
+# Проверить вручную
+curl http://192.168.1.125:5555/health
+```
+
+### База данных проблемы:
+```powershell
+# Проверить volume
+ssh ubuntu@192.168.1.125 "docker volume ls"
+
+# Проверить файл базы
+ssh ubuntu@192.168.1.125 "ls -la /home/ubuntu/carebot-production && docker exec carebot_production ls -la /app/data/"
+```

@@ -58,6 +58,7 @@
     <Content Include="CareBot\database\map_story.sql" />
     <Content Include="CareBot\database\mission_stack.sql" />
     <Content Include="CareBot\database\schedule.sql" />
+    <Content Include="CareBot\database\texts.sql" />
     <Content Include="CareBot\database\warmasters.sql" />
     <Content Include="requirements.txt" />
     <Content Include="CareBot\static\content\bootstrap.css" />

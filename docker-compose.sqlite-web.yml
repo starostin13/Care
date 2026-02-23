@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  sqlite-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlite-web
+    container_name: carebot_sqlite_web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/game_database.db
+    restart: unless-stopped
+    depends_on:
+      - carebot_production
+    networks:
+      - carebot_network
+
+  carebot_production:
+    build:
+      context: .
+      dockerfile: CareBot/Dockerfile
+    container_name: carebot_production
+    command: ["python", "run_hybrid.py"]
+    environment:
+      - DATABASE_PATH=/app/data/game_database.db
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=5555
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "5555:5555"
+    restart: unless-stopped
+    networks:
+      - carebot_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5555/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  carebot_network:
+    driver: bridge
+
+volumes:
+  data:
