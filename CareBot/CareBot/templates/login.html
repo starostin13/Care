@@ -28,23 +28,29 @@
                     <div class="form-group">
                         <label for="warmaster_id">
                             <span class="glyphicon glyphicon-user"></span>
-                            Warmaster
+                            Администратор
                         </label>
                         <select class="form-control" id="warmaster_id" name="warmaster_id" required autofocus>
-                            <option value="">-- Выберите warmaster --</option>
+                            <option value="">-- Выберите администратора --</option>
                             {% if warmasters %}
-                                {% for wm in warmasters %}
-                                    <option value="{{ wm[0] }}">
-                                        {{ wm[3] or 'ID: ' + wm[0]|string }}
-                                        {% if wm[2] %}
-                                            ({{ wm[2] }})
+                                {% for admin in warmasters %}
+                                    {# admin format: (warmaster_id, nickname, alliance_name, is_admin, has_web_password) #}
+                                    <option value="{{ admin[0] }}" {% if not admin[4] %}disabled{% endif %}>
+                                        {{ admin[1] or 'ID: ' + admin[0]|string }}
+                                        {% if admin[2] %}
+                                            ({{ admin[2] }})
+                                        {% endif %}
+                                        {% if not admin[4] %}
+                                            - ⚠️ нет веб-пароля
                                         {% endif %}
                                     </option>
                                 {% endfor %}
+                            {% else %}
+                                <option value="" disabled>Нет администраторов с веб-доступом</option>
                             {% endif %}
                         </select>
                         <small class="form-text text-muted">
-                            Выберите свой warmaster аккаунт
+                            Только администраторы с установленным веб-паролем
                         </small>
                     </div>
 

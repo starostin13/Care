@@ -197,6 +197,121 @@ ALTER TABLE table_name ADD COLUMN new_column TEXT DEFAULT 'value';
 - `apply_mission_rewards()` - применяет награды и раскрывает секретные бонусы
 - `get_winner_bonus(mission_id)` - получает секретный бонус (только после битвы!)
 
+## Веб-интерфейс администратора
+
+### Архитектура аутентификации
+
+**Двухслойная система доступа:**
+
+1. **Таблица warmasters** - источник истины для статуса админа
+   - Поле `is_admin` (INTEGER, 0 или 1)
+   - Управляется через Telegram бота командой `/make_admin`
+   - Определяет КТО может быть админом
+
+2. **Таблица admin_users** - веб-пароли для админов
+   - Хранит только `password_hash` (bcrypt)
+   - `warmaster_id` как PRIMARY KEY (FOREIGN KEY -> warmasters.id)
+   - Определяет ЧТО нужно для веб-входа
+
+**Процесс авторизации:**
+```python
+# 1. Проверка статуса админа
+if not is_user_admin(telegram_id):  # warmasters.is_admin == 1
+    return False
+
+# 2. Проверка веб-пароля
+if not verify_admin_web_credentials(telegram_id, password):  # admin_users.password_hash
+    return False
+
+# 3. Успешный вход
+```
+
+### Управление веб-доступом
+
+**Установка пароля для админа:**
+```bash
+# Интерактивный режим
+python scripts/set_admin_password.py
+
+# Просмотр админов
+python scripts/set_admin_password.py list
+
+# Установка напрямую
+python scripts/set_admin_password.py set <warmaster_id> <password>
+```
+
+**Требования:**
+- Warmaster должен иметь `is_admin=1` (устанавливается через Telegram)
+- Пароль минимум 4 символа
+- Пароль хешируется bcrypt с солью
+
+### Функции sqllite_helper для веб-доступа
+
+- `set_admin_web_password(telegram_id, password)` - установить/обновить веб-пароль
+- `verify_admin_web_credentials(telegram_id, password)` - проверка логина
+- `has_admin_web_password(telegram_id)` - есть ли веб-пароль
+- `get_all_admins_with_web_access()` - список админов с индикатором пароля
+- `update_admin_last_login(telegram_id)` - обновить last_login
+- `get_admin_web_info(telegram_id)` - информация о веб-доступе админа
+
+### Endpoints
+
+**Публичные:**
+- `GET /login` - форма входа с выбором админа
+- `POST /login` - обработка логина
+- `GET /logout` - выход из системы
+
+**Защищенные (требуют @auth.admin_required):**
+- `GET /admin/dashboard` - главная панель с статистикой
+- `GET /admin/enter-result` - (в разработке) ввод результата битвы
+- `GET /admin/create-mission` - (в разработке) создание новой миссии
+
+**API endpoints (в разработке):**
+- `GET /api/warmasters` - список warmasters
+- `GET /api/active-missions` - активные миссии
+- `POST /api/complete-mission` - завершить миссию от админа
+
+### Безопасность
+
+**Настройки сессий:**
+- `SESSION_TYPE = 'filesystem'` - сессии на диске
+- `SESSION_COOKIE_SECURE = True` - только HTTPS
+- `SESSION_COOKIE_HTTPONLY = True` - защита от XSS
+- `PERMANENT_SESSION_LIFETIME = 3600` - 1 час
+- `SECRET_KEY` - случайный 32-байтный ключ
+
+**HTTPS/SSL:**
+- Flask adhoc SSL для разработки (`ssl_context='adhoc'`)
+- Самоподписанные сертификаты нужно установить на устройствах
+- См. `SSL_SETUP.md` для инструкций по платформам
+
+**Защита от атак:**
+- Bcrypt для хеширования паролей (cost factor 12)
+- Параметризованные SQL запросы (SQLite injection защита)
+- Flask-Login для управления сессиями
+- HttpOnly cookies против XSS
+
+### PWA поддержка (в разработке)
+
+**Требования для PWA:**
+- ✅ HTTPS (adhoc SSL настроен)
+- ⏳ Service Worker (планируется)
+- ⏳ Web Manifest (планируется)
+- ⏳ Offline caching (IndexedDB)
+
+**Offline функционал:**
+- Кеширование карты и edges для офлайн генерации миссий
+- IndexedDB для хранения pending результатов
+- Background sync при восстановлении соединения
+
+### Лучшие практики веб-админки
+
+1. **Никогда не дублируйте is_admin статус** - всегда используйте `warmasters.is_admin`
+2. **Всегда проверяйте is_admin перед операциями** - двойная проверка (таблица + функция)
+3. **Логируйте admin действия** - кто, когда, что изменил
+4. **Используйте транзакции** - особенно для критичных операций
+5. **Тестируйте через mock режим** - не используйте production базу для тестов
+
 ## Соглашения по коду
 
 ### База данных

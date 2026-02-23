@@ -1,17 +1,14 @@
 -- Admin Users Table
--- Stores authentication information for admin users
--- Linked to warmasters table for user identification
+-- Stores web passwords for admin users (who have is_admin=1 in warmasters)
+-- Admins can use Telegram bot without password, web requires password
 
 CREATE TABLE IF NOT EXISTS admin_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    warmaster_id INTEGER UNIQUE NOT NULL,
+    warmaster_id INTEGER PRIMARY KEY NOT NULL,
     password_hash TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     last_login TEXT,
-    is_active BOOLEAN DEFAULT 1,
     FOREIGN KEY (warmaster_id) REFERENCES warmasters(id) ON DELETE CASCADE
 );
 
 -- Index for faster lookups
-CREATE INDEX IF NOT EXISTS idx_admin_warmaster ON admin_users(warmaster_id);
-CREATE INDEX IF NOT EXISTS idx_admin_active ON admin_users(is_active);
+CREATE INDEX IF NOT EXISTS idx_admin_last_login ON admin_users(last_login);

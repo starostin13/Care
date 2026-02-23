@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 Authentication module for admin panel
-Uses Flask-Login and integrates with warmasters table
+Uses Flask-Login and integrates with warmasters.is_admin field
+Passwords are stored separately in admin_users table for web access
 """
 
 import asyncio
@@ -25,11 +26,12 @@ class AdminUser(UserMixin):
     User class for Flask-Login
     Represents an authenticated admin user
     """
-    def __init__(self, warmaster_id, nickname, alliance=None):
+    def __init__(self, warmaster_id, nickname, alliance=None, is_admin=False):
         self.id = warmaster_id  # Flask-Login requires 'id' attribute
         self.warmaster_id = warmaster_id
         self.nickname = nickname
         self.alliance = alliance
+        self._is_admin = is_admin
     
     def get_id(self):
         """Required by Flask-Login - returns user ID as string"""
@@ -42,8 +44,8 @@ class AdminUser(UserMixin):
     
     @property
     def is_active(self):
-        """Required by Flask-Login"""
-        return True
+        """Required by Flask-Login - check is_admin status"""
+        return self._is_admin
     
     @property
     def is_anonymous(self):
@@ -53,8 +55,8 @@ class AdminUser(UserMixin):
 
 async def _load_user_async(warmaster_id: int):
     """Async helper to load user from database"""
-    # Check if user is an admin
-    is_admin = await sqllite_helper.check_admin_exists(int(warmaster_id))
+    # Check if user is an admin via is_admin field in warmasters
+    is_admin = await sqllite_helper.is_user_admin(str(warmaster_id))
     if not is_admin:
         return None
     
@@ -72,7 +74,7 @@ async def _load_user_async(warmaster_id: int):
         alliances = await sqllite_helper.get_all_alliances()
         alliance_name = next((a[1] for a in alliances if a[0] == alliance_id), None)
     
-    return AdminUser(warmaster_id, nickname, alliance_name)
+    return AdminUser(warmaster_id, nickname, alliance_name, is_admin=True)
 
 
 @login_manager.user_loader
@@ -80,6 +82,7 @@ def load_user(warmaster_id):
     """
     User loader callback for Flask-Login
     Loads user from database by warmaster_id
+    Checks is_admin status from warmasters table
     """
     if not warmaster_id:
         return None
@@ -95,27 +98,16 @@ def load_user(warmaster_id):
 
 async def _verify_login_async(warmaster_id: int, password: str):
     """Async helper to verify login credentials"""
-    # Get admin user from database
-    admin_info = await sqllite_helper.get_admin_by_warmaster_id(warmaster_id)
-    
-    if not admin_info:
+    # First check if user is admin via is_admin field in warmasters
+    is_admin = await sqllite_helper.is_user_admin(str(warmaster_id))
+    if not is_admin:
         return None
     
-    admin_id, wm_id, created_at, last_login, is_active = admin_info
-    
-    # Check if admin is active
-    if not is_active:
-        return None
-    
-    # Get password hash from database
-    # In production, password_hash should be stored in admin_users table
-    # For now, we'll use a simple hash comparison
-    # TODO: Update to use proper bcrypt password hashing
-    
+    # Hash the password using SHA256 (TODO: upgrade to bcrypt in production)
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     
-    # Verify credentials
-    is_valid = await sqllite_helper.verify_admin_credentials(warmaster_id, password_hash)
+    # Verify web password from admin_users table
+    is_valid = await sqllite_helper.verify_admin_web_credentials(warmaster_id, password_hash)
     
     if not is_valid:
         return None
@@ -147,7 +139,7 @@ def login():
             flash('Неверный ID warmaster', 'error')
             return render_template('login.html')
         
-        # Verify credentials
+        # Verify credentials (checks is_admin + web password)
         user = asyncio.run(_verify_login_async(warmaster_id, password))
         
         if user is None:
@@ -167,10 +159,16 @@ def login():
         return redirect(url_for('admin_dashboard'))
     
     # GET request - show login form
-    # Get list of warmasters for dropdown
-    warmasters = asyncio.run(sqllite_helper.get_all_warmasters())
+    # Get list of admins (only those with is_admin=1)
+    admins_info = asyncio.run(_get_admins_for_login())
     
-    return render_template('login.html', warmasters=warmasters)
+    return render_template('login.html', warmasters=admins_info)
+
+
+async def _get_admins_for_login():
+    """Get admins with web password status"""
+    admins = await sqllite_helper.get_all_admins_with_web_access()
+    return admins
 
 
 @auth_bp.route('/logout')
@@ -183,36 +181,24 @@ def logout():
     return redirect(url_for('auth.login'))
 
 
-async def _get_all_warmasters_async():
-    """Get all warmasters for dropdown"""
-    warmasters = await sqllite_helper.get_all_warmasters()
-    admins = await sqllite_helper.get_all_admin_users()
-    admin_warmaster_ids = {admin[1] for admin in admins}  # Set of warmaster IDs that are admins
-    
-    return [
-        {
-            'id': wm[0],
-            'nickname': wm[3],
-            'alliance': wm[2],
-            'is_admin': wm[0] in admin_warmaster_ids
-        }
-        for wm in warmasters
-    ]
-
-
-async def _create_first_admin_async(warmaster_id: int, password: str):
-    """Create the first admin user"""
+async def _set_admin_password_async(warmaster_id: int, password: str):
+    """Set web password for admin user"""
     password_hash = hashlib.sha256(password.encode()).hexdigest()
-    await sqllite_helper.create_admin_user(warmaster_id, password_hash)
+    return await sqllite_helper.set_admin_web_password(warmaster_id, password_hash)
 
 
-def create_first_admin(warmaster_id: int, password: str):
+def set_admin_password(warmaster_id: int, password: str):
     """
-    Utility function to create the first admin user
-    Usage: Run this once to set up the first admin
+    Utility function to set web password for an admin user
+    User must already have is_admin=1 in warmasters table
+    Usage: Run this to enable web access for an admin
     """
-    asyncio.run(_create_first_admin_async(warmaster_id, password))
-    print(f"✅ Admin user created for warmaster_id: {warmaster_id}")
+    success = asyncio.run(_set_admin_password_async(warmaster_id, password))
+    if success:
+        print(f"✅ Web password set for warmaster_id: {warmaster_id}")
+    else:
+        print(f"❌ Failed: warmaster_id {warmaster_id} is not an admin (is_admin=0)")
+    return success
 
 
 def init_login_manager(app):
@@ -244,8 +230,11 @@ def admin_required(f):
         if not current_user.is_authenticated:
             return redirect(url_for('auth.login'))
         
-        # Additional admin checks can go here
-        # For now, being logged in means you're an admin
+        # Check if user is still admin (in case is_admin changed)
+        if not current_user.is_active:
+            logout_user()
+            flash('Ваши права администратора были отозваны', 'error')
+            return redirect(url_for('auth.login'))
         
         return f(*args, **kwargs)
     return decorated_function
