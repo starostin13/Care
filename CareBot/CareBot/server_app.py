@@ -10,10 +10,10 @@ import asyncio
 import os
 
 # Импортируем наши модули
-from mission_engine import MissionGenerator, MissionStorage, MissionPrinter
-from sync_api import setup_sync_api
-import sqllite_helper
-import auth
+from .mission_engine import MissionGenerator, MissionStorage, MissionPrinter
+from .sync_api import setup_sync_api
+from . import sqllite_helper
+from . import auth
 
 # Создаем Flask приложение
 app = Flask(__name__)
