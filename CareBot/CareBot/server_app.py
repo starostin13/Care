@@ -349,11 +349,11 @@ def api_get_active_missions():
 def api_get_warmasters():
     """API endpoint to get warmasters for admin dropdowns"""
     try:
-        warmasters = asyncio.run(sqllite_helper.get_warmasters_with_nicknames())
+        warmasters = asyncio.run(sqllite_helper.get_warmasters_for_admin())
         data = [
             {
                 'telegram_id': row[0],
-                'nickname': row[1],
+                'display_name': row[1],
                 'alliance': row[2]
             }
             for row in warmasters

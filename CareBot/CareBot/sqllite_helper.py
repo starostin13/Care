@@ -1105,6 +1105,25 @@ async def get_warmasters_with_nicknames():
             return await cursor.fetchall()
 
 
+async def get_warmasters_for_admin():
+    """Get all warmasters for admin dropdowns.
+    
+    Returns:
+        List of tuples: [(telegram_id, display_name, alliance), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 
+                telegram_id,
+                COALESCE(NULLIF(nickname, ''), NULLIF(registered_as, ''), telegram_id) AS display_name,
+                alliance
+            FROM warmasters
+            WHERE telegram_id IS NOT NULL AND telegram_id != ''
+            ORDER BY display_name
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
 async def get_all_alliances():
     """Get all alliances with their IDs and names.
     

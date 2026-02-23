@@ -155,7 +155,8 @@ function populateWarmastersSelects(warmasters) {
     select2.append('<option value="">Выберите игрока...</option>');
 
     warmasters.forEach(function(player) {
-        const label = player.nickname + (player.alliance ? ' (альянс ' + player.alliance + ')' : '');
+        const name = player.display_name || player.nickname || player.telegram_id;
+        const label = name + (player.alliance ? ' (альянс ' + player.alliance + ')' : '');
         const option = `<option value="${player.telegram_id}">${label}</option>`;
         select1.append(option);
         select2.append(option);
