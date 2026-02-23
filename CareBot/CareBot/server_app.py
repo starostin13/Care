@@ -22,7 +22,7 @@ app = Flask(__name__)
 
 # Configure secret key for sessions (required by Flask-Login)
 app.secret_key = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
-app.config['SESSION_COOKIE_SECURE'] = True  # Require HTTPS for cookies
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour session timeout
