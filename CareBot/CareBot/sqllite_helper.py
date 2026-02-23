@@ -2208,7 +2208,23 @@ async def submit_admin_battle_result(battle_id: int, player1_score: int, player2
         mission_details = await get_mission_details(mission_id)
         if mission_details:
             scenario = mission_details.rules
-            await map_helper.check_patronage(battle_id, scenario)
+            # Determine winner from battle result
+            scores = user_reply.split()
+            if len(scores) == 2:
+                score1 = int(scores[0])
+                score2 = int(scores[1])
+                # First participant is player1, second is opponent
+                if score1 > score2:
+                    winner_telegram_id = player1_telegram_id
+                elif score2 > score1:
+                    # Get opponent telegram id
+                    all_participants = await get_battle_participants(battle_id)
+                    winner_telegram_id = all_participants[1] if len(all_participants) > 1 else None
+                else:
+                    winner_telegram_id = None  # Draw
+                
+                if winner_telegram_id:
+                    await map_helper.update_map(battle_id, user_reply, winner_telegram_id, scenario)
         
         logger.info(
             "Admin %s submitted result for battle %s: %s",

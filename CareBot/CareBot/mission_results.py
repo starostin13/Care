@@ -185,12 +185,9 @@ async def confirm_result_callback(update: Update, context: ContextTypes.DEFAULT_
 async def update_map_from_result(mission: Mission, result: str, winner_id: str):
     """Обновление карты на основе результата миссии"""
     try:
-        # Используем существующую логику обновления карты
-        await map_helper.check_patronage(
-            battle_id=None,  # У нас нет battle_id, но можно адаптировать
-            battle_result=result,
-            user_telegram_id=winner_id
-        )
+        # Note: Миссии без battle_id не обновляют карту
+        # Для обновления карты нужен полноценный battle_id в БД
+        pass
     except Exception as e:
         logger.error(f"Error updating map from result: {e}")
 
