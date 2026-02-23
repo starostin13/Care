@@ -2040,3 +2040,141 @@ async def get_all_admins_with_web_access():
             ORDER BY w.nickname
         ''') as cursor:
             return await cursor.fetchall()
+
+
+# ============================================================================
+# ADMIN WEB PANEL - Mission Management
+# ============================================================================
+
+async def get_active_battles_for_admin():
+    """
+    Get all active battles (without results) for admin panel.
+    Returns list of battles with mission details and player names.
+    
+    Returns:
+        List of dicts with battle and mission information
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 
+                b.id as battle_id,
+                b.mission_id,
+                b.fstplayer,
+                b.sndplayer,
+                m.deploy as mission_type,
+                m.rules,
+                m.cell as hex_id,
+                m.mission_description,
+                m.created_date,
+                w1.nickname as player1_name,
+                w1.telegram_id as player1_telegram_id,
+                w2.nickname as player2_name,
+                w2.telegram_id as player2_telegram_id
+            FROM battles b
+            INNER JOIN mission_stack m ON b.mission_id = m.id
+            INNER JOIN warmasters w1 ON b.fstplayer = w1.id
+            INNER JOIN warmasters w2 ON b.sndplayer = w2.id
+            LEFT JOIN pending_results pr ON b.id = pr.battle_id
+            WHERE pr.battle_id IS NULL
+            ORDER BY m.created_date DESC
+        ''') as cursor:
+            rows = await cursor.fetchall()
+            
+            battles = []
+            for row in rows:
+                battles.append({
+                    'id': row[0],  # battle_id
+                    'mission_id': row[1],
+                    'player1_id': row[2],  # fstplayer warmaster_id
+                    'player2_id': row[3],  # sndplayer warmaster_id
+                    'mission_type': row[4],
+                    'rules': row[5],
+                    'hex_id': row[6],
+                    'mission_description': row[7],
+                    'created_date': row[8],
+                    'player1_name': row[9],
+                    'player1_telegram_id': row[10],
+                    'player2_name': row[11],
+                    'player2_telegram_id': row[12]
+                })
+            
+            return battles
+
+
+async def submit_admin_battle_result(battle_id: int, player1_score: int, player2_score: int, admin_id: int):
+    """
+    Submit battle result from admin panel.
+    Bypasses player confirmation - directly applies result.
+    
+    Args:
+        battle_id: ID of the battle
+        player1_score: Score for first player
+        player2_score: Score for second player
+        admin_id: ID of admin who submitted the result
+    
+    Returns:
+        Dict with result status and any errors
+    """
+    import mission_helper
+    import map_helper
+    
+    try:
+        # Get battle details
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            async with db.execute('''
+                SELECT mission_id, fstplayer, sndplayer FROM battles WHERE id = ?
+            ''', (battle_id,)) as cursor:
+                battle_row = await cursor.fetchone()
+                
+        if not battle_row:
+            return {'status': 'error', 'message': 'Battle not found'}
+        
+        mission_id, player1_id, player2_id = battle_row
+        
+        # Construct user_reply as space-separated scores
+        user_reply = f"{player1_score} {player2_score}"
+        
+        # Write battle result to database
+        await mission_helper.write_battle_result(battle_id, user_reply)
+        
+        # Get player1 telegram_id for apply_mission_rewards
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            async with db.execute('''
+                SELECT telegram_id FROM warmasters WHERE id = ?
+            ''', (player1_id,)) as cursor:
+                telegram_row = await cursor.fetchone()
+                
+        if not telegram_row:
+            return {'status': 'error', 'message': 'Player not found'}
+        
+        player1_telegram_id = telegram_row[0]
+        
+        # Apply mission rewards
+        rewards = await mission_helper.apply_mission_rewards(
+            battle_id, user_reply, player1_telegram_id
+        )
+        
+        # Update map patronage
+        mission_details = await get_mission_details(mission_id)
+        if mission_details:
+            scenario = mission_details.rules
+            await map_helper.check_patronage(battle_id, scenario)
+        
+        logger.info(
+            "Admin %s submitted result for battle %s: %s",
+            admin_id, battle_id, user_reply
+        )
+        
+        return {
+            'status': 'success',
+            'message': 'Result submitted successfully',
+            'rewards': rewards
+        }
+        
+    except Exception as e:
+        logger.error("Error submitting admin battle result: %s", e, exc_info=True)
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
+

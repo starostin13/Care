@@ -1,0 +1,264 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid" style="margin-top: 70px;">
+    <!-- Header -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="page-header">
+                <h1>
+                    <span class="glyphicon glyphicon-edit"></span>
+                    Ввод результата битвы
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-default pull-right">
+                        <span class="glyphicon glyphicon-arrow-left"></span> Назад
+                    </a>
+                </h1>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col-md-12">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else category }} alert-dismissible" role="alert">
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Result Entry Form -->
+    <div class="row">
+        <div class="col-md-8 col-md-offset-2">
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <span class="glyphicon glyphicon-list-alt"></span>
+                        Выбор миссии и результат
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    <form id="resultForm" method="POST" action="{{ url_for('admin_submit_result') }}">
+                        <!-- Mission Selection -->
+                        <div class="form-group">
+                            <label for="missionSelect">
+                                <span class="glyphicon glyphicon-flag"></span>
+                                Активная миссия
+                            </label>
+                            <select class="form-control" id="missionSelect" name="mission_id" required>
+                                <option value="">Загрузка миссий...</option>
+                            </select>
+                            <p class="help-block" id="missionInfo"></p>
+                        </div>
+
+                        <!-- Mission Details (shown after selection) -->
+                        <div id="missionDetails" style="display: none;">
+                            <div class="alert alert-info">
+                                <h4><span class="glyphicon glyphicon-info-sign"></span> Детали миссии</h4>
+                                <dl class="dl-horizontal">
+                                    <dt>Тип:</dt>
+                                    <dd id="missionType">-</dd>
+                                    <dt>Правила:</dt>
+                                    <dd id="missionRules">-</dd>
+                                    <dt>Гекс:</dt>
+                                    <dd id="missionHex">-</dd>
+                                    <dt>Игрок 1:</dt>
+                                    <dd id="player1Name">-</dd>
+                                    <dt>Игрок 2:</dt>
+                                    <dd id="player2Name">-</dd>
+                                </dl>
+                            </div>
+
+                            <!-- Score Input -->
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="player1Score">
+                                            <span class="glyphicon glyphicon-user"></span>
+                                            Счет игрока 1
+                                        </label>
+                                        <input type="number" class="form-control" id="player1Score" 
+                                               name="player1_score" min="0" max="100" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="player2Score">
+                                            <span class="glyphicon glyphicon-user"></span>
+                                            Счет игрока 2
+                                        </label>
+                                        <input type="number" class="form-control" id="player2Score" 
+                                               name="player2_score" min="0" max="100" required>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Submit Button -->
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-success btn-lg btn-block">
+                                    <span class="glyphicon glyphicon-ok"></span>
+                                    Подтвердить результат
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Missions List -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <span class="glyphicon glyphicon-th-list"></span>
+                        Список активных миссий
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="missionsTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Тип</th>
+                                    <th>Правила</th>
+                                    <th>Гекс</th>
+                                    <th>Игрок 1</th>
+                                    <th>Игрок 2</th>
+                                    <th>Дата</th>
+                                </tr>
+                            </thead>
+                            <tbody id="missionsTableBody">
+                                <tr>
+                                    <td colspan="7" class="text-center">
+                                        <span class="glyphicon glyphicon-refresh glyphicon-spin"></span>
+                                        Загрузка...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let missionsData = [];
+
+// Load active missions on page load
+$(document).ready(function() {
+    loadActiveMissions();
+    
+    // Handle mission selection
+    $('#missionSelect').on('change', function() {
+        const missionId = $(this).val();
+        if (missionId) {
+            showMissionDetails(missionId);
+        } else {
+            $('#missionDetails').hide();
+        }
+    });
+});
+
+function loadActiveMissions() {
+    $.ajax({
+        url: '/api/admin/active-missions',
+        method: 'GET',
+        success: function(response) {
+            if (response.status === 'success') {
+                missionsData = response.missions;
+                populateMissionSelect(response.missions);
+                populateMissionsTable(response.missions);
+            } else {
+                showError('Ошибка загрузки миссий: ' + response.message);
+            }
+        },
+        error: function(xhr) {
+            showError('Ошибка загрузки миссий: ' + xhr.responseText);
+        }
+    });
+}
+
+function populateMissionSelect(missions) {
+    const select = $('#missionSelect');
+    select.empty();
+    
+    if (missions.length === 0) {
+        select.append('<option value="">Нет активных миссий</option>');
+        return;
+    }
+    
+    select.append('<option value="">Выберите миссию...</option>');
+    missions.forEach(function(mission) {
+        const option = `<option value="${mission.id}">
+            Миссия #${mission.id} - ${mission.mission_type} (${mission.player1_name} vs ${mission.player2_name})
+        </option>`;
+        select.append(option);
+    });
+}
+
+function populateMissionsTable(missions) {
+    const tbody = $('#missionsTableBody');
+    tbody.empty();
+    
+    if (missions.length === 0) {
+        tbody.append('<tr><td colspan="7" class="text-center text-muted">Нет активных миссий</td></tr>');
+        return;
+    }
+    
+    missions.forEach(function(mission) {
+        const row = `<tr>
+            <td><strong>${mission.id}</strong></td>
+            <td>${mission.mission_type}</td>
+            <td><span class="label label-info">${mission.rules}</span></td>
+            <td>Гекс #${mission.hex_id}</td>
+            <td>${mission.player1_name}</td>
+            <td>${mission.player2_name}</td>
+            <td>${new Date(mission.created_date).toLocaleDateString('ru-RU')}</td>
+        </tr>`;
+        tbody.append(row);
+    });
+}
+
+function showMissionDetails(missionId) {
+    const mission = missionsData.find(m => m.id == missionId);
+    if (!mission) return;
+    
+    $('#missionType').text(mission.mission_type);
+    $('#missionRules').text(mission.rules);
+    $('#missionHex').text('Гекс #' + mission.hex_id);
+    $('#player1Name').text(mission.player1_name);
+    $('#player2Name').text(mission.player2_name);
+    
+    $('#missionInfo').html(`
+        <span class="glyphicon glyphicon-info-sign"></span>
+        <strong>${mission.mission_type}</strong> - ${mission.rules}
+    `);
+    
+    $('#missionDetails').slideDown();
+}
+
+function showError(message) {
+    const alert = `<div class="alert alert-danger alert-dismissible" role="alert">
+        <button type="button" class="close" data-dismiss="alert">
+            <span>&times;</span>
+        </button>
+        ${message}
+    </div>`;
+    $('.container-fluid').prepend(alert);
+}
+</script>
+{% endblock %}

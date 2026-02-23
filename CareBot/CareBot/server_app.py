@@ -166,9 +166,79 @@ def admin_dashboard():
         return f"Error loading dashboard: {e}", 500
 
 
+@app.route('/admin/enter-result')
+@auth.admin_required
+def admin_enter_result():
+    """Admin page for entering battle results"""
+    from flask_login import current_user
+    
+    return render_template(
+        'admin_result_entry.html',
+        title='Ввод результата битвы',
+        year=datetime.now().year,
+        user=current_user
+    )
+
+
+@app.route('/admin/submit-result', methods=['POST'])
+@auth.admin_required
+def admin_submit_result():
+    """Handle admin battle result submission"""
+    from flask_login import current_user
+    from flask import request, redirect, url_for, flash
+    
+    try:
+        mission_id = request.form.get('mission_id')
+        player1_score = int(request.form.get('player1_score'))
+        player2_score = int(request.form.get('player2_score'))
+        
+        if not mission_id:
+            flash('Выберите миссию', 'error')
+            return redirect(url_for('admin_enter_result'))
+        
+        # Submit the result
+        result = asyncio.run(
+            sqllite_helper.submit_admin_battle_result(
+                int(mission_id), 
+                player1_score, 
+                player2_score,
+                current_user.warmaster_id
+            )
+        )
+        
+        if result['status'] == 'success':
+            flash(f'Результат успешно сохранен: {player1_score} - {player2_score}', 'success')
+        else:
+            flash(f'Ошибка: {result["message"]}', 'error')
+        
+        return redirect(url_for('admin_enter_result'))
+        
+    except Exception as e:
+        flash(f'Ошибка при сохранении результата: {str(e)}', 'error')
+        return redirect(url_for('admin_enter_result'))
+
+
 # ============================================================================
 # API ROUTES
 # ============================================================================
+
+@app.route('/api/admin/active-missions')
+@auth.admin_required
+def api_get_active_missions():
+    """API endpoint to get active missions for admin panel"""
+    try:
+        battles = asyncio.run(sqllite_helper.get_active_battles_for_admin())
+        
+        return jsonify({
+            'status': 'success',
+            'missions': battles
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 
 @app.route('/api/hex-info/<int:hex_id>')
 def get_hex_info(hex_id):
