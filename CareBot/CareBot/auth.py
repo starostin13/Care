@@ -12,7 +12,7 @@ from functools import wraps
 from flask import Blueprint, request, render_template, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
-import sqllite_helper
+from . import sqllite_helper
 
 # Create Blueprint for auth routes
 auth_bp = Blueprint('auth', __name__)

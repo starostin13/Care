@@ -11,8 +11,8 @@ import asyncio
 import threading
 
 # Импортируем наши модули
-import sqllite_helper
-from mission_engine import Mission, MissionStorage
+from . import sqllite_helper
+from .mission_engine import Mission, MissionStorage
 
 class SyncAPI:
     """API для синхронизации с мобильными устройствами"""
