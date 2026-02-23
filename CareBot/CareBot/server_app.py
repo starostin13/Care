@@ -93,6 +93,17 @@ def health():
             'version': '1.0.0'
         }), 500
 
+@app.route('/manifest.json')
+def manifest():
+    """PWA Web App Manifest"""
+    try:
+        with open('CareBot/static/manifest.json', 'r') as f:
+            import json
+            manifest_data = json.load(f)
+        return jsonify(manifest_data), 200, {'Content-Type': 'application/manifest+json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/map')
 def map_view():
     """Страница карты для Telegram Mini App"""
