@@ -408,6 +408,24 @@ async def get_settings(telegram_user_id):
             return await cursor.fetchone()
 
 
+async def get_warmaster_info_by_id(warmaster_id: int) -> tuple:
+    """Get warmaster information by warmaster ID (not telegram_id).
+    
+    Args:
+        warmaster_id: Warmaster ID (primary key)
+        
+    Returns:
+        tuple: (nickname, registered_as, language, notifications_enabled, telegram_id, alliance) or None
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT nickname, registered_as, language, notifications_enabled, telegram_id, alliance 
+            FROM warmasters 
+            WHERE id = ?
+        ''', (warmaster_id,)) as cursor:
+            return await cursor.fetchone()
+
+
 async def get_warehouses_of_warmaster(telegram_user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
@@ -1019,6 +1037,23 @@ async def is_user_admin(user_telegram_id):
         async with db.execute('''
             SELECT is_admin FROM warmasters WHERE telegram_id = ?
         ''', (user_telegram_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] == 1 if result else False
+
+
+async def is_warmaster_admin(warmaster_id: int) -> bool:
+    """Check if a warmaster is an admin by warmaster ID.
+    
+    Args:
+        warmaster_id: Warmaster ID (primary key)
+        
+    Returns:
+        bool: True if warmaster is admin, False otherwise
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT is_admin FROM warmasters WHERE id = ?
+        ''', (warmaster_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] == 1 if result else False
 
@@ -1916,7 +1951,7 @@ async def verify_admin_web_credentials(warmaster_id: int, password_hash: str) ->
         True if user is admin and password is correct
     """
     # Check is_admin status first
-    is_admin = await is_user_admin(str(warmaster_id))
+    is_admin = await is_warmaster_admin(warmaster_id)
     if not is_admin:
         return False
     

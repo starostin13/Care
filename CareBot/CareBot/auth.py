@@ -56,19 +56,20 @@ class AdminUser(UserMixin):
 async def _load_user_async(warmaster_id: int):
     """Async helper to load user from database"""
     # Check if user is an admin via is_admin field in warmasters
-    is_admin = await sqllite_helper.is_user_admin(str(warmaster_id))
+    is_admin = await sqllite_helper.is_warmaster_admin(warmaster_id)
     if not is_admin:
         return None
     
     # Get warmaster information
-    warmaster_info = await sqllite_helper.get_settings(str(warmaster_id))
+    warmaster_info = await sqllite_helper.get_warmaster_info_by_id(warmaster_id)
     if not warmaster_info:
         return None
     
-    nickname = warmaster_info[0] if warmaster_info else f"User {warmaster_id}"
+    # Unpack warmaster info: (nickname, registered_as, language, notifications_enabled, telegram_id, alliance)
+    nickname = warmaster_info[0] if warmaster_info[0] else f"User {warmaster_id}"
+    alliance_id = warmaster_info[5]  # alliance field
     
-    # Get alliance if available
-    alliance_id = await sqllite_helper.get_alliance_of_warmaster(str(warmaster_id))
+    # Get alliance name if available
     alliance_name = None
     if alliance_id:
         alliances = await sqllite_helper.get_all_alliances()
@@ -99,7 +100,7 @@ def load_user(warmaster_id):
 async def _verify_login_async(warmaster_id: int, password: str):
     """Async helper to verify login credentials"""
     # First check if user is admin via is_admin field in warmasters
-    is_admin = await sqllite_helper.is_user_admin(str(warmaster_id))
+    is_admin = await sqllite_helper.is_warmaster_admin(warmaster_id)
     if not is_admin:
         return None
     
