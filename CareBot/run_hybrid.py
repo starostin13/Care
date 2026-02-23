@@ -35,8 +35,22 @@ def start_flask_server():
         host = os.getenv('SERVER_HOST', '0.0.0.0')
         port = int(os.getenv('SERVER_PORT', 5555))
         
-        logger.info(f"Flask server starting on {host}:{port}")
-        app.run(host=host, port=port, debug=False, use_reloader=False)
+        # SSL настройки для HTTPS (опционально)
+        ssl_cert = os.getenv('SSL_CERT_PATH')
+        ssl_key = os.getenv('SSL_KEY_PATH')
+        ssl_context = None
+        
+        if ssl_cert and ssl_key:
+            if os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+                ssl_context = (ssl_cert, ssl_key)
+                logger.info(f"Flask server starting on https://{host}:{port} (SSL enabled)")
+            else:
+                logger.warning(f"SSL files not found, falling back to HTTP")
+                logger.info(f"Flask server starting on http://{host}:{port}")
+        else:
+            logger.info(f"Flask server starting on http://{host}:{port}")
+        
+        app.run(host=host, port=port, debug=False, use_reloader=False, ssl_context=ssl_context)
         
     except Exception as e:
         logger.error(f"Error starting Flask server: {e}")
