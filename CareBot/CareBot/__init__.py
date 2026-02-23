@@ -1,8 +1,9 @@
 """
 The flask application package.
+Imports the configured Flask app from server_app.py
 """
 
-from flask import Flask
-app = Flask(__name__)
+# Import the properly configured Flask app from server_app
+from .server_app import app
 
-from . import views
+__all__ = ['app']
