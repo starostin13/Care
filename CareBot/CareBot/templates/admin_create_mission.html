@@ -1,0 +1,187 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid" style="margin-top: 70px;">
+    <!-- Header -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="page-header">
+                <h1>
+                    <span class="glyphicon glyphicon-plus"></span>
+                    Создание миссии
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-default pull-right">
+                        <span class="glyphicon glyphicon-arrow-left"></span> Назад
+                    </a>
+                </h1>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col-md-12">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else category }} alert-dismissible" role="alert">
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Mission Creation Form -->
+    <div class="row">
+        <div class="col-md-8 col-md-offset-2">
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <span class="glyphicon glyphicon-list-alt"></span>
+                        Параметры миссии
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    <form id="createMissionForm" method="POST" action="{{ url_for('admin_submit_mission') }}">
+                        <div class="form-group">
+                            <label for="rulesSelect">
+                                <span class="glyphicon glyphicon-cog"></span>
+                                Правила / режим
+                            </label>
+                            <select class="form-control" id="rulesSelect" name="rules" required>
+                                <option value="">Выберите правила...</option>
+                                <option value="killteam">Kill Team</option>
+                                <option value="wh40k">WH40K</option>
+                                <option value="boarding_action">Boarding Action</option>
+                                <option value="combat_patrol">Combat Patrol</option>
+                                <option value="battlefleet">Battlefleet</option>
+                            </select>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="player1Select">
+                                        <span class="glyphicon glyphicon-user"></span>
+                                        Игрок 1 (атакующий)
+                                    </label>
+                                    <select class="form-control" id="player1Select" name="player1_telegram_id" required>
+                                        <option value="">Загрузка игроков...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="player2Select">
+                                        <span class="glyphicon glyphicon-user"></span>
+                                        Игрок 2 (защитник)
+                                    </label>
+                                    <select class="form-control" id="player2Select" name="player2_telegram_id" required>
+                                        <option value="">Загрузка игроков...</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="hexIdInput">
+                                <span class="glyphicon glyphicon-map-marker"></span>
+                                Гекс (опционально)
+                            </label>
+                            <input type="number" class="form-control" id="hexIdInput" name="hex_id" min="1" placeholder="Если оставить пустым, гекс будет определен автоматически">
+                            <p class="help-block">Автоматически выбирается гекс между альянсами игроков.</p>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-success btn-lg btn-block">
+                                <span class="glyphicon glyphicon-plus"></span>
+                                Создать миссию
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let warmastersData = [];
+
+$(document).ready(function() {
+    loadWarmasters();
+    
+    $('#player1Select').on('change', function() {
+        const player1 = $(this).val();
+        filterPlayer2Options(player1);
+    });
+});
+
+function loadWarmasters() {
+    $.ajax({
+        url: '/api/admin/warmasters',
+        method: 'GET',
+        success: function(response) {
+            if (response.status === 'success') {
+                warmastersData = response.warmasters;
+                populateWarmastersSelects(response.warmasters);
+            } else {
+                showError('Ошибка загрузки игроков: ' + response.message);
+            }
+        },
+        error: function(xhr) {
+            showError('Ошибка загрузки игроков: ' + xhr.responseText);
+        }
+    });
+}
+
+function populateWarmastersSelects(warmasters) {
+    const select1 = $('#player1Select');
+    const select2 = $('#player2Select');
+    select1.empty();
+    select2.empty();
+
+    if (warmasters.length === 0) {
+        select1.append('<option value="">Нет игроков</option>');
+        select2.append('<option value="">Нет игроков</option>');
+        return;
+    }
+
+    select1.append('<option value="">Выберите игрока...</option>');
+    select2.append('<option value="">Выберите игрока...</option>');
+
+    warmasters.forEach(function(player) {
+        const label = player.nickname + (player.alliance ? ' (альянс ' + player.alliance + ')' : '');
+        const option = `<option value="${player.telegram_id}">${label}</option>`;
+        select1.append(option);
+        select2.append(option);
+    });
+}
+
+function filterPlayer2Options(player1Id) {
+    const select2 = $('#player2Select');
+    select2.find('option').each(function() {
+        const val = $(this).attr('value');
+        if (val && val === player1Id) {
+            $(this).hide();
+        } else {
+            $(this).show();
+        }
+    });
+}
+
+function showError(message) {
+    const alert = `<div class="alert alert-danger alert-dismissible" role="alert">
+        <button type="button" class="close" data-dismiss="alert">
+            <span>&times;</span>
+        </button>
+        ${message}
+    </div>`;
+    $('.container-fluid').prepend(alert);
+}
+</script>
+{% endblock %}

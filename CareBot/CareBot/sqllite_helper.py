@@ -685,6 +685,25 @@ async def save_mission(mission):
         await db.commit()
 
 
+async def save_mission_and_get_id(mission) -> Optional[int]:
+    """Save a mission and return its new mission_id."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        today = datetime.date.today().isoformat()
+        await db.execute('''
+            INSERT INTO mission_stack(deploy, rules, cell,
+                                     mission_description, winner_bonus, status, created_date, map_description, reward_config)
+            VALUES(?, ?, ?, ?, ?, 0, ?, ?, ?)
+        ''', (mission[0], mission[1], mission[2], mission[3],
+              mission[4] if len(mission) > 4 else None,
+              today,
+              mission[5] if len(mission) > 5 else None,
+              mission[6] if len(mission) > 6 else None))
+        await db.commit()
+        async with db.execute('SELECT last_insert_rowid()') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def set_nickname(user_telegram_id, nickname):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
@@ -2059,43 +2078,64 @@ async def get_active_battles_for_admin():
             SELECT 
                 b.id as battle_id,
                 b.mission_id,
-                b.fstplayer,
-                b.sndplayer,
                 m.deploy as mission_type,
                 m.rules,
                 m.cell as hex_id,
                 m.mission_description,
                 m.created_date,
-                w1.nickname as player1_name,
-                w1.telegram_id as player1_telegram_id,
-                w2.nickname as player2_name,
-                w2.telegram_id as player2_telegram_id
+                (SELECT ba.attender_id
+                 FROM battle_attenders ba
+                 WHERE ba.battle_id = b.id
+                 ORDER BY ba.rowid ASC
+                 LIMIT 1) as player1_telegram_id,
+                (SELECT ba.attender_id
+                 FROM battle_attenders ba
+                 WHERE ba.battle_id = b.id
+                 ORDER BY ba.rowid ASC
+                 LIMIT 1 OFFSET 1) as player2_telegram_id,
+                (SELECT w.nickname
+                 FROM warmasters w
+                 WHERE w.telegram_id = (
+                     SELECT ba.attender_id
+                     FROM battle_attenders ba
+                     WHERE ba.battle_id = b.id
+                     ORDER BY ba.rowid ASC
+                     LIMIT 1
+                 )) as player1_name,
+                (SELECT w.nickname
+                 FROM warmasters w
+                 WHERE w.telegram_id = (
+                     SELECT ba.attender_id
+                     FROM battle_attenders ba
+                     WHERE ba.battle_id = b.id
+                     ORDER BY ba.rowid ASC
+                     LIMIT 1 OFFSET 1
+                 )) as player2_name
             FROM battles b
             INNER JOIN mission_stack m ON b.mission_id = m.id
-            INNER JOIN warmasters w1 ON b.fstplayer = w1.id
-            INNER JOIN warmasters w2 ON b.sndplayer = w2.id
-            LEFT JOIN pending_results pr ON b.id = pr.battle_id
-            WHERE pr.battle_id IS NULL
+                        LEFT JOIN pending_results pr ON b.id = pr.battle_id
+                        WHERE pr.battle_id IS NULL
+                            AND COALESCE(m.status, 0) != 3
             ORDER BY m.created_date DESC
         ''') as cursor:
             rows = await cursor.fetchall()
             
             battles = []
             for row in rows:
+                if not row[7] or not row[8]:
+                    continue
                 battles.append({
                     'id': row[0],  # battle_id
                     'mission_id': row[1],
-                    'player1_id': row[2],  # fstplayer warmaster_id
-                    'player2_id': row[3],  # sndplayer warmaster_id
-                    'mission_type': row[4],
-                    'rules': row[5],
-                    'hex_id': row[6],
-                    'mission_description': row[7],
-                    'created_date': row[8],
+                    'mission_type': row[2],
+                    'rules': row[3],
+                    'hex_id': row[4],
+                    'mission_description': row[5],
+                    'created_date': row[6],
+                    'player1_telegram_id': row[7],
+                    'player2_telegram_id': row[8],
                     'player1_name': row[9],
-                    'player1_telegram_id': row[10],
-                    'player2_name': row[11],
-                    'player2_telegram_id': row[12]
+                    'player2_name': row[10]
                 })
             
             return battles
@@ -2119,17 +2159,10 @@ async def submit_admin_battle_result(battle_id: int, player1_score: int, player2
     import map_helper
     
     try:
-        # Get battle details
-        async with aiosqlite.connect(DATABASE_PATH) as db:
-            async with db.execute('''
-                SELECT mission_id, fstplayer, sndplayer FROM battles WHERE id = ?
-            ''', (battle_id,)) as cursor:
-                battle_row = await cursor.fetchone()
-                
-        if not battle_row:
+        # Get mission ID
+        mission_id = await get_mission_id_by_battle_id(battle_id)
+        if not mission_id:
             return {'status': 'error', 'message': 'Battle not found'}
-        
-        mission_id, player1_id, player2_id = battle_row
         
         # Construct user_reply as space-separated scores
         user_reply = f"{player1_score} {player2_score}"
@@ -2137,23 +2170,21 @@ async def submit_admin_battle_result(battle_id: int, player1_score: int, player2
         # Write battle result to database
         await mission_helper.write_battle_result(battle_id, user_reply)
         
-        # Get player1 telegram_id for apply_mission_rewards
-        async with aiosqlite.connect(DATABASE_PATH) as db:
-            async with db.execute('''
-                SELECT telegram_id FROM warmasters WHERE id = ?
-            ''', (player1_id,)) as cursor:
-                telegram_row = await cursor.fetchone()
-                
-        if not telegram_row:
-            return {'status': 'error', 'message': 'Player not found'}
+        # Get participants for apply_mission_rewards
+        participants = await get_battle_participants(battle_id)
+        if not participants:
+            return {'status': 'error', 'message': 'Participants not found'}
         
-        player1_telegram_id = telegram_row[0]
+        player1_telegram_id = participants[0]
         
         # Apply mission rewards
         rewards = await mission_helper.apply_mission_rewards(
             battle_id, user_reply, player1_telegram_id
         )
         
+        # Update mission status to confirmed
+        await update_mission_status(mission_id, 3)
+
         # Update map patronage
         mission_details = await get_mission_details(mission_id)
         if mission_details:

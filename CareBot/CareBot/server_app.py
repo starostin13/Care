@@ -4,16 +4,18 @@
 Обновленное серверное приложение с поддержкой синхронизации и печати
 """
 
-from flask import Flask, render_template, jsonify, redirect, url_for
+from flask import Flask, render_template, jsonify, redirect, url_for, request, flash
 from datetime import datetime
 import asyncio
 import os
+import random
 
 # Импортируем наши модули
 from .mission_engine import MissionGenerator, MissionStorage, MissionPrinter
 from .sync_api import setup_sync_api
 from . import sqllite_helper
 from . import auth
+from . import mission_helper
 
 # Создаем Flask приложение
 app = Flask(__name__)
@@ -185,21 +187,20 @@ def admin_enter_result():
 def admin_submit_result():
     """Handle admin battle result submission"""
     from flask_login import current_user
-    from flask import request, redirect, url_for, flash
     
     try:
-        mission_id = request.form.get('mission_id')
+        battle_id = request.form.get('battle_id')
         player1_score = int(request.form.get('player1_score'))
         player2_score = int(request.form.get('player2_score'))
         
-        if not mission_id:
-            flash('Выберите миссию', 'error')
+        if not battle_id:
+            flash('Выберите бой', 'error')
             return redirect(url_for('admin_enter_result'))
         
         # Submit the result
         result = asyncio.run(
             sqllite_helper.submit_admin_battle_result(
-                int(mission_id), 
+                int(battle_id),
                 player1_score, 
                 player2_score,
                 current_user.warmaster_id
@@ -216,6 +217,109 @@ def admin_submit_result():
     except Exception as e:
         flash(f'Ошибка при сохранении результата: {str(e)}', 'error')
         return redirect(url_for('admin_enter_result'))
+
+
+@app.route('/admin/create-mission')
+@auth.admin_required
+def admin_create_mission():
+    """Admin page for creating missions"""
+    from flask_login import current_user
+    
+    return render_template(
+        'admin_create_mission.html',
+        title='Создание миссии',
+        year=datetime.now().year,
+        user=current_user
+    )
+
+
+@app.route('/admin/submit-mission', methods=['POST'])
+@auth.admin_required
+def admin_submit_mission():
+    """Handle admin mission creation"""
+    from flask_login import current_user
+    
+    try:
+        rules = request.form.get('rules')
+        player1_telegram_id = request.form.get('player1_telegram_id')
+        player2_telegram_id = request.form.get('player2_telegram_id')
+        hex_id_raw = request.form.get('hex_id')
+        
+        if not rules or not player1_telegram_id or not player2_telegram_id:
+            flash('Заполните все обязательные поля', 'error')
+            return redirect(url_for('admin_create_mission'))
+        
+        if player1_telegram_id == player2_telegram_id:
+            flash('Игроки должны быть разными', 'error')
+            return redirect(url_for('admin_create_mission'))
+        
+        hex_id = int(hex_id_raw) if hex_id_raw else None
+        
+        # Generate mission template
+        mission_tuple = mission_helper.generate_new_one(rules)
+        
+        # Determine hex if not provided
+        if hex_id is None:
+            attacker_alliance = asyncio.run(
+                sqllite_helper.get_alliance_of_warmaster(player1_telegram_id)
+            )
+            defender_alliance = asyncio.run(
+                sqllite_helper.get_alliance_of_warmaster(player2_telegram_id)
+            )
+            
+            if attacker_alliance and defender_alliance:
+                attacker_alliance_id = attacker_alliance[0]
+                defender_alliance_id = defender_alliance[0]
+                
+                adjacent_hexes = asyncio.run(
+                    sqllite_helper.get_adjacent_hexes_between_alliances(
+                        attacker_alliance_id, defender_alliance_id
+                    )
+                )
+                adjacent_list = list(adjacent_hexes) if adjacent_hexes else []
+                if adjacent_list:
+                    hex_id = random.choice(adjacent_list)[0]
+                else:
+                    defender_hexes = asyncio.run(
+                        sqllite_helper.get_hexes_by_alliance(defender_alliance_id)
+                    )
+                    defender_list = list(defender_hexes) if defender_hexes else []
+                    if defender_list:
+                        hex_id = random.choice(defender_list)[0]
+            
+        if hex_id is None:
+            flash('Не удалось определить гекс. Укажите гекс вручную.', 'error')
+            return redirect(url_for('admin_create_mission'))
+        
+        # Build mission data with chosen hex
+        mission_data = (
+            mission_tuple[0],
+            mission_tuple[1],
+            hex_id,
+            mission_tuple[3],
+            mission_tuple[4] if len(mission_tuple) > 4 else None,
+            mission_tuple[5] if len(mission_tuple) > 5 else None,
+            mission_tuple[6] if len(mission_tuple) > 6 else None
+        )
+        
+        # Save mission and get ID
+        mission_id = asyncio.run(sqllite_helper.save_mission_and_get_id(mission_data))
+        if not mission_id:
+            flash('Ошибка создания миссии', 'error')
+            return redirect(url_for('admin_create_mission'))
+        
+        # Lock mission and start battle
+        asyncio.run(sqllite_helper.lock_mission(mission_id))
+        battle_id = asyncio.run(
+            mission_helper.start_battle(mission_id, player1_telegram_id, player2_telegram_id)
+        )
+        
+        flash(f'Миссия #{mission_id} создана, бой #{battle_id}', 'success')
+        return redirect(url_for('admin_enter_result'))
+    
+    except Exception as e:
+        flash(f'Ошибка при создании миссии: {str(e)}', 'error')
+        return redirect(url_for('admin_create_mission'))
 
 
 # ============================================================================
@@ -238,6 +342,25 @@ def api_get_active_missions():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+@app.route('/api/admin/warmasters')
+@auth.admin_required
+def api_get_warmasters():
+    """API endpoint to get warmasters for admin dropdowns"""
+    try:
+        warmasters = asyncio.run(sqllite_helper.get_warmasters_with_nicknames())
+        data = [
+            {
+                'telegram_id': row[0],
+                'nickname': row[1],
+                'alliance': row[2]
+            }
+            for row in warmasters
+        ]
+        return jsonify({'status': 'success', 'warmasters': data})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/hex-info/<int:hex_id>')
