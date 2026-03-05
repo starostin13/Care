@@ -1075,6 +1075,24 @@ async def get_all_alliances_with_resources():
             return await cursor.fetchall()
 
 
+async def get_all_alliances_detailed():
+    """Return alliances with resource totals for API consumers."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, name, common_resource
+            FROM alliances
+            ORDER BY id
+        ''') as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "common_resource": row[2]
+                } for row in rows
+            ]
+
+
 async def get_alliance_player_count(alliance_id):
     """Get the number of players in an alliance.
     
@@ -1126,6 +1144,47 @@ async def get_dominant_alliance():
         ''') as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
+
+
+async def get_map_cells_snapshot():
+    """Return all map cells with current patron and warehouse flags."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, planet_id, state, patron, has_warehouse
+            FROM map
+            ORDER BY id
+        ''') as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "planet_id": row[1],
+                    "state": row[2],
+                    "patron": row[3],
+                    "has_warehouse": bool(row[4]) if row[4] is not None else False
+                }
+                for row in rows
+            ]
+
+
+async def get_map_edges_snapshot():
+    """Return all map edges for adjacency reconstruction."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, left_hexagon, right_hexagon, state
+            FROM edges
+            ORDER BY id
+        ''') as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "left_hexagon": row[1],
+                    "right_hexagon": row[2],
+                    "state": row[3]
+                }
+                for row in rows
+            ]
 
 
 async def set_warmaster_alliance(user_telegram_id, alliance_id):
@@ -1546,6 +1605,29 @@ async def get_all_players():
             SELECT telegram_id, nickname, alliance FROM warmasters
         ''') as cursor:
             return await cursor.fetchall()
+
+
+async def get_all_warmasters_full():
+    """Return warmasters with alliance and notification metadata."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id, alliance, nickname, faction, language, notifications_enabled, is_admin
+            FROM warmasters
+            ORDER BY telegram_id
+        ''') as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "telegram_id": row[0],
+                    "alliance": row[1],
+                    "nickname": row[2],
+                    "faction": row[3],
+                    "language": row[4],
+                    "notifications_enabled": bool(row[5]) if row[5] is not None else False,
+                    "is_admin": bool(row[6]) if row[6] is not None else False
+                }
+                for row in rows
+            ]
 
 
 # ============================================================================
