@@ -183,3 +183,11 @@ carebot-latest.tar
 *.key
 cert.pfx
 convert_cert.py
+
+# Android / Gradle
+/android-app/.gradle/
+/android-app/local.properties
+/android-app/captures/
+/android-app/.cxx/
+*.apk
+*.aab

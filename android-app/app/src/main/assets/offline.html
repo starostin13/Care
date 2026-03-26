@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CareBot Offline</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; background: #111827; color: #f9fafb; }
+    .card { background: #1f2937; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    .title { font-size: 20px; margin: 0 0 8px; }
+    .muted { color: #9ca3af; font-size: 13px; }
+    input, select, button { width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; border: 1px solid #374151; background: #0f172a; color: #f9fafb; }
+    button { background: #2563eb; border: none; font-weight: 600; }
+    button.secondary { background: #374151; }
+    .ok { color: #34d399; }
+    .warn { color: #fbbf24; }
+    pre { white-space: pre-wrap; background: #0b1220; padding: 10px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 class="title">Офлайн режим</h1>
+    <div class="muted">Сервер недоступен. Можно посмотреть кеш и сохранить результат боя локально.</div>
+  </div>
+
+  <div class="card">
+    <div id="cacheStatus" class="muted">Проверка кеша...</div>
+    <button class="secondary" onclick="openOnline()">Попробовать открыть сервер</button>
+    <button class="secondary" onclick="refreshCacheInfo()">Обновить статус кеша</button>
+  </div>
+
+  <div class="card">
+    <div><b>Сохранить результат боя (локально)</b></div>
+    <input id="missionId" type="number" placeholder="Mission ID" />
+    <input id="winnerId" type="number" placeholder="Winner ID" />
+    <input id="loserId" type="number" placeholder="Loser ID" />
+    <select id="missionType">
+      <option value="Secure">Secure</option>
+      <option value="Intel">Intel</option>
+      <option value="Coordinates">Coordinates</option>
+      <option value="Loot">Loot</option>
+      <option value="Transmission">Transmission</option>
+    </select>
+    <input id="location" placeholder="Hex location (например A1)" />
+    <button onclick="saveOfflineResult()">Сохранить офлайн</button>
+    <div id="saveStatus" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <div><b>Ожидает синхронизации</b></div>
+    <pre id="pending">Загрузка...</pre>
+  </div>
+
+  <script>
+    function bridgeAvailable() {
+      return typeof window.Android !== 'undefined';
+    }
+
+    function refreshCacheInfo() {
+      if (!bridgeAvailable()) {
+        document.getElementById('cacheStatus').innerHTML = '<span class="warn">Android bridge недоступен</span>';
+        return;
+      }
+      try {
+        const missions = JSON.parse(window.Android.getCachedMissions());
+        const pending = JSON.parse(window.Android.getPendingBattles());
+        const count = (missions.missions || []).length;
+        const p = pending.pending || 0;
+        document.getElementById('cacheStatus').innerHTML = `<span class="ok">Кеш миссий: ${count}</span> · <span class="warn">Ожидает sync: ${p}</span>`;
+        document.getElementById('pending').textContent = JSON.stringify(pending, null, 2);
+      } catch (e) {
+        document.getElementById('cacheStatus').innerHTML = `<span class="warn">Ошибка чтения кеша: ${e.message}</span>`;
+      }
+    }
+
+    function saveOfflineResult() {
+      if (!bridgeAvailable()) {
+        document.getElementById('saveStatus').textContent = 'Android bridge недоступен';
+        return;
+      }
+      try {
+        const payload = {
+          mission_id: Number(document.getElementById('missionId').value),
+          winner_id: Number(document.getElementById('winnerId').value),
+          loser_id: Number(document.getElementById('loserId').value),
+          mission_type: document.getElementById('missionType').value,
+          location: document.getElementById('location').value,
+          timestamp: new Date().toISOString()
+        };
+
+        if (!payload.mission_id || !payload.winner_id || !payload.loser_id) {
+          document.getElementById('saveStatus').textContent = 'Заполни mission/winner/loser ID';
+          return;
+        }
+
+        const result = JSON.parse(window.Android.savePendingBattleResult(JSON.stringify(payload)));
+        if (result.error) {
+          document.getElementById('saveStatus').textContent = `Ошибка: ${result.error}`;
+          return;
+        }
+
+        document.getElementById('saveStatus').innerHTML = '<span class="ok">Сохранено локально. Применится на сервере после sync.</span>';
+        refreshCacheInfo();
+      } catch (e) {
+        document.getElementById('saveStatus').textContent = `Ошибка: ${e.message}`;
+      }
+    }
+
+    function openOnline() {
+      window.location.href = 'http://192.168.1.125:5555/admin/dashboard';
+    }
+
+    refreshCacheInfo();
+  </script>
+</body>
+</html>

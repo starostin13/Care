@@ -16,6 +16,7 @@ from .sync_api import setup_sync_api
 from . import sqllite_helper
 from . import auth
 from . import mission_helper
+from . import sync_helper
 
 # Создаем Flask приложение
 app = Flask(__name__)
@@ -431,9 +432,171 @@ def print_mission_api(mission_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+# ============== MOBILE APP SYNC API ==============
+
+@app.route('/api/mobile/data-export')
+def api_mobile_data_export():
+    """
+    Export data for mobile app caching - COMPLETE OFFLINE GENERATION PACKAGE.
+    
+    Architecture:
+    1. Generation Templates - Rules/mission types for CREATING new missions offline
+    2. Active Missions - Current missions that need result entry
+    3. Map Data - Territory edges for adjacency calculations (Kill Team)
+    
+    Offline Workflow:
+    1. App downloads this data -> cached in SQLite
+    2. App GENERATES new mission offline using templates
+    3. User enters battle RESULT for that mission
+    4. App saves result -> ready for sync
+    
+    Server Sync Workflow:
+    1. App POST to /api/mobile/sync-results with battle result
+    2. Server applies effects:
+       - Kill Team: Territory capture (Secure), Depot (Intel), Destruction (Coordinates)
+       - WH40K: Reveal winner_bonus to winner only
+    3. Server returns success -> App updates status
+    """
+    try:
+        db_path = os.getenv('DATABASE_PATH', '/app/data/game_database.db')
+        
+        # Run async functions
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # 1. Generation templates (templates for creating NEW missions)
+        templates_data = loop.run_until_complete(
+            sync_helper.export_mission_generation_templates(db_path)
+        )
+        
+        # 2. Active missions (missions that need results)
+        active_missions = loop.run_until_complete(
+            sync_helper.export_active_missions(db_path)
+        )
+        
+        # 3. Map data (for territory calculations)
+        map_data = loop.run_until_complete(
+            sync_helper.export_map_data_for_cache(db_path)
+        )
+        
+        return jsonify({
+            'status': 'ok',
+            'generation_templates': templates_data,
+            'active_missions': active_missions,
+            'map': map_data,
+            'version': '1.1',
+            'note': 'Use templates to generate missions offline, enter results, sync on reconnect'
+        })
+    except Exception as e:
+        logger.error(f"Error exporting data for mobile: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/sync-results', methods=['POST'])
+def api_mobile_sync_results():
+    """
+    Sync battle results from mobile app.
+    Processes territory captures/protections and calculates mission rewards.
+    
+    Expected JSON:
+    {
+        'warmaster_id': int,
+        'results': [
+            {'mission_id': int, 'winner_id': int, 'loser_id': int, 'mission_type': str, 'location': str},
+            ...
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        warmaster_id = data.get('warmaster_id')
+        synced_results = data.get('results', [])
+        
+        if not warmaster_id or not synced_results:
+            return jsonify({'error': 'Missing warmaster_id or results'}), 400
+        
+        db_path = os.getenv('DATABASE_PATH', '/app/data/game_database.db')
+        
+        # Run async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        sync_result = loop.run_until_complete(
+            sync_helper.process_synced_battle_results(db_path, warmaster_id, synced_results)
+        )
+        
+        return jsonify({
+            'status': 'synced',
+            'processed': sync_result['processed'],
+            'territories_affected': sync_result['territories_affected'],
+            'errors': sync_result.get('errors', [])
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/sync-status')
+def api_mobile_sync_status():
+    """
+    Get sync status - which data needs to be synced.
+    """
+    try:
+        db_path = os.getenv('DATABASE_PATH', '/app/data/game_database.db')
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        status = loop.run_until_complete(sync_helper.get_sync_status(db_path))
+        
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mobile/wh40k-winner-bonus/<int:mission_id>')
+def api_wh40k_winner_bonus(mission_id):
+    """
+    Get WH40K mission winner bonus - ONLY for the actual winner!
+    
+    This endpoint reveals the SECRET bonus text that was hidden during mission generation.
+    SECURITY: The bonus is only revealed to the player who actually won the mission.
+    
+    Query param: warmaster_id - Must be authenticated and must be the winner
+    """
+    try:
+        from flask_login import current_user, login_required
+        
+        # Require authentication
+        if not current_user or not current_user.is_authenticated:
+            return jsonify({
+                'error': 'Not authenticated',
+                'authorized': False
+            }), 401
+        
+        warmaster_id = current_user.get_id()
+        
+        db_path = os.getenv('DATABASE_PATH', '/app/data/game_database.db')
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        bonus_result = loop.run_until_complete(
+            sync_helper.get_wh40k_winner_bonus(db_path, mission_id, int(warmaster_id))
+        )
+        
+        if not bonus_result.get('authorized'):
+            return jsonify(bonus_result), 403
+        
+        return jsonify(bonus_result)
+    except Exception as e:
+        logger.error(f"Error getting WH40K winner bonus: {e}")
+        return jsonify({'error': str(e), 'authorized': False}), 500
+
+
 if __name__ == '__main__':
     print("🚀 Starting Crusade Server with sync support...")
-    print("� HTTPS enabled with adhoc SSL certificate")
+    print("✅ HTTPS enabled with adhoc SSL certificate")
     print("📱 Mobile devices can sync at: https://[your-ip]:5000/api/sync")
     print("🗺️ Telegram Mini App at: https://[your-ip]:5000/map")
     print("🖨️ Print station at: https://[your-ip]:5000/print-station")
