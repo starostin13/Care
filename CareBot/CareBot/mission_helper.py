@@ -3,6 +3,7 @@
 from typing import Optional, Tuple
 import random
 import logging
+from pathlib import Path
 import config
 
 # Автоматическое переключение на mock версию в тестовом режиме
@@ -21,6 +22,23 @@ from database.killzone_manager import get_killzone_for_mission
 from models import Mission, MissionDetails
 
 logger = logging.getLogger(__name__)
+
+ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "deploys"
+WH40K_DEPLOY_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _get_wh40k_deploy_images():
+    """Return sorted deploy image filenames for WH40K missions."""
+    if not ASSETS_DIR.exists():
+        logger.warning("WH40K deploy assets directory not found: %s", ASSETS_DIR)
+        return []
+
+    images = [
+        item.name for item in ASSETS_DIR.iterdir()
+        if item.is_file() and item.suffix.lower() in WH40K_DEPLOY_EXTENSIONS
+    ]
+    images.sort()
+    return images
 
 # Reinforcement restriction message
 REINFORCEMENT_RESTRICTION_MESSAGE = (
@@ -210,7 +228,7 @@ def generate_new_one(rules):
         return (deploy, rules, None, description, None, None)
 
     elif rules == "wh40k":
-        deploy_types = ["Total Domination", "Braze Bridge"]
+        deploy_types = _get_wh40k_deploy_images()
         missions = [
             'Начиная со второго раунда битвы, в конце фазы командования каждого игрока, игрок, чей ход сейчас, получает ПО следующим образом: За каждый контролируемый ими маркер цели на нейтральной полосе они получают 5 ПО. Если они контролируют маркер цели в зоне развертывания противника, они получают 10 ПО. В пятом раунде битвы игрок, у которого второй ход, получает ПО, как описано выше, но делает это в конце хода, а не в конце своей фазы командования. Каждый игрок может получить максимум 90 ПО за выполнение этой цели миссии.',
             'Игрок получает 10 чоков в конце своего хода, если выполняется одно из двух условий: 1) Хотя бы один юнит игрока находится в Ничейной земле, в Ничейной земле нет юнитов оппонента; 2) Игрок имеет хотя бы один юнит в зоне Атакера, Ничейной земле и зоне Дефендера. В конце игры, Дефендер получает 20 очков если держит точку в своей деплойке. Атакер получает 40 очков если держит точку в деплойке оппонента. Если никто не держит точку в деплойке дефендера, то атакер получает 20 очков'
@@ -220,7 +238,7 @@ def generate_new_one(rules):
             "Победитель может выбрать юнит находящийся на точке вефендера и выдать ему любой доступный Battle Trait"
         ]
         description = random.choice(missions)
-        deploy = random.choice(deploy_types)
+        deploy = random.choice(deploy_types) if deploy_types else "total_domination.jpg"
         winner_bonus = random.choice(winner_bonuses)
         # Return tuple with cell=None, winner_bonus included, no map_description for wh40k
         return (deploy, rules, None, description, winner_bonus, None)

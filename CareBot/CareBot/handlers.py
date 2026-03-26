@@ -27,6 +27,7 @@ from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton,
 from datetime import datetime
 import re
 import tracemalloc
+from pathlib import Path
 tracemalloc.start()
 
 
@@ -38,6 +39,8 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+DEPLOY_ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "deploys"
 
 MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS, ALLIANCE_INPUT, CUSTOM_NOTIFICATION = range(7)
 # Callback data
@@ -112,12 +115,20 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         battle_id = await mission_helper.start_battle(mission_id, attacker_id, defender_id)
     except ValueError as e:
         logger.error(f"Failed to start battle: {e}")
+        if mission_id is not None:
+            await sqllite_helper.update_mission_status(mission_id, 0)
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_battle_creation", error=str(e))
+        await query.edit_message_text(error_msg)
+        return MISSIONS
+    except Exception as e:
+        logger.error(f"Unexpected error while starting battle for mission {mission_id}: {e}", exc_info=True)
+        if mission_id is not None:
+            await sqllite_helper.update_mission_status(mission_id, 0)
         error_msg = await localization.get_text_for_user(update.effective_user.id, "error_battle_creation", error=str(e))
         await query.edit_message_text(error_msg)
         return MISSIONS
 
-    # Lock the mission now that battle has been successfully created
-    await sqllite_helper.lock_mission(mission_id)
+    # Mission is already locked atomically in sqllite_helper.get_mission()
 
     situation = await mission_helper.get_situation(battle_id, [(attacker_id,), (defender_id,)])
     
@@ -201,10 +212,27 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     back_markup = InlineKeyboardMarkup(back_button)
     
     score_instructions = await localization.get_text_for_user(update.effective_user.id, "mission_score_instructions")
-    await query.edit_message_text(
-        f"{attacker_message}\n{score_instructions}",
-        reply_markup=back_markup
-    )
+    attacker_text = f"{attacker_message}\n{score_instructions}"
+
+    deploy_asset_path = None
+    if mission_rules == "wh40k" and len(mission) > 0 and isinstance(mission[0], str):
+        deploy_asset_name = mission[0]
+        deploy_asset_path = DEPLOY_ASSETS_DIR / deploy_asset_name
+
+    if deploy_asset_path and deploy_asset_path.exists():
+        with deploy_asset_path.open("rb") as deploy_photo:
+            await context.bot.send_photo(
+                chat_id=update.effective_user.id,
+                photo=deploy_photo,
+                caption=attacker_text,
+                reply_markup=back_markup,
+            )
+        await query.edit_message_text("Mission sent as a separate message.")
+    else:
+        await query.edit_message_text(
+            attacker_text,
+            reply_markup=back_markup
+        )
 
     # Отправляем сообщение с миссией дефендеру
     if defender_id:
@@ -212,10 +240,19 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             defender_message = await build_mission_message(attacker_is_dominant, attacker_nickname, defender_lang)
             new_mission_prefix = await localization.get_text("new_mission_prefix", defender_lang)
             
-            await context.bot.send_message(
-                chat_id=defender_id, 
-                text=f"{new_mission_prefix}\n{defender_message}"
-            )
+            defender_text = f"{new_mission_prefix}\n{defender_message}"
+            if deploy_asset_path and deploy_asset_path.exists():
+                with deploy_asset_path.open("rb") as deploy_photo:
+                    await context.bot.send_photo(
+                        chat_id=defender_id,
+                        photo=deploy_photo,
+                        caption=defender_text,
+                    )
+            else:
+                await context.bot.send_message(
+                    chat_id=defender_id,
+                    text=defender_text
+                )
         except Exception as e:
             logger.error(
                 f"Ошибка при отправке сообщения дефендеру {defender_id}: {e}")

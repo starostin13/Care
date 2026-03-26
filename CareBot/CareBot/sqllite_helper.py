@@ -365,13 +365,13 @@ async def fix_mission_null_id(db, mission_data):
 
 
 async def get_mission(rules) -> Optional[Mission]:
-    """Get an available mission by rules.
+    """Atomically claim an available mission by rules.
 
     Args:
         rules: Mission ruleset (killteam, wh40k, etc.)
 
     Returns:
-        Mission object or None if no mission found
+        Mission object (already locked with status=1) or None if no mission found
 
     Note:
         Missions with NULL id will have a new id generated and updated in the database.
@@ -380,28 +380,47 @@ async def get_mission(rules) -> Optional[Mission]:
     await unlock_expired_missions()
 
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("BEGIN IMMEDIATE")
+
         async with db.execute('''
             SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description, reward_config
             FROM mission_stack
             WHERE status=0 AND rules=?
+            ORDER BY id ASC
+            LIMIT 1
         ''', (rules,)) as cursor:
             row = await cursor.fetchone()
 
-            if not row:
-                return None
+        if not row:
+            await db.commit()
+            return None
 
-            # Check if id is NULL and fix it
-            if row[0] is None:
-                new_id = await fix_mission_null_id(db, row)
-                # Re-fetch the mission with the new id
-                async with db.execute('''
-                    SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date
-                    FROM mission_stack
-                    WHERE id=?
-                ''', (new_id,)) as new_cursor:
-                    row = await new_cursor.fetchone()
+        # Check if id is NULL and fix it before locking
+        if row[0] is None:
+            new_id = await fix_mission_null_id(db, row)
+            async with db.execute('''
+                SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description, reward_config
+                FROM mission_stack
+                WHERE id=?
+            ''', (new_id,)) as new_cursor:
+                row = await new_cursor.fetchone()
 
-            return Mission.from_db_row(row)
+        mission_id = row[0]
+        cursor = await db.execute('''
+            UPDATE mission_stack
+            SET status=1
+            WHERE id=? AND status=0
+        ''', (mission_id,))
+
+        # Defensive guard: if row wasn't updated, mission was already claimed.
+        if cursor.rowcount != 1:
+            await db.commit()
+            return None
+
+        await db.commit()
+        return Mission.from_db_row((
+            row[0], row[1], row[2], row[3], row[4], row[5], 1, row[7], row[8], row[9]
+        ))
 
 async def get_schedule_by_user(user_telegram, date=None):
     async with aiosqlite.connect(DATABASE_PATH) as db:

@@ -17,6 +17,20 @@ function Write-Error($text) { Write-Host "ERROR: $text" -ForegroundColor Red }
 function Write-Info($text) { Write-Host "INFO: $text" -ForegroundColor Cyan }
 function Write-Warning($text) { Write-Host "WARNING: $text" -ForegroundColor Yellow }
 
+# Build image on production host
+function Build-ProductionImage {
+    Write-Info "Building production image on server..."
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker build -t carebot:latest -f Dockerfile ."
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Server-side Docker build failed"
+        return $false
+    }
+
+    Write-Success "Production image built successfully"
+    return $true
+}
+
 # Production safety check
 function Test-ProductionSafety {
     Write-Info "Running production safety check..."
@@ -111,6 +125,16 @@ function Sync-Files {
         Write-Host "  Copying migration: $($migration.Name)..."
         scp "CareBot/CareBot/migrations/$($migration.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/migrations/$($migration.Name)"
     }
+
+    # Синхронизируем assets для деплоев WH40K
+    Write-Info "Syncing WH40K deploy assets..."
+    ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH/CareBot/CareBot/assets/deploys"
+
+    $deployAssetFiles = Get-ChildItem -Path "CareBot/CareBot/assets/deploys" -File -ErrorAction SilentlyContinue
+    foreach ($asset in $deployAssetFiles) {
+        Write-Host "  Copying deploy asset: $($asset.Name)..."
+        scp "CareBot/CareBot/assets/deploys/$($asset.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/CareBot/CareBot/assets/deploys/$($asset.Name)"
+    }
     
     Write-Success "File sync completed"
     return $true
@@ -164,9 +188,11 @@ function Update-Production {
     }
     
     if (-not (Sync-Files)) { return $false }
+
+    if (-not (Build-ProductionImage)) { return $false }
     
-    Write-Info "Restarting production service (no server-side build)..."
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d"
+    Write-Info "Recreating production service with newly built image..."
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d --force-recreate carebot-production"
     
     if (-not $SkipHealthCheck) {
         Test-Health
@@ -210,8 +236,9 @@ function Stop-Service {
 }
 
 function Restart-Service {
-    Write-Info "Restarting service (no server-side build)..."
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d"
+    Write-Info "Rebuilding image and restarting service..."
+    if (-not (Build-ProductionImage)) { return }
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d --force-recreate carebot-production"
     Write-Success "Service restarted"
 }
 
@@ -297,6 +324,9 @@ switch ($Action.ToLower()) {
     "migration-status" {
         Check-MigrationStatus
     }
+    "build" {
+        Build-ProductionImage
+    }
     "backup" {
         Create-Backup
     }
@@ -322,6 +352,7 @@ switch ($Action.ToLower()) {
         Write-Host "  migrations       - Sync only migration files"
         Write-Host "  apply-migrations - Apply migrations manually"
         Write-Host "  migration-status - Check migration status"
+        Write-Host "  build            - Build production image on server"
         Write-Host "  safety-check     - Run production safety validation"
         Write-Host ""
         Write-Host "Options:"
