@@ -25,7 +25,9 @@ class CacheService {
 
   String get baseUrl => _prefs.getString(_keyBaseUrl) ?? _defaultBaseUrl;
 
-  Future<void> setBaseUrl(String url) => _prefs.setString(_keyBaseUrl, url);
+  Future<void> setBaseUrl(String url) async {
+    await _prefs.setString(_keyBaseUrl, url);
+  }
 
   // ── Bootstrap snapshot ───────────────────────────────────────────────────
 
