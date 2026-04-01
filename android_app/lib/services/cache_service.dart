@@ -31,10 +31,26 @@ class CacheService {
 
   // ── Bootstrap snapshot ───────────────────────────────────────────────────
 
+  /// In-memory snapshot to avoid repeated JSON decoding on every getter call.
+  BootstrapData? _bootstrapSnapshot;
+
+  /// Returns the memoized bootstrap snapshot, loading from storage if needed.
+  BootstrapData? get _cachedBootstrap {
+    _bootstrapSnapshot ??= load();
+    return _bootstrapSnapshot;
+  }
+
+  /// Invalidates the in-memory snapshot so the next getter call re-reads from
+  /// storage (called automatically after refresh/save).
+  void _invalidateBootstrapCache() {
+    _bootstrapSnapshot = null;
+  }
+
   /// Fetches fresh data from [apiService] and stores it locally.
   Future<BootstrapData> refresh(ApiService apiService) async {
     final data = await apiService.fetchBootstrap();
     await _saveBootstrap(data);
+    _invalidateBootstrapCache();
     return data;
   }
 
@@ -115,10 +131,10 @@ class CacheService {
 
   // ── Convenience getters ──────────────────────────────────────────────────
 
-  List<Alliance> get cachedAlliances => load()?.alliances ?? [];
-  List<Warmaster> get cachedWarmasters => load()?.warmasters ?? [];
-  List<MapCell> get cachedMapCells => load()?.mapCells ?? [];
-  List<MapEdge> get cachedMapEdges => load()?.mapEdges ?? [];
+  List<Alliance> get cachedAlliances => _cachedBootstrap?.alliances ?? [];
+  List<Warmaster> get cachedWarmasters => _cachedBootstrap?.warmasters ?? [];
+  List<MapCell> get cachedMapCells => _cachedBootstrap?.mapCells ?? [];
+  List<MapEdge> get cachedMapEdges => _cachedBootstrap?.mapEdges ?? [];
   List<PendingMission> get cachedPendingMissions =>
-      load()?.pendingMissions ?? [];
+      _cachedBootstrap?.pendingMissions ?? [];
 }

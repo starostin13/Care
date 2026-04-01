@@ -239,6 +239,62 @@ void main() {
     });
   });
 
+  group('Warmaster.fromJson', () {
+    test('parses boolean true for is_admin', () {
+      final w = Warmaster.fromJson({
+        'telegram_id': '1',
+        'alliance': null,
+        'nickname': 'Test',
+        'faction': null,
+        'language': null,
+        'notifications_enabled': true,
+        'is_admin': true,
+      });
+      expect(w.isAdmin, true);
+      expect(w.notificationEnabled, true);
+    });
+
+    test('parses boolean false for is_admin without throwing', () {
+      final w = Warmaster.fromJson({
+        'telegram_id': '2',
+        'alliance': null,
+        'nickname': null,
+        'faction': null,
+        'language': null,
+        'notifications_enabled': false,
+        'is_admin': false,
+      });
+      expect(w.isAdmin, false);
+      expect(w.notificationEnabled, false);
+    });
+
+    test('parses integer 1 for is_admin (legacy API format)', () {
+      final w = Warmaster.fromJson({
+        'telegram_id': '3',
+        'alliance': 1,
+        'nickname': 'Admin',
+        'faction': null,
+        'language': 'ru',
+        'notification_enabled': 1,
+        'is_admin': 1,
+      });
+      expect(w.isAdmin, true);
+      expect(w.notificationEnabled, true);
+    });
+
+    test('parses null / absent is_admin as false', () {
+      final w = Warmaster.fromJson({
+        'telegram_id': '4',
+        'alliance': null,
+        'nickname': null,
+        'faction': null,
+        'language': null,
+      });
+      expect(w.isAdmin, false);
+      expect(w.notificationEnabled, false);
+    });
+  });
+
   group('Mission', () {
     test('status helpers work correctly', () {
       const active = Mission(

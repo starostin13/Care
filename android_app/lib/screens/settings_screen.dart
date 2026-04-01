@@ -50,11 +50,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(width: 8),
             ElevatedButton(
-              onPressed: () {
-                state.updateBaseUrl(_urlCtrl.text.trim());
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Server URL updated')),
-                );
+              onPressed: () async {
+                await state.updateBaseUrl(_urlCtrl.text.trim());
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Server URL updated')),
+                  );
+                }
               },
               child: const Text('Save'),
             ),

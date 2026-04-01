@@ -24,8 +24,8 @@ class AppState extends ChangeNotifier {
   String? get error => _error;
   String? get lastRefreshed => _lastRefreshed;
 
-  void updateBaseUrl(String url) {
-    cache.setBaseUrl(url);
+  Future<void> updateBaseUrl(String url) async {
+    await cache.setBaseUrl(url);
     api = ApiService(baseUrl: url);
     notifyListeners();
   }
