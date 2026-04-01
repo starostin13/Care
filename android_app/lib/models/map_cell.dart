@@ -13,15 +13,19 @@ class MapCell {
     this.hasWarehouse = false,
   });
 
-  factory MapCell.fromJson(Map<String, dynamic> json) => MapCell(
-        id: json['id'] as int,
-        planetId: json['planet_id'] as int?,
-        patron: json['patron'] as int?,
-        state: json['state'] as String?,
-        hasWarehouse: json['has_warehouse'] == true ||
-            (json['has_warehouse'] as int?) == 1,
-      );
+  factory MapCell.fromJson(Map<String, dynamic> json) {
+    final dynamic rawHasWarehouse = json['has_warehouse'];
+    final bool hasWarehouse =
+        rawHasWarehouse == true || rawHasWarehouse == 1;
 
+    return MapCell(
+      id: json['id'] as int,
+      planetId: json['planet_id'] as int?,
+      patron: json['patron'] as int?,
+      state: json['state'] as String?,
+      hasWarehouse: hasWarehouse,
+    );
+  }
   Map<String, dynamic> toJson() => {
         'id': id,
         'planet_id': planetId,
