@@ -173,3 +173,11 @@ cython_debug/
 /CareBot/.vs/CareBot/v17
 /CareBot/.vs/CareBot/copilot-chat
 /CareBot/.vs/CareBot/CopilotIndices
+*.tar.gz
+carebot-latest.tar
+
+# WH40K deploy images are local assets, keep them out of git
+/CareBot/CareBot/assets/deploys/
+
+# Local certificate artifacts
+*.pfx

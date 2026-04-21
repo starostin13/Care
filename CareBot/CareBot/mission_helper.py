@@ -1,20 +1,174 @@
 ﻿"""Helper functions for managing missions in the game."""
 
-from typing import Optional
+from typing import Optional, Tuple
 import random
 import logging
-import sqllite_helper
+from pathlib import Path
+import config
+
+# Автоматическое переключение на mock версию в тестовом режиме
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+    print("🧪 Mission Helper using MOCK SQLite helper")
+else:
+    import sqllite_helper
+    print("✅ Mission Helper using REAL SQLite helper")
+
 import map_helper
 import notification_service
+from features import feature_registry
+import register_features  # Ensure features are registered
 from database.killzone_manager import get_killzone_for_mission
+from models import Mission, MissionDetails
 
 logger = logging.getLogger(__name__)
+
+ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "deploys"
+WH40K_DEPLOY_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _get_wh40k_deploy_images():
+    """Return sorted deploy image filenames for WH40K missions."""
+    if not ASSETS_DIR.exists():
+        logger.warning("WH40K deploy assets directory not found: %s", ASSETS_DIR)
+        return []
+
+    images = [
+        item.name for item in ASSETS_DIR.iterdir()
+        if item.is_file() and item.suffix.lower() in WH40K_DEPLOY_EXTENSIONS
+    ]
+    images.sort()
+    return images
 
 # Reinforcement restriction message
 REINFORCEMENT_RESTRICTION_MESSAGE = (
     "⚠️ Атакующий игрок не может отправлять юнитов в резервы, "
     "за исключением тех кто имеет правило Deep Strike"
 )
+
+# Battlefleet Gothica celestial phenomena generators
+BATTLEZONE_GENERATORS = {
+    1: {  # Asteroid Field
+        1: "Dense Asteroid Cluster - Ships moving through reduce speed by 2\"",
+        2: "Asteroid Belt - Provides cover, enemies get -1 to hit",
+        3: "Scattered Debris - No effect on movement",
+        4: "Mining Operation - Abandoned structures provide partial cover",
+        5: "Ice Field - Sensors reduced, -2\" to detection range",
+        6: "Metallic Asteroids - Interferes with targeting systems"
+    },
+    2: {  # Nebula Zone
+        1: "Gas Cloud - Reduces weapon range by 6\"",
+        2: "Plasma Storm - Random energy discharges, roll for damage each turn",
+        3: "Dust Cloud - All ships count as obscured",
+        4: "Ion Nebula - Shields reduced by 1",
+        5: "Radiation Field - Crew take 1 damage per turn inside",
+        6: "Clear Zone - No effect"
+    },
+    3: {  # Gravity Wells
+        1: "Massive Gravity Well - All movement reduced by 3\"",
+        2: "Unstable Gravity - Random direction pull each turn",
+        3: "Black Hole Proximity - Ships within 12\" pulled 2\" towards center",
+        4: "Tidal Forces - Ships take 1 hull damage if moving at full speed",
+        5: "Gravitational Anomaly - Unpredictable sensor readings",
+        6: "Stable Orbit Zone - +1 to hit for ships not moving"
+    },
+    4: {  # Solar Phenomena
+        1: "Solar Flare - All shields at -2 this turn",
+        2: "Radiation Burst - Communications disrupted",
+        3: "Electromagnetic Pulse - Ordnance weapons gain +1 strength",
+        4: "Corona Discharge - Energy weapons reduced range by 6\"",
+        5: "Stellar Wind - All ships pushed 3\" in random direction",
+        6: "Magnetic Storm - Torpedoes may veer off course"
+    },
+    5: {  # Debris Field
+        1: "Ship Wreckage - Provides full cover",
+        2: "Battle Debris - Hazardous terrain, moving ships roll for damage",
+        3: "Ancient Hulk - Can be used as cover or boarded",
+        4: "Orbital Wreckage - Scattered debris, no effect",
+        5: "Minefield Remnants - Roll D6 when entering, 5+ takes 1 damage",
+        6: "Salvage Field - No combat effect"
+    },
+    6: {  # Planetary Bodies
+        1: "Moon - Provides cover and gravity well",
+        2: "Small Planet - Can use for slingshot maneuvers",
+        3: "Gas Giant - Obscures sensors within 6\"",
+        4: "Planetary Ring - Counts as asteroid field",
+        5: "Barren Rock - Blocks line of sight",
+        6: "Space Station - Neutral fortification"
+    }
+}
+
+
+def _parse_reward_config(reward_config):
+    """Return normalized reward entries from mission reward_config text."""
+    rewards = {}
+    if not reward_config:
+        return rewards
+    normalized = reward_config.replace("\n", ";")
+    for part in normalized.split(";"):
+        if ":" not in part:
+            continue
+        key, value = part.split(":", 1)
+        key = key.strip().upper()
+        try:
+            amount = int(value.strip())
+        except (TypeError, ValueError):
+            continue
+        rewards[key] = amount
+    return rewards
+
+
+def generate_battlefleet_map():
+    """Generate celestial phenomena map for Battlefleet Gothica missions.
+    
+    Based on Setting Up Celestial Phenomena: Method 2
+    Divides table into 60cm square areas and generates phenomena.
+    
+    Returns:
+        str: Formatted map description with celestial phenomena
+    """
+    # Standard table is typically 120cm x 180cm, giving us 2x3 = 6 areas of 60cm each
+    # We'll use a simpler 2x3 grid (6 areas total)
+    areas = []
+    
+    # First, determine which battlezone generator to use (D6 roll)
+    generator_type = random.randint(1, 6)
+    generator_name = {
+        1: "Asteroid Field",
+        2: "Nebula Zone", 
+        3: "Gravity Wells",
+        4: "Solar Phenomena",
+        5: "Debris Field",
+        6: "Planetary Bodies"
+    }[generator_type]
+    
+    selected_generator = BATTLEZONE_GENERATORS[generator_type]
+    
+    # Check each area (6 total in 2x3 grid)
+    area_labels = [
+        "Top-Left", "Top-Center", "Top-Right",
+        "Bottom-Left", "Bottom-Center", "Bottom-Right"
+    ]
+    
+    for label in area_labels:
+        # Roll D6 for each area - on 4+ it contains phenomena
+        roll = random.randint(1, 6)
+        if roll >= 4:
+            # Generate phenomena from the selected generator
+            phenomena_roll = random.randint(1, 6)
+            phenomena = selected_generator[phenomena_roll]
+            areas.append(f"  • {label}: {phenomena}")
+        else:
+            areas.append(f"  • {label}: Empty space")
+    
+    # Build the final map description
+    map_desc = f"🗺️ BATTLEFLEET MAP - {generator_name.upper()}\n\n"
+    map_desc += "Celestial Phenomena (60cm grid areas):\n"
+    map_desc += "\n".join(areas)
+    map_desc += "\n\n📋 Note: Position phenomena anywhere within each area, but don't overlap them."
+    
+    return map_desc
+
 
 
 def generate_new_one(rules):
@@ -38,7 +192,7 @@ def generate_new_one(rules):
         description = random.choice(missions)
 
         # cell should be None when generating, assigned later when mission is selected
-        return (mission_name, rules, None, description, None)
+        return (mission_name, rules, None, description, None, None)
 
     elif rules == "boarding_action":
         deploy_types = ["Breach Points", "Ship Interface", "Void Strike"]
@@ -52,8 +206,8 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Forces must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        # Return tuple with cell=None, no winner_bonus for boarding_action
-        return (deploy, rules, None, description, None)
+        # Return tuple with cell=None, no winner_bonus, no map_description for boarding_action
+        return (deploy, rules, None, description, None, None)
 
     elif rules == "combat_patrol":
         deploy_types = ["Strategic Reserves",
@@ -70,22 +224,24 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Patrol forces must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        # Return tuple with cell=None for consistency
-        return (deploy, rules, None, description, None)
+        # Return tuple with cell=None, no winner_bonus, no map_description for consistency
+        return (deploy, rules, None, description, None, None)
 
     elif rules == "wh40k":
-        deploy_types = ["Total Domination"]
+        deploy_types = _get_wh40k_deploy_images()
         missions = [
-            'Начиная со второго раунда битвы, в конце фазы командования каждого игрока, игрок, чей ход сейчас, получает ПО следующим образом: За каждый контролируемый ими маркер цели на нейтральной полосе они получают 5 ПО. Если они контролируют маркер цели в зоне развертывания противника, они получают 10 ПО. В пятом раунде битвы игрок, у которого второй ход, получает ПО, как описано выше, но делает это в конце хода, а не в конце своей фазы командования. Каждый игрок может получить максимум 90 ПО за выполнение этой цели миссии.'
+            'Начиная со второго раунда битвы, в конце фазы командования каждого игрока, игрок, чей ход сейчас, получает ПО следующим образом: За каждый контролируемый ими маркер цели на нейтральной полосе они получают 5 ПО. Если они контролируют маркер цели в зоне развертывания противника, они получают 10 ПО. В пятом раунде битвы игрок, у которого второй ход, получает ПО, как описано выше, но делает это в конце хода, а не в конце своей фазы командования. Каждый игрок может получить максимум 90 ПО за выполнение этой цели миссии.',
+            'Игрок получает 10 чоков в конце своего хода, если выполняется одно из двух условий: 1) Хотя бы один юнит игрока находится в Ничейной земле, в Ничейной земле нет юнитов оппонента; 2) Игрок имеет хотя бы один юнит в зоне Атакера, Ничейной земле и зоне Дефендера. В конце игры, Дефендер получает 20 очков если держит точку в своей деплойке. Атакер получает 40 очков если держит точку в деплойке оппонента. Если никто не держит точку в деплойке дефендера, то атакер получает 20 очков'
         ]
         winner_bonuses = [
             "Выбрать один юнит участвующий в битве. Этот юнит получает 3xp вместо 1xp за участие в битве.",
+            "Победитель может выбрать юнит находящийся на точке вефендера и выдать ему любой доступный Battle Trait"
         ]
         description = random.choice(missions)
-        deploy = random.choice(deploy_types)
+        deploy = random.choice(deploy_types) if deploy_types else "total_domination.jpg"
         winner_bonus = random.choice(winner_bonuses)
-        # Return tuple with cell=None, winner_bonus included for wh40k
-        return (deploy, rules, None, description, winner_bonus)
+        # Return tuple with cell=None, winner_bonus included, no map_description for wh40k
+        return (deploy, rules, None, description, winner_bonus, None)
 
     elif rules == "battlefleet":
         deploy_types = ["Convoy Pattern", "Battle Line", "Orbital Superiority"]
@@ -102,13 +258,15 @@ def generate_new_one(rules):
         description = (f"{random.choice(missions)}: Fleet must "
                        f"{random.choice(actions)}")
         deploy = random.choice(deploy_types)
-        # Return tuple with cell=None, no winner_bonus for battlefleet
-        return (deploy, rules, None, description, None)
+        # Generate celestial phenomena map
+        map_description = generate_battlefleet_map()
+        # Return tuple with cell=None, no winner_bonus, but with map_description for battlefleet
+        return (deploy, rules, None, description, None, map_description)
 
     else:
         # Default case if rules type is not recognized
-        # Return tuple with cell=None for consistency
-        return ('Only War', rules, None, f'Generic mission for {rules}', None)
+        # Return tuple with cell=None, no winner_bonus, no map_description for consistency
+        return ('Only War', rules, None, f'Generic mission for {rules}', None, None)
 
 
 async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, defender_id: Optional[str] = None):
@@ -119,18 +277,27 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
         attacker_id: Telegram ID of the attacker (who clicked the mission)
         defender_id: Telegram ID of the defender (opponent)
     
+    Returns:
+        Tuple with mission data for display (backwards compatible format)
+    
     Battle cell is determined by finding hexes adjacent to attacker's territory 
     that belong to defender and randomly selecting one of them.
     """
+    # Get mission from database (returns Mission object or None)
     mission = await sqllite_helper.get_mission(rules)
-
+    
     if not mission:
-        # Если миссия не найдена, генерируем новую
-        mission = generate_new_one(rules)
-        await sqllite_helper.save_mission(mission)
-
+        # Generate new mission (returns tuple)
+        mission_tuple = generate_new_one(rules)
+        await sqllite_helper.save_mission(mission_tuple)
+        # Re-fetch from DB to get Mission object with ID
+        mission = await sqllite_helper.get_mission(rules)
+        
+    if not mission:
+        raise ValueError(f"Failed to get or create mission for rules: {rules}")
+    
     # Determine cell_id based on participants
-    cell_id = mission[2]  # May be None for newly generated missions
+    cell_id = mission.cell
     
     if attacker_id and defender_id and cell_id is None:
         attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
@@ -145,9 +312,11 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
                 attacker_alliance_id, defender_alliance_id
             )
             
-            if adjacent_defender_hexes:
+            # Convert iterator to list if needed
+            adjacent_hexes_list = list(adjacent_defender_hexes) if adjacent_defender_hexes else []
+            if adjacent_hexes_list:
                 # Randomly select one adjacent hex from defender's territory
-                cell_id = random.choice(adjacent_defender_hexes)[0]
+                cell_id = random.choice(adjacent_hexes_list)[0]
                 logger.info(
                     f"Battle cell determined: {cell_id} "
                     f"(random hex from defender's territory adjacent to attacker)"
@@ -167,51 +336,62 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
                         f"No hexes found for defender alliance {defender_alliance_id}"
                     )
         
-        # Update mission tuple with determined cell_id
+        # Update mission with determined cell_id
         if cell_id is not None:
-            mission = list(mission)
-            mission[2] = cell_id
-            mission = tuple(mission)
-            # Update mission in database with the cell
-            await sqllite_helper.update_mission_cell(mission[4], cell_id)
+            await sqllite_helper.update_mission_cell(mission.id, cell_id)
+            mission.cell = cell_id  # Update local object
 
     if rules == "killteam":
         if cell_id is not None:
-            await sqllite_helper.lock_mission(mission[4])  # Lock by mission id, not cell
             state = await sqllite_helper.get_state(cell_id)
 
             # Получаем killzone для данного state гекса (или None)
             hex_state = state[0] if state is not None else None
             killzone = get_killzone_for_mission(hex_state)
-            mission = mission + (f"Killzone: {killzone}",)
+
+            # Build result tuple with extra info
+            result = mission.to_tuple() + (f"Killzone: {killzone}",)
 
             if state is not None:
-                mission = mission + (state[0],)
+                result = result + (state[0],)
 
             history = await sqllite_helper.get_cell_history(cell_id)
             for point in history:
-                mission = mission + point
+                result = result + tuple(point)  # Convert Row to tuple
+
+            return result
         else:
-            # For killteam without cell, just lock the mission
-            await sqllite_helper.lock_mission(mission[4])
+            # For killteam without cell, return mission tuple
+            return mission.to_tuple()
 
     elif rules == "wh40k":
-        # Lock mission by id (mission[4])
-        await sqllite_helper.lock_mission(mission[4])
+        # Return mission info without locking
         if cell_id is not None:
             # If cell is assigned, add extra info
             number_of_safe_next_cells = await sqllite_helper.get_number_of_safe_next_cells(cell_id)
-            mission = mission + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
+            result = mission.to_tuple() + (f"Бой на {(number_of_safe_next_cells + 1) * 500} pts",)
             history = await sqllite_helper.get_cell_history(cell_id)
             state = await sqllite_helper.get_state(cell_id)
             if state is not None:
-                mission = mission + (state[0],)
+                result = result + (state[0],)
 
             for point in history:
-                mission = mission + point
+                result = result + tuple(point)  # Convert Row to tuple
+            
+            return result
+        else:
+            return mission.to_tuple()
+    
+    elif rules == "battlefleet":
+        # Lock mission and include map description
+        await sqllite_helper.lock_mission(mission.id)
+        result = mission.to_tuple()
+        # Add map description if available
+        if mission.map_description:
+            result = result + (mission.map_description,)
+        return result
 
-    return mission
-
+    return mission.to_tuple()
 
 async def check_attacker_reinforcement_status(battle_id, attacker_id):
     """
@@ -331,10 +511,9 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         logger.error("Could not find mission details for battle %s", battle_id)
         return
 
-    # Extract mission type (the first part of the mission tuple is the
-    # mission name/type)
-    mission_type = mission_details[0]
-    rules = mission_details[1]
+    # Extract mission type and rules from Mission object
+    mission_type = mission_details.deploy  # Mission name/type
+    rules = mission_details.rules
     logger.info("Mission type: %s, rules: %s", mission_type, rules)
 
     # Get alliance IDs for both players 
@@ -385,6 +564,13 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
             "Opponent %s has no alliance (alliance=0) in battle %s",
             opponent_telegram_id, battle_id)
 
+    # Base resource gain for participating alliances
+    participant_alliances = []
+    if user_alliance not in (None, 0):
+        participant_alliances.append(user_alliance)
+    if opponent_alliance not in (None, 0):
+        participant_alliances.append(opponent_alliance)
+
     # Determine winner
     logger.info("Determining winner...")
     if user_score > opponent_score:
@@ -415,145 +601,38 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
         loser_score = opponent_score
         logger.info("Draw - no winner")
 
-    # Apply rewards based on mission type and rules
-    logger.info("Processing rewards for rules: %s", rules)
+    # Prepare battle data for features
+    battle_data = {
+        'battle_id': battle_id,
+        'mission_id': mission_id,
+        'user_score': user_score,
+        'opponent_score': opponent_score,
+        'user_alliance': user_alliance,
+        'opponent_alliance': opponent_alliance,
+        'winner_alliance_id': winner_alliance_id,
+        'loser_alliance_id': loser_alliance_id,
+        'winner_score': winner_score,
+        'loser_score': loser_score,
+        'mission_type': mission_type,
+        'rules': rules,
+        'reward_config': getattr(mission_details, "reward_config", None)
+    }
+    
+    # Call feature lifecycle method for all enabled features
+    await feature_registry.on_result_approved(battle_data)
+    
+    # Process non-resource mission-specific logic
     if rules == "killteam":
-        # Process Kill Team missions
-        logger.info("Processing Kill Team mission type: %s", mission_type)
-        if mission_type.lower() == "loot":
-            # Both players get 1 resource (only if they have alliances)
-            if user_alliance != 0:
-                await sqllite_helper.increase_common_resource(
-                    user_alliance, 1)
-            if opponent_alliance != 0:
-                await sqllite_helper.increase_common_resource(
-                    opponent_alliance, 1)
-
-            # Winner gets additional resources based on score ratio
-            if winner_alliance_id:
-                # Calculate additional resources (minimum 1)
-                if loser_score == 0:
-                    additional_resources = 3  # To avoid division by zero
-                else:
-                    score_ratio = winner_score / loser_score
-                    additional_resources = max(1, int(score_ratio))
-
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, additional_resources)
-
-                logger.info(
-                    "Loot mission: Winner %s received %s resources total",
-                    winner_alliance_id, additional_resources + 1)
-                logger.info(
-                    "Loot mission: Loser %s received 1 resource",
-                    loser_alliance_id)
-
-        elif mission_type.lower() == "transmission":
-            # Winner gets resources equal to opponent's resources but
-            # limited by own resources
-            if winner_alliance_id and loser_alliance_id:
-                # Get current resource amounts
-                winner_resources = await sqllite_helper.get_alliance_resources(
-                    winner_alliance_id)
-                loser_resources = await sqllite_helper.get_alliance_resources(
-                    loser_alliance_id)
-
-                # Calculate transfer amount (minimum of loser's and winner's
-                # resources)
-                transfer_amount = min(loser_resources, winner_resources)
-
-                if transfer_amount > 0:
-                    await sqllite_helper.increase_common_resource(
-                        winner_alliance_id, transfer_amount)
-                    logger.info(
-                        "Transmission mission: Winner %s received %s "
-                        "resources",
-                        winner_alliance_id, transfer_amount)
-                else:
-                    logger.info(
-                        "Transmission mission: No resources transferred "
-                        "(either winner or loser has 0 resources)")
-
-        elif mission_type.lower() == "secure":
-            # Winner gets resources, may create warehouse
-            if winner_alliance_id:
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, 2)
-                logger.info(
-                    "Secure mission: Winner %s received 2 resources",
-                    winner_alliance_id)
-
-        elif mission_type.lower() == "intel":
+        if mission_type.lower() == "intel":
             # Creates warehouse in the hex where the mission took place
             if winner_alliance_id:
-                cell_id = await sqllite_helper.get_cell_id_by_battle_id(
-                    battle_id)
+                cell_id = await sqllite_helper.get_cell_id_by_battle_id(battle_id)
                 await sqllite_helper.create_warehouse(cell_id)
-                logger.info(
-                    "Intel mission: Warehouse created in hex %s",
-                    cell_id)
-
+                logger.info("Intel mission: Warehouse created in hex %s", cell_id)
+        
         elif mission_type.lower() == "sabotage":
             # No resource changes for sabotage missions
             logger.info("Sabotage mission: No resource changes")
-            
-        elif mission_type.lower() == "resource collection":
-            # Winner gets 1 resource from eliminated alliance reserves
-            logger.info("Processing Resource Collection mission")
-            if winner_alliance_id:
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, 1)
-                logger.info(
-                    "Resource Collection mission: Winner %s gained 1 resource",
-                    winner_alliance_id)
-
-        elif mission_type.lower() == "extraction":
-            # Winner gets 1 resource, loser loses 1 resource
-            if winner_alliance_id and loser_alliance_id:
-                await sqllite_helper.increase_common_resource(
-                    winner_alliance_id, 1)
-                await sqllite_helper.decrease_common_resource(
-                    loser_alliance_id, 1)
-                logger.info(
-                    "Extraction mission: Winner %s gained 1 resource, "
-                    "loser %s lost 1 resource",
-                    winner_alliance_id, loser_alliance_id)
-
-        elif mission_type.lower() == "power surge":
-            # Loser loses resources equal to number of warehouses (minimum 1)
-            if winner_alliance_id and loser_alliance_id:
-                warehouse_count = await (
-                    sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
-                )
-                resource_loss = max(1, warehouse_count)
-                
-                await sqllite_helper.decrease_common_resource(
-                    loser_alliance_id, resource_loss)
-                logger.info(
-                    "Power Surge mission: Loser %s lost %s resources "
-                    "(based on %s warehouses)",
-                    loser_alliance_id, resource_loss, warehouse_count)
-
-        elif mission_type.lower() == "coordinates":
-            # Loser loses resources equal to number of warehouses (minimum 1)
-            # Winner destroys enemy warehouse
-            if winner_alliance_id and loser_alliance_id:
-                warehouse_count = await (
-                    sqllite_helper.get_warehouse_count_by_alliance(loser_alliance_id)
-                )
-                resource_loss = max(1, warehouse_count)
-                
-                await sqllite_helper.decrease_common_resource(
-                    loser_alliance_id, resource_loss)
-                
-                # Destroy one enemy warehouse if exists
-                await sqllite_helper.destroy_warehouse_by_alliance(loser_alliance_id)
-                
-                logger.info(
-                    "Coordinates mission: Loser %s lost %s resources and one warehouse",
-                    loser_alliance_id, resource_loss)
-
-        # Add more mission types as needed
 
     # Check if loser alliance has any hexes remaining after battle
     logger.info("Checking for alliance elimination...")
@@ -562,10 +641,12 @@ async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
             "Checking hexes for loser alliance: %s", loser_alliance_id)
         remaining_hexes = await sqllite_helper.get_hexes_by_alliance(
             loser_alliance_id)
+        # Convert iterator to list to get length
+        remaining_hexes_list = list(remaining_hexes) if remaining_hexes else []
         logger.info(
             "Alliance %s has %s hexes remaining",
-            loser_alliance_id, len(remaining_hexes))
-        if len(remaining_hexes) == 0:
+            loser_alliance_id, len(remaining_hexes_list))
+        if len(remaining_hexes_list) == 0:
             logger.info(
                 "Alliance %s eliminated - no hexes remaining",
                 loser_alliance_id)
@@ -632,6 +713,7 @@ async def handle_alliance_elimination(eliminated_alliance_id, context=None):
                 None,  # cell (NULL)
                 "Collect resources from eliminated alliance reserves.",
                 None,  # winner_bonus
+                None,  # map_description
             )
             await sqllite_helper.save_mission(mission_data)
     
@@ -668,21 +750,26 @@ async def start_battle(mission_id, player1_id, player2_id):
         )
     
     # Create battle without scores
-    battle_id = await sqllite_helper.add_battle(mission_id)
+    battle_id_result = await sqllite_helper.add_battle(mission_id)
+    
+    if not battle_id_result:
+        raise RuntimeError(f"Failed to create battle for mission {mission_id}")
+    
+    battle_id = battle_id_result[0]
     
     # Add exactly 2 players in order: first player is fstplayer, second is sndplayer
     await sqllite_helper.add_battle_participant(
-        battle_id[0],
+        battle_id,
         player1_id
     )
     await sqllite_helper.add_battle_participant(
-        battle_id[0],
+        battle_id,
         player2_id
     )
     
     logger.info(
-        f"Battle {battle_id[0]} created for mission {mission_id} with "
+        f"Battle {battle_id} created for mission {mission_id} with "
         f"fstplayer={player1_id}, sndplayer={player2_id}"
     )
     
-    return battle_id[0]
+    return battle_id

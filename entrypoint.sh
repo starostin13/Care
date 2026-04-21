@@ -15,4 +15,4 @@ else
 fi
 
 echo "Starting CareBot application..."
-exec python run_hybrid.py
+exec python CareBot/run_hybrid.py

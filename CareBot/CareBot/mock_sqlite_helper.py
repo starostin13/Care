@@ -11,6 +11,7 @@ import asyncio
 import random
 import os
 from typing import List, Tuple, Optional, Dict, Any
+from models import Mission
 
 # Критическая защита от использования в production
 if os.getenv('CAREBOT_TEST_MODE', 'false').lower() != 'true':
@@ -49,11 +50,11 @@ MOCK_MISSIONS = {}
 MOCK_BATTLES = {}
 MOCK_SCHEDULES = {}
 MOCK_ALLIANCES = {
-    1: {'id': 1, 'name': 'Crimson Legion', 'color': 'red'},
-    2: {'id': 2, 'name': 'Shadow Pact', 'color': 'black'},
-    3: {'id': 3, 'name': 'Iron Brotherhood', 'color': 'gray'},
-    4: {'id': 4, 'name': 'Storm Guard', 'color': 'blue'},
-    5: {'id': 5, 'name': 'Void Seekers', 'color': 'purple'}
+    1: {'id': 1, 'name': 'Crimson Legion', 'color': 'red', 'common_resource': 0},
+    2: {'id': 2, 'name': 'Shadow Pact', 'color': 'black', 'common_resource': 0},
+    3: {'id': 3, 'name': 'Iron Brotherhood', 'color': 'gray', 'common_resource': 0},
+    4: {'id': 4, 'name': 'Storm Guard', 'color': 'blue', 'common_resource': 0},
+    5: {'id': 5, 'name': 'Void Seekers', 'color': 'purple', 'common_resource': 0}
 }
 
 print("🧪 Mock SQLite Helper loaded for TEST MODE")
@@ -91,12 +92,23 @@ async def set_cell_patron(cell_id, winner_alliance_id):
 # Alliance functions
 async def get_alliance_by_id(alliance_id):
     print(f"🧪 Mock: get_alliance_by_id({alliance_id})")
-    return MOCK_ALLIANCES.get(alliance_id, MOCK_ALLIANCES[1])
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    if not alliance:
+        return None
+    return (alliance['id'], alliance['name'], alliance.get('common_resource', 0))
 
 async def get_all_alliances():
     print("🧪 Mock: get_all_alliances()")
     # Возвращаем (id, name) как ожидает keyboard_constructor
     return [(alliance['id'], alliance['name']) for alliance in MOCK_ALLIANCES.values()]
+
+
+async def get_all_alliances_with_resources():
+    print("🧪 Mock: get_all_alliances_with_resources()")
+    return [
+        (alliance['id'], alliance['name'], alliance.get('common_resource', 0))
+        for alliance in MOCK_ALLIANCES.values()
+    ]
 
 
 async def create_alliance(name, initial_resources=0):
@@ -128,6 +140,7 @@ async def create_alliance(name, initial_resources=0):
     MOCK_ALLIANCES[new_id] = {
         'id': new_id,
         'name': name,
+        'color': random.choice(['red', 'black', 'gray', 'blue', 'purple']),
         'common_resource': initial_resources
     }
     
@@ -363,7 +376,7 @@ async def save_mission(mission_data):
         **mission_data, 
         'id': mission_id,
         'created_date': today,
-        'locked': 0
+        'status': 0
     }
     return mission_id
 
@@ -452,7 +465,25 @@ async def get_localized_text(key, language='ru'):
         'enter_name': 'Введите ваше имя (тест):',
         'invalid_name': 'Неверное имя (тест)',
         'admin_menu': 'Админ меню (тест)',
-        'access_denied': 'Доступ запрещен (тест)'
+        'access_denied': 'Доступ запрещен (тест)',
+        'button_alliance_resources': 'Информация об альянсе (тест)',
+        'alliance_resources_message': 'Ресурсы альянса {alliance_name}: {resources}',
+        'alliance_info_message': '📊 Информация об альянсе {alliance_name}\n\n💎 Ресурсы: {resources}\n👥 Игроков: {player_count}\n🗺️ Территорий: {territory_count}',
+        'alliance_no_alliance': 'У вас пока нет альянса (тест)',
+        'button_admin_adjust_resources': 'Ресурсы альянсов (тест)',
+        'admin_adjust_resources_title': 'Выберите альянс для изменения ресурсов (тест)',
+        'admin_adjust_resource_prompt': 'Введите изменение ресурсов для {alliance_name} (текущее: {current})',
+        'admin_adjust_resource_success': 'Ресурсы изменены на {delta}, теперь {new_value}',
+        'admin_adjust_resource_invalid': 'Введите целое число',
+        'button_admin_stats': 'Статистика (тест)',
+        'button_admin_stats_users': 'Список пользователей (тест)',
+        'button_admin_stats_alliances': 'Список альянсов (тест)',
+        'admin_stats_title': 'Статистика (тест)',
+        'admin_stats_users_title': 'Игроки за месяц (тест)',
+        'admin_stats_alliances_title': 'Альянсы за месяц (тест)',
+        'admin_stats_alliance_users_title': 'Игроки альянса {alliance_name} (тест)',
+        'admin_stats_no_data': 'Нет данных за последний месяц (тест)',
+        'admin_stats_games_label': 'игр'
     }
     
     return mock_texts.get(key, f'[ТЕСТ] {key}')
@@ -485,7 +516,8 @@ async def update_alliance_resources(alliance_id, change):
 
 async def get_alliance_resources(alliance_id):
     print(f"🧪 Mock: get_alliance_resources({alliance_id})")
-    return random.randint(5, 20)
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    return alliance.get('common_resource', 0) if alliance else 0
 
 # Complete function implementations for all sqllite_helper functions
 async def add_warmaster(telegram_id):
@@ -513,28 +545,35 @@ async def get_faction_of_warmaster(user_telegram_id):
 async def get_mission(rules):
     """
     Mock реализация для получения миссии по правилам.
-    Возвращает кортеж формата: (deploy, rules, cell, mission_description, id, locked, created_date)
-    Совместимо с реальной структурой таблицы mission_stack.
+    Возвращает Mission объект совместимо с реальной структурой.
     """
     print(f"🧪 Mock: get_mission({rules})")
     
     # Разблокируем просроченные миссии перед получением
     await unlock_expired_missions()
     
-    # Генерируем тестовые данные в правильном формате
+    # Генерируем тестовые данные
     mission_id = random.randint(1, 100)
-    cell_id = random.randint(1, 50)  # Cell ID для карты
+    cell_id = random.randint(1, 50)
     today = datetime.date.today().isoformat()
     
-    # Формат: (deploy, rules, cell, mission_description, id, locked, created_date)
-    return (
-        f"Mock {rules} Deploy",    # deploy
-        rules,                     # rules
-        cell_id,                   # cell (это mission[2] которое ожидается)
-        f"Тестовая миссия для {rules}",  # mission_description
-        mission_id,               # id
-        0,                        # locked (0 = unlocked, 1 = locked)
-        today                     # created_date
+    # For battlefleet, include map description
+    map_description = None
+    if rules == "battlefleet":
+        map_description = "🗺️ BATTLEFLEET MAP - TEST\n\nCelestial Phenomena:\n  • Test Area: Mock Phenomenon"
+    
+    # Create Mission object
+    return Mission(
+        id=mission_id,
+        deploy=f"Mock {rules} Deploy",
+        rules=rules,
+        cell=cell_id,
+        mission_description=f"Тестовая миссия для {rules}",
+        winner_bonus=None,
+        status=0,
+        created_date=today,
+        map_description=map_description,
+        reward_config=None
     )
 
 async def get_schedule_by_user(user_telegram, date=None):
@@ -544,7 +583,7 @@ async def get_schedule_by_user(user_telegram, date=None):
 async def get_schedule_with_warmasters(user_telegram, date=None):
     """
     Mock реализация для получения расписания миссий на сегодня.
-    Возвращает список записей формата: (schedule_id, rules, nickname)
+    Возвращает список записей формата: (schedule_id, rules, nickname, opponent_telegram_id)
     Генерирует миссии для всех игровых режимов с одним противником.
     Исключает союзников по альянсу.
     """
@@ -586,12 +625,32 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
         schedule_id = 1000 + i  # Уникальный ID для расписания
         schedule_entries.append((
             schedule_id,
-            rules, 
-            opponent['nickname']
+            rules,
+            opponent['nickname'],
+            opponent['telegram_id']
         ))
     
     print(f"🧪 Mock: Сгенерировано {len(schedule_entries)} записей расписания")
     return schedule_entries
+
+
+async def get_user_bookings_for_dates(user_telegram, dates):
+    """
+    Mock реализация для получения бронирований пользователя на указанные даты.
+    
+    Args:
+        user_telegram: User's telegram ID
+        dates: List of date strings in format YYYY-MM-DD
+        
+    Returns:
+        Dictionary mapping date to rule name for dates where user has bookings
+    """
+    print(f"🧪 Mock: get_user_bookings_for_dates({user_telegram}, {dates})")
+    
+    # В mock режиме возвращаем пустой словарь (нет бронирований)
+    # В реальных тестах можно добавить mock данные
+    return {}
+
 
 async def get_settings(telegram_user_id):
     print(f"🧪 Mock: get_settings({telegram_user_id})")
@@ -646,6 +705,22 @@ async def get_warmasters_opponents(against_alliance, rule, date):
         if w.get('alliance') != alliance_id
     ]
 
+async def get_other_rule_opponents(against_alliance, rule, date):
+    print(f"🧪 Mock: get_other_rule_opponents({against_alliance}, {rule}, {date})")
+    alliance_id = against_alliance[0] if isinstance(against_alliance, (list, tuple)) else against_alliance
+    date_key = str(datetime.datetime.strptime(str(date), "%c").date())
+    opponents = []
+    for record in MOCK_SCHEDULES.get(date_key, []):
+        user = await get_user_by_telegram_id(record.get('user_telegram'))
+        if not user:
+            continue
+        if user.get('alliance') == alliance_id:
+            continue
+        if record.get('rules') == rule:
+            continue
+        opponents.append((user.get('nickname'), user.get('registered_as'), record.get('rules')))
+    return opponents
+
 async def get_alliance_of_warmaster(telegram_user_id):
     """
     Mock реализация для получения альянса игрока.
@@ -658,6 +733,13 @@ async def get_alliance_of_warmaster(telegram_user_id):
 
 async def insert_to_schedule(date, rules, user_telegram):
     print(f"🧪 Mock: insert_to_schedule({date}, {rules}, {user_telegram})")
+    date_key = str(getattr(date, "date", lambda: date)())
+    # Сохраняем расписание, чтобы использовать его в тестовых выборках
+    MOCK_SCHEDULES.setdefault(date_key, []).append({
+        'date': date_key,
+        'rules': rules,
+        'user_telegram': str(user_telegram)
+    })
     return True
 
 async def has_route_to_warehouse(start_id, patron):
@@ -675,6 +757,10 @@ async def is_hex_patroned_by(cell_id, participant_telegram):
 
 async def lock_mission(mission_id):
     print(f"🧪 Mock: lock_mission({mission_id})")
+    return True
+
+async def update_mission_status(mission_id, status):
+    print(f"🧪 Mock: update_mission_status({mission_id}, {status})")
     return True
 
 async def set_mission_score_submitted(mission_id):
@@ -712,11 +798,19 @@ async def toggle_notifications(user_telegram_id):
 
 async def increase_common_resource(alliance_id, amount=1):
     print(f"🧪 Mock: increase_common_resource({alliance_id}, {amount})")
-    return True
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    if not alliance:
+        return 0
+    alliance['common_resource'] = alliance.get('common_resource', 0) + amount
+    return alliance['common_resource']
 
 async def decrease_common_resource(alliance_id, amount=1):
     print(f"🧪 Mock: decrease_common_resource({alliance_id}, {amount})")
-    return True
+    alliance = MOCK_ALLIANCES.get(alliance_id)
+    if not alliance:
+        return 0
+    alliance['common_resource'] = max(0, alliance.get('common_resource', 0) - amount)
+    return alliance['common_resource']
 
 async def create_warehouse(cell_id):
     print(f"🧪 Mock: create_warehouse({cell_id})")
@@ -745,12 +839,19 @@ async def get_mission_id_by_battle_id(battle_id):
 
 async def get_mission_details(mission_id):
     print(f"🧪 Mock: get_mission_details({mission_id})")
-    return {
-        'id': mission_id,
-        'name': 'Mock Mission',
-        'description': 'Test mission details',
-        'rules': 'wh40k'
-    }
+    today = datetime.date.today().isoformat()
+    return Mission(
+        id=mission_id,
+        deploy='Mock Deploy',
+        rules='wh40k',
+        cell=None,
+        mission_description='Test mission details',
+        winner_bonus=None,
+        status=0,
+        created_date=today,
+        map_description=None,
+        reward_config=None
+    )
 
 async def destroy_warehouse_by_alliance(alliance_id):
     print(f"🧪 Mock: destroy_warehouse_by_alliance({alliance_id})")
@@ -799,6 +900,25 @@ async def get_alliance_territory_count(alliance_id):
     if alliance_id == 0 or alliance_id is None:
         return 0
     return random.randint(1, 5)  # Mock alliances have some territories
+
+async def get_user_game_counts_last_month(alliance_id: int = None):
+    print(f"🧪 Mock: get_user_game_counts_last_month(alliance_id={alliance_id})")
+    sample_stats = [
+        ('325313837', 'TestUser1', 1, 5),
+        ('123456789', 'TestUser2', 2, 3),
+        ('987654321', 'NoAlliance', 0, 1)
+    ]
+    if alliance_id is not None:
+        sample_stats = [row for row in sample_stats if row[2] == alliance_id]
+    return sample_stats
+
+
+async def get_alliance_game_counts_last_month():
+    print("🧪 Mock: get_alliance_game_counts_last_month()")
+    return [
+        (aid, alliance['name'], random.randint(1, 5))
+        for aid, alliance in MOCK_ALLIANCES.items()
+    ]
 
 async def get_dominant_alliance():
     """Mock: Get the alliance with the most territories (cells) on the map."""
@@ -874,3 +994,60 @@ async def add_battle_result(mission_id, counts1, counts2):
     return True
 
 print("🧪 Mock SQLite Helper fully initialized")
+
+# ==================== Feature Flags Functions ====================
+
+# In-memory feature flags storage for testing
+_feature_flags = {
+    'common_resource': {'enabled': False, 'description': 'Alliance resource mechanics'}
+}
+
+async def is_feature_enabled(flag_name: str) -> bool:
+    """
+    Mock: Check if a feature flag is enabled.
+    
+    Args:
+        flag_name: Name of the feature flag to check
+        
+    Returns:
+        True if feature is enabled, False otherwise.
+        Returns True by default if flag doesn't exist (fail-safe).
+    """
+    print(f"🧪 Mock: is_feature_enabled({flag_name})")
+    flag = _feature_flags.get(flag_name, {})
+    return flag.get('enabled', True)
+
+
+async def toggle_feature_flag(flag_name: str) -> bool:
+    """
+    Mock: Toggle a feature flag between enabled and disabled.
+    
+    Args:
+        flag_name: Name of the feature flag to toggle
+        
+    Returns:
+        New state of the flag (True=enabled, False=disabled)
+    """
+    print(f"🧪 Mock: toggle_feature_flag({flag_name})")
+    if flag_name not in _feature_flags:
+        _feature_flags[flag_name] = {'enabled': True, 'description': flag_name}
+    
+    current_state = _feature_flags[flag_name]['enabled']
+    new_state = not current_state
+    _feature_flags[flag_name]['enabled'] = new_state
+    
+    return new_state
+
+
+async def get_all_feature_flags() -> list:
+    """
+    Mock: Get all feature flags with their current status.
+    
+    Returns:
+        List of tuples: [(flag_name, enabled, description), ...]
+    """
+    print("🧪 Mock: get_all_feature_flags()")
+    return [
+        (flag_name, int(flag['enabled']), flag['description'])
+        for flag_name, flag in _feature_flags.items()
+    ]
