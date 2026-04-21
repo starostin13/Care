@@ -29,7 +29,7 @@ The new implementation uses a CTE and a NOT condition to efficiently filter out 
 WITH current_user_alliance AS (
     SELECT alliance FROM warmasters WHERE telegram_id=?
 )
-SELECT schedule.id, schedule.rules, warmasters.nickname 
+SELECT schedule.id, schedule.rules, warmasters.nickname, warmasters.telegram_id
 FROM schedule 
 JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id 
 CROSS JOIN current_user_alliance
@@ -46,6 +46,8 @@ AND (
     )
 )
 ```
+
+**Note:** After merging with main branch, the query now returns 4 fields including `telegram_id` as the 4th field: `(schedule_id, rules, nickname, telegram_id)`
 
 #### Logic Explanation
 The filter excludes a warmaster ONLY when ALL of the following conditions are true:
