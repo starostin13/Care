@@ -585,6 +585,7 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
     Mock реализация для получения расписания миссий на сегодня.
     Возвращает список записей формата: (schedule_id, rules, nickname, opponent_telegram_id)
     Генерирует миссии для всех игровых режимов с одним противником.
+    Исключает союзников по альянсу.
     """
     print(f"🧪 Mock: get_schedule_with_warmasters({user_telegram}, {date})")
     
@@ -593,21 +594,27 @@ async def get_schedule_with_warmasters(user_telegram, date=None):
     if not current_user:
         return []
     
-    # Находим пользователя из другого альянса (если текущий в альянсе)
-    current_alliance = current_user.get('alliance')
+    # Получаем альянс текущего пользователя
+    current_user_alliance = current_user.get('alliance')
+    
+    # Находим другого пользователя для противостояния (не союзника)
     opponent = None
     for user in MOCK_WARMASTERS.values():
-        if current_alliance and current_alliance != 0:
-            if user.get('alliance') != current_alliance:
-                opponent = user
-                break
-        else:
-            if user['telegram_id'] != str(user_telegram):
+        if user['telegram_id'] != str(user_telegram):
+            # Исключаем союзников по альянсу
+            user_alliance = user.get('alliance')
+            # Показываем только если:
+            # - У противника нет альянса (None или 0)
+            # - У текущего пользователя нет альянса (None или 0)
+            # - Альянсы разные
+            if (not user_alliance or user_alliance == 0 or
+                not current_user_alliance or current_user_alliance == 0 or
+                user_alliance != current_user_alliance):
                 opponent = user
                 break
     
     if not opponent:
-        print("🧪 Mock: Нет доступных противников для расписания")
+        print("🧪 Mock: Нет доступных противников для расписания (исключены союзники)")
         return []
     
     # Генерируем расписание для всех игровых режимов
