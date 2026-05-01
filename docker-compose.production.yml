@@ -22,7 +22,7 @@ services:
     networks:
       - carebot-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5555/health')"]
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:5555/health', timeout=10)"]
       interval: 30s
       timeout: 10s
       retries: 3

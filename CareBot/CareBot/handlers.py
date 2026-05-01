@@ -15,6 +15,7 @@ import settings_helper
 import schedule_helper
 import mission_message_builder
 import feature_flags_helper
+import map_exporter
 # Автоматическое переключение на mock версию в тестовом режиме
 if config.TEST_MODE:
     import mock_sqlite_helper as sqllite_helper
@@ -23,7 +24,7 @@ else:
     import sqllite_helper
     print("✅ Handlers using REAL SQLite helper")
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import InputFile, InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
 from datetime import datetime
 import re
 import tracemalloc
@@ -63,6 +64,46 @@ async def contact_callback(update, bot):
     phone = contact.phone_number
     userid = contact.user_id
     await warmaster_helper.register_warmaster(userid, phone)
+
+
+async def export_realistic_map(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Export full planet map as PNG with terrain and alliance ownership overlays."""
+    if not update.effective_user or not update.message:
+        return MAIN_MENU
+
+    user_id = update.effective_user.id
+    if not await sqllite_helper.is_user_admin(user_id):
+        await update.message.reply_text("Команда /map_export доступна только администраторам.")
+        return MAIN_MENU
+
+    status_message = await update.message.reply_text("Формирую реалистичную карту планеты...")
+    try:
+        map_cells_raw = await sqllite_helper.get_map_cells_for_export()
+        map_cells = [
+            (int(row[0]), row[1], row[2], int(row[3]))
+            for row in map_cells_raw
+        ]
+        if not map_cells:
+            await status_message.edit_text("Карта пуста, экспортировать нечего.")
+            return MAIN_MENU
+
+        alliances_raw = await sqllite_helper.get_alliances_for_map_export()
+        alliances = [
+            (int(row[0]), row[1], row[2])
+            for row in alliances_raw
+        ]
+        png_bytes = map_exporter.render_realistic_map_png(map_cells, alliances)
+
+        await update.message.reply_photo(
+            photo=InputFile(png_bytes, filename="carebot_realistic_map.png"),
+            caption="Реалистичная карта: местность, склады и контроль альянсов.",
+        )
+        await status_message.delete()
+    except Exception as e:
+        logger.error("Failed to export realistic map: %s", e, exc_info=True)
+        await status_message.edit_text("Не удалось экспортировать карту. Проверьте логи приложения.")
+
+    return MAIN_MENU
 
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2492,7 +2533,19 @@ def start_bot():
         return False
     print("✅ Database migrations completed successfully.")
 
-    bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
+    bot = (
+        ApplicationBuilder()
+        .token(config.crusade_care_bot_telegram_token)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .get_updates_connect_timeout(30)
+        .get_updates_read_timeout(30)
+        .get_updates_write_timeout(30)
+        .get_updates_pool_timeout(30)
+        .build()
+    )
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", hello),
@@ -2602,6 +2655,7 @@ def start_bot():
     )
     bot.add_handler(conv_handler)
     bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    bot.add_handler(CommandHandler("map_export", export_realistic_map))
     bot.add_handler(CommandHandler("setname", input_name))
     bot.add_handler(CommandHandler("regme", contact))
     bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))

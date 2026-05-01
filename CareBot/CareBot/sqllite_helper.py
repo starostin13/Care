@@ -1174,6 +1174,47 @@ async def get_all_alliances_with_resources():
             return await cursor.fetchall()
 
 
+async def get_map_cells_for_export():
+    """Get full map dataset for rendering export.
+
+    Returns:
+        List of tuples: [(id, state, patron, has_warehouse), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, state, patron, COALESCE(has_warehouse, 0)
+            FROM map
+            ORDER BY id
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_alliances_for_map_export():
+    """Get alliances for map export legend and ownership coloring.
+
+    Returns:
+        List of tuples: [(id, name, color), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("PRAGMA table_info(alliances)") as cursor:
+            columns = [row[1] for row in await cursor.fetchall()]
+
+        if "color" in columns:
+            async with db.execute('''
+                SELECT id, name, color
+                FROM alliances
+                ORDER BY id
+            ''') as cursor:
+                return await cursor.fetchall()
+
+        async with db.execute('''
+            SELECT id, name, NULL as color
+            FROM alliances
+            ORDER BY id
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
 async def get_alliance_player_count(alliance_id):
     """Get the number of players in an alliance.
     

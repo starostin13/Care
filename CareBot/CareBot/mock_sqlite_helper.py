@@ -49,6 +49,15 @@ MOCK_WARMASTERS = {
 MOCK_MISSIONS = {}
 MOCK_BATTLES = {}
 MOCK_SCHEDULES = {}
+MOCK_MAP_CELLS = [
+    (1, 'Город', 1, 1),
+    (2, 'Леса', 1, 0),
+    (3, 'Пустыня', 2, 0),
+    (4, 'Завод', 2, 1),
+    (5, 'Тундра/снег', 3, 0),
+    (6, 'Отравленные земли', 3, 0),
+    (7, 'Разрушенный город', 4, 0),
+]
 MOCK_ALLIANCES = {
     1: {'id': 1, 'name': 'Crimson Legion', 'color': 'red', 'common_resource': 0},
     2: {'id': 2, 'name': 'Shadow Pact', 'color': 'black', 'common_resource': 0},
@@ -107,6 +116,21 @@ async def get_all_alliances_with_resources():
     print("🧪 Mock: get_all_alliances_with_resources()")
     return [
         (alliance['id'], alliance['name'], alliance.get('common_resource', 0))
+        for alliance in MOCK_ALLIANCES.values()
+    ]
+
+
+async def get_map_cells_for_export():
+    """Get map cells for export (mock version)."""
+    print("🧪 Mock: get_map_cells_for_export()")
+    return list(MOCK_MAP_CELLS)
+
+
+async def get_alliances_for_map_export():
+    """Get alliances for export (mock version)."""
+    print("🧪 Mock: get_alliances_for_map_export()")
+    return [
+        (alliance['id'], alliance['name'], alliance.get('color'))
         for alliance in MOCK_ALLIANCES.values()
     ]
 
