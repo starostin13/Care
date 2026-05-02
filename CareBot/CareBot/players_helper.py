@@ -16,14 +16,16 @@ async def get_opponents(forUserId: int, callback_data):
     rule = callback_data_arr[1].split(':')[1]
     weekday = callback_data_arr[0]
 
-    if config.TEST_MODE:
-        # Hard-bind to mock helper to avoid any accidental real DB usage in test runs
-        import mock_sqlite_helper as mock_helper
-        alliance = await mock_helper.get_alliance_of_warmaster(forUserId)
-        return await mock_helper.get_warmasters_opponents(alliance, rule=rule, date=weekday)
-
     alliance = await sqllite_helper.get_alliance_of_warmaster(forUserId)
     return await sqllite_helper.get_warmasters_opponents(alliance, rule=rule, date=weekday)
+
+async def get_opponents_other_formats(forUserId: int, callback_data):
+    callback_data_arr = callback_data.split(',')
+    rule = callback_data_arr[1].split(':')[1]
+    weekday = callback_data_arr[0]
+
+    alliance = await sqllite_helper.get_alliance_of_warmaster(forUserId)
+    return await sqllite_helper.get_other_rule_opponents(alliance, rule=rule, date=weekday)
 
 async def set_name(user_telegram_id, nickname):
     await sqllite_helper.set_nickname(user_telegram_id, nickname)

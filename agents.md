@@ -215,10 +215,174 @@ ALTER TABLE table_name ADD COLUMN new_column TEXT DEFAULT 'value';
 
 ## Деплой и инфраструктура
 
-### Docker деплой
-- Приложение упаковывается в Docker контейнер
-- База данных SQLite монтируется как volume для персистентности
-- Используйте `scripts/deploy.ps1` для автоматического деплоя
+### 🐳 WSL2 + Docker деплой (ПРИОРИТЕТНЫЙ СПОСОБ)
+
+С января 2026 года **единственный приоритетный** способ деплоя — использование WSL2 + Docker на локальной машине.
+**Не копировать код на сервер для сборки образа**: сборка и тестирование выполняются локально в WSL2, на сервер отправляется только готовый образ и команды деплоя.
+
+#### Преимущества WSL2 подхода
+
+✅ **Прозрачность образа**: Точно видно какие файлы попали в Docker образ  
+✅ **Быстрая сборка**: Локальный кеш слоев Docker  
+✅ **Независимость**: Не требуется Docker на production для сборки  
+✅ **Тестирование**: Можно запустить тот же образ локально перед деплоем  
+✅ **Контроль версий**: Легко управлять тегами и версиями образов  
+✅ **Безопасность**: Production safety check перед сборкой образа
+
+#### Основной workflow деплоя
+
+```powershell
+# Полный цикл (build → inspect → test → deploy)
+.\scripts\wsl2-deploy.ps1 full
+
+# Или по шагам:
+.\scripts\wsl2-deploy.ps1 build          # Сборка образа в WSL2
+.\scripts\wsl2-deploy.ps1 inspect        # Проверка содержимого образа
+.\scripts\wsl2-deploy.ps1 test           # Тестирование локально
+.\scripts\wsl2-deploy.ps1 deploy         # Деплой на production
+```
+
+#### Ключевые команды wsl2-deploy.ps1
+
+**Сборка и тестирование:**
+- `build` - сборка Docker образа в WSL2
+- `inspect` - просмотр содержимого образа (что попало в образ)
+- `test` - запуск образа локально на порту 5556
+- `stop-test` - остановка локального тестового контейнера
+
+**Деплой:**
+- `deploy` - деплой на production
+- `full` - полный цикл (build → test → deploy)
+
+**Управление production:**
+- `status` - статус production сервиса
+- `logs` - логи production
+- `restart` - перезапуск production
+- `backup` - создание бэкапа
+
+**Миграции:**
+- `migrations` - синхронизация файлов миграций
+- `apply-migrations` - применение миграций
+- `migration-status` - статус миграций
+
+**Утилиты:**
+- `images` - список Docker образов
+- `cleanup` - очистка старых образов
+- `check-wsl` - проверка WSL2 и Docker
+- `safety-check` - production safety проверка
+
+#### Инспекция образа
+
+**Проверка что попало в образ:**
+```powershell
+.\scripts\wsl2-deploy.ps1 inspect
+```
+
+Показывает:
+- Список всех файлов в образе
+- Размер каждого слоя
+- Переменные окружения
+- Exposed порты
+- Команду запуска
+
+**Проверка конкретных файлов:**
+```bash
+# В WSL2
+wsl -d Ubuntu-22.04
+cd /mnt/c/Users/staro/Projects/Care
+
+# Проверить файлы
+sudo docker run --rm carebot:latest ls -la /app/CareBot/
+
+# Проверить конкретный файл
+sudo docker run --rm carebot:latest cat /app/CareBot/mission_helper.py | head -20
+```
+
+#### Типичный workflow для агентов
+
+1. **Разработка и тестирование локально:**
+   ```powershell
+   # Тестируем без Docker
+   .\scripts\test-mode.ps1 start
+   ```
+
+2. **Production safety check:**
+   ```powershell
+   python scripts\check-production-safety.py
+   ```
+
+3. **Сборка образа:**
+   ```powershell
+   .\scripts\wsl2-deploy.ps1 build
+   ```
+
+4. **Проверка образа:**
+   ```powershell
+   .\scripts\wsl2-deploy.ps1 inspect
+   ```
+
+5. **Тестирование образа локально (опционально):**
+   ```powershell
+   .\scripts\wsl2-deploy.ps1 test
+   # Проверить http://localhost:5556/health
+   ```
+
+6. **Деплой на production:**
+   ```powershell
+   .\scripts\wsl2-deploy.ps1 deploy
+   ```
+
+7. **Проверка production:**
+   ```powershell
+   .\scripts\wsl2-deploy.ps1 status
+   ```
+
+#### Что попадает в образ, а что нет
+
+**✅ Попадает в образ:**
+- Python runtime (3.11-slim)
+- Все зависимости из requirements.txt
+- Production код (handlers, helpers, config)
+- Localization файлы
+- Entrypoint скрипты
+
+**❌ НЕ попадает в образ:**
+- `mock_sqlite_helper.py` (тестовые файлы)
+- `test_*.py` (тесты)
+- `.git/` (репозиторий)
+- `scripts/` (deployment скрипты)
+- База данных (монтируется через volume)
+- Миграции (монтируются через volume)
+
+#### Отладка проблем
+
+**Файл отсутствует в образе:**
+```bash
+# Проверьте .dockerignore
+cat .dockerignore
+
+# Проверьте образ
+wsl -d Ubuntu-22.04 -e bash -c "sudo docker run --rm carebot:latest ls -la /app/CareBot/"
+```
+
+**Образ не запускается:**
+```powershell
+# Проверьте логи
+.\scripts\wsl2-deploy.ps1 logs
+
+# Проверьте health
+curl http://192.168.1.125:5555/health
+```
+
+**Полная документация:** См. [WSL2_DEPLOYMENT.md](WSL2_DEPLOYMENT.md)
+
+### Legacy Docker деплой (УСТАРЕЛ, ТОЛЬКО ДЛЯ ЭКСТРЕННЫХ СЛУЧАЕВ)
+
+- ⚠️ **Устаревший способ**: `scripts/update-production.ps1`
+- Использовать **только если WSL2 недоступен**. Не копируйте код на сервер для сборки образа — это больше не основной путь.
+- Собирает образ на production сервере
+- Менее прозрачен и медленнее
+- **Рекомендуется мигрировать на WSL2 деплой**
 
 ### Система бэкапов (ВАЖНО ДЛЯ АГЕНТОВ!)
 - **Расположение бэкапов**: `/home/ubuntu/carebot-backup-YYYYMMDD-HHMMSS/` на сервере ubuntu@192.168.1.125

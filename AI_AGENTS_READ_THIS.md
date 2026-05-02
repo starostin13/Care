@@ -1,33 +1,141 @@
-# ВАЖНО ДЛЯ AI АГЕНТОВ! 
+# ВАЖНО ДЛЯ AI АГЕНТОВ!
 
-## ⚠️ НЕ ПЕРЕИЗОБРЕТАЙТЕ КОЛЕСО!
+## 🎯 ОБНОВЛЕНИЕ: WSL2 Deployment (January 2026)
 
-Если вас попросили развернуть CareBot, то **ЕСТЬ ГОТОВОЕ ПРОВЕРЕННОЕ РЕШЕНИЕ**.
+### Новый рекомендуемый способ деплоя
 
-### Что использовать
+**С января 2026 года используется WSL2 + Docker на локальной машине**
+**WSL2 локальный Docker — приоритетный путь. Не копировать код на сервер для сборки образа.**
 
-1. **📖 Полная документация:** `DEPLOYMENT_SUCCESS.md`
-2. **🚀 Готовый скрипт:** `scripts/deploy-proven.ps1`
+#### Основные ссылки (ЧИТАТЬ В ПОРЯДКЕ ПРИОРИТЕТА)
 
-### Рабочая конфигурация (НЕ ИЗМЕНЯТЬ!)
+1. **[agents.md](agents.md)** - ГЛАВНЫЙ ФАЙЛ для агентов
+   - Секция "WSL2 + Docker деплой" - основной workflow
+   - Секция "Миграции" - работа с базой данных
+   - Секция "Production безопасность" - КРИТИЧЕСКИ ВАЖНО!
 
-- `Dockerfile.carebot` - основной образ CareBot
-- `Dockerfile.sqlite-web` - веб интерфейс базы данных  
-- `docker-compose.simple.yml` - проверенная конфигурация
-- `sqlite_web_interface.py` - веб интерфейс
+2. **[WSL2_QUICKSTART.md](WSL2_QUICKSTART.md)** - быстрый старт
+   - Команды для копипасты
+   - Чеклист перед деплоем
+   - Troubleshooting
 
-### Быстрый деплой
+3. **[WSL2_EXAMPLES.md](WSL2_EXAMPLES.md)** - практические примеры
+   - 22+ сценария использования
+   - Шпаргалка команд
+
+4. **[WSL2_MIGRATION_SUMMARY.md](WSL2_MIGRATION_SUMMARY.md)** - обзор изменений
+   - Что изменилось vs legacy
+   - Типичные задачи агентов
+   - Метрики и улучшения
+
+#### Быстрые команды
 
 ```powershell
-# Из корневой папки проекта
-.\scripts\deploy-proven.ps1
+# Полный цикл деплоя (РЕКОМЕНДУЕТСЯ)
+.\scripts\wsl2-deploy.ps1 full
+
+# Быстрый деплой (для bug fixes)
+.\scripts\wsl2-deploy.ps1 build
+.\scripts\wsl2-deploy.ps1 deploy -Force
+
+# Проверка что попало в образ (ВАЖНО!)
+.\scripts\wsl2-deploy.ps1 inspect
+
+# Локальное тестирование
+.\scripts\wsl2-deploy.ps1 test
+
+# Статус production
+.\scripts\wsl2-deploy.ps1 status
 ```
 
-### Проверка статуса
+### Ключевые преимущества WSL2
+
+✅ **Прозрачность** - точно видно что попало в Docker образ  
+✅ **Скорость** - локальный кеш Docker (3-4x быстрее)  
+✅ **Тестирование** - можно запустить образ локально перед деплоем  
+✅ **Контроль** - полный контроль над процессом сборки  
+✅ **Безопасность** - production safety check перед сборкой
+
+### Основной workflow для агентов
 
 ```powershell
-.\scripts\deploy-proven.ps1 status
+# 1. Разработка в test mode (БЕЗ Docker)
+.\scripts\test-mode.ps1 start
+
+# 2. Production safety check (ОБЯЗАТЕЛЬНО!)
+python scripts\check-production-safety.py
+
+# 3. Сборка образа в WSL2
+.\scripts\wsl2-deploy.ps1 build
+
+# 4. Проверка содержимого образа
+.\scripts\wsl2-deploy.ps1 inspect
+
+# 5. Локальное тестирование (опционально)
+.\scripts\wsl2-deploy.ps1 test
+
+# 6. Деплой на production
+.\scripts\wsl2-deploy.ps1 deploy
+
+# 7. Проверка production
+.\scripts\wsl2-deploy.ps1 status
 ```
+
+### 🛡️ КРИТИЧЕСКИ ВАЖНО: Production Safety
+
+**ВСЕГДА** запускайте проверку безопасности перед деплоем:
+
+```powershell
+python scripts\check-production-safety.py
+```
+
+Проверяет:
+- ❌ Нет тестовых файлов (`mock_sqlite_helper.py`, `test_*.py`)
+- ❌ `CAREBOT_TEST_MODE` не установлен
+- ✅ Все production файлы на месте
+
+**WSL2 деплой автоматически запускает эту проверку!**
+
+### Типичные задачи
+
+#### Исправить баг
+```powershell
+.\scripts\wsl2-deploy.ps1 build
+.\scripts\wsl2-deploy.ps1 deploy -Force
+```
+
+#### Новая фича
+```powershell
+.\scripts\wsl2-deploy.ps1 full  # Полный цикл с тестированием
+```
+
+#### Обновить миграции
+```powershell
+.\scripts\wsl2-deploy.ps1 migrations
+.\scripts\wsl2-deploy.ps1 apply-migrations
+```
+
+#### Проверить образ
+```powershell
+.\scripts\wsl2-deploy.ps1 inspect
+```
+
+---
+
+## ⚠️ Legacy Deployment (УСТАРЕЛ, только если WSL2 недоступен)
+
+### Если WSL2 недоступен
+
+- **📖 Документация:** [DEPLOYMENT_SUCCESS.md](DEPLOYMENT_SUCCESS.md)
+- **🔧 Скрипт:** `scripts\update-production.ps1`
+
+```powershell
+# Legacy способ (собирает образ на production сервере)
+.\scripts\update-production.ps1 update
+```
+
+**Рекомендуется мигрировать на WSL2!**
+**Не копировать код на сервер для сборки — это больше не основной процесс.**
 
 ### 🛡️ РАБОЧИЕ КОМАНДЫ БЭКАПА
 
