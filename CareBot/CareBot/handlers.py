@@ -66,7 +66,8 @@ async def contact_callback(update, bot):
 
 
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # update.callback_query.data 'mission_sch_{schedule_id}_{opponent_telegram_id}'
+    # update.callback_query.data format: 'mission_sch_{schedule_id}_{warmaster_id}'
+    # Uses warmaster_id instead of telegram_id for security
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
     
@@ -78,17 +79,28 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return MISSIONS
     
     try:
-        # Parse callback data: mission_sch_{schedule_id}_{opponent_telegram_id}
+        # Parse callback data: mission_sch_{schedule_id}_{warmaster_id}
         data_parts = query.data.replace("mission_sch_", "").split("_")
-        mission_number = int(data_parts[0])
-        defender_id = str(data_parts[1])  # Opponent telegram_id from callback
+        if len(data_parts) < 2:
+            raise ValueError(f"Invalid callback data format: {query.data}")
+        
+        schedule_id = int(data_parts[0])
+        warmaster_id = int(data_parts[1])
+        
+        # Get defender's telegram_id from warmaster_id (security: use internal DB ID)
+        defender_id = await sqllite_helper.get_telegram_id_by_warmaster_id(warmaster_id)
+        
+        if not defender_id:
+            raise ValueError(f"Failed to find telegram_id for warmaster ID: {warmaster_id}")
+            
     except (ValueError, AttributeError, IndexError) as e:
         logger.error(f"Failed to parse mission callback data '{query.data}': {e}")
         error_msg = await localization.get_text_for_user(update.effective_user.id, "error_mission_info_failed")
         await query.edit_message_text(error_msg)
         return MISSIONS
     
-    rules = await schedule_helper.get_mission_rules(mission_number)
+    # Get mission rules for this schedule entry
+    rules = await schedule_helper.get_mission_rules(schedule_id)
     
     # Определяем атакующего (кто нажал кнопку) и защищающегося (из callback_data)
     attacker_id = str(update.effective_user.id)
