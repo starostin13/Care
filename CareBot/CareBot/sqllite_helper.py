@@ -46,6 +46,34 @@ async def add_battle(mission_id):
             return await cursor.fetchone()
 
 
+async def add_battle_with_id(mission_id, battle_id):
+    """Create a new battle record with a specific battle_id.
+
+    Args:
+        mission_id: The mission ID
+        battle_id: The explicit battle ID to use
+
+    Returns:
+        Tuple with battle ID
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            INSERT INTO battles(id, mission_id) VALUES(?, ?)
+        ''', (battle_id, mission_id))
+        await db.commit()
+        return (battle_id,)
+
+
+async def battle_exists(battle_id: int) -> bool:
+    """Check whether a battle with the specified ID already exists."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 1 FROM battles WHERE id = ? LIMIT 1
+        ''', (battle_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row is not None
+
+
 async def get_mission_id_for_battle(battle_id):
     """Get the mission_id for a battle record.
     
@@ -1215,6 +1243,21 @@ async def get_alliances_for_map_export():
             return await cursor.fetchall()
 
 
+async def get_terrain_colors():
+    """Get terrain type colors from DB for map export customization.
+
+    Returns:
+        Dict mapping terrain name -> hex color string, or {} on error.
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            async with db.execute("SELECT name, color FROM terrain_colors") as cursor:
+                rows = await cursor.fetchall()
+                return {row[0]: row[1] for row in rows}
+        except Exception:
+            return {}
+
+
 async def get_alliance_player_count(alliance_id):
     """Get the number of players in an alliance.
     
@@ -2010,3 +2053,187 @@ async def get_all_feature_flags() -> list:
             ORDER BY flag_name
         ''') as cursor:
             return await cursor.fetchall()
+
+
+# ============================================================================
+# Web UI Helpers
+# ============================================================================
+
+async def get_active_battles_for_web():
+    """Get all active missions (status=1) with battle and participant info for web UI.
+
+    Returns:
+        List of dicts with keys: mission_id, deploy, rules, cell, description,
+        created_date, battle_id, p1_id, p1_nick, p1_alliance, p2_id, p2_nick, p2_alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT ms.id, ms.deploy, ms.rules, ms.cell, ms.mission_description, ms.created_date,
+                   b.id as battle_id,
+                   ba1.attender_id as p1_id, w1.nickname as p1_nick, a1.name as p1_alliance,
+                   ba2.attender_id as p2_id, w2.nickname as p2_nick, a2.name as p2_alliance
+            FROM mission_stack ms
+            JOIN battles b ON b.mission_id = ms.id
+            JOIN (
+                SELECT battle_id, attender_id, MIN(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba1 ON ba1.battle_id = b.id
+            LEFT JOIN warmasters w1 ON w1.telegram_id = ba1.attender_id
+            LEFT JOIN alliances a1 ON a1.id = w1.alliance
+            JOIN (
+                SELECT battle_id, attender_id, MAX(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba2 ON ba2.battle_id = b.id AND ba2.attender_id != ba1.attender_id
+            LEFT JOIN warmasters w2 ON w2.telegram_id = ba2.attender_id
+            LEFT JOIN alliances a2 ON a2.id = w2.alliance
+            WHERE ms.status = 1
+            ORDER BY ms.created_date DESC
+        ''') as cursor:
+            rows = await cursor.fetchall()
+
+    result = []
+    for row in rows:
+        result.append({
+            'mission_id': row[0],
+            'deploy': row[1],
+            'rules': row[2],
+            'cell': row[3],
+            'description': row[4],
+            'created_date': row[5],
+            'battle_id': row[6],
+            'p1_id': row[7],
+            'p1_nick': row[8] or str(row[7]),
+            'p1_alliance': row[9] or '—',
+            'p2_id': row[10],
+            'p2_nick': row[11] or str(row[10]),
+            'p2_alliance': row[12] or '—',
+        })
+    return result
+
+
+async def get_pending_battles_for_web():
+    """Get all missions (status=2) with pending results and participant info for web UI.
+
+    Returns:
+        List of dicts with keys: mission_id, deploy, rules, cell, description,
+        created_date, battle_id, pending_id, submitter_id, fst_score, snd_score,
+        p1_id, p1_nick, p1_alliance, p2_id, p2_nick, p2_alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT ms.id, ms.deploy, ms.rules, ms.cell, ms.mission_description, ms.created_date,
+                   b.id as battle_id,
+                   pr.id as pending_id, pr.submitter_id, pr.fstplayer_score, pr.sndplayer_score,
+                   ba1.attender_id as p1_id, w1.nickname as p1_nick, a1.name as p1_alliance,
+                   ba2.attender_id as p2_id, w2.nickname as p2_nick, a2.name as p2_alliance
+            FROM mission_stack ms
+            JOIN battles b ON b.mission_id = ms.id
+            JOIN pending_results pr ON pr.battle_id = b.id
+            JOIN (
+                SELECT battle_id, attender_id, MIN(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba1 ON ba1.battle_id = b.id
+            LEFT JOIN warmasters w1 ON w1.telegram_id = ba1.attender_id
+            LEFT JOIN alliances a1 ON a1.id = w1.alliance
+            JOIN (
+                SELECT battle_id, attender_id, MAX(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba2 ON ba2.battle_id = b.id AND ba2.attender_id != ba1.attender_id
+            LEFT JOIN warmasters w2 ON w2.telegram_id = ba2.attender_id
+            LEFT JOIN alliances a2 ON a2.id = w2.alliance
+            WHERE ms.status = 2
+            ORDER BY ms.created_date DESC
+        ''') as cursor:
+            rows = await cursor.fetchall()
+
+    result = []
+    for row in rows:
+        result.append({
+            'mission_id': row[0],
+            'deploy': row[1],
+            'rules': row[2],
+            'cell': row[3],
+            'description': row[4],
+            'created_date': row[5],
+            'battle_id': row[6],
+            'pending_id': row[7],
+            'submitter_id': row[8],
+            'fst_score': row[9],
+            'snd_score': row[10],
+            'p1_id': row[11],
+            'p1_nick': row[12] or str(row[11]),
+            'p1_alliance': row[13] or '—',
+            'p2_id': row[14],
+            'p2_nick': row[15] or str(row[14]),
+            'p2_alliance': row[16] or '—',
+        })
+    return result
+
+
+async def get_completed_battles_for_web():
+    """Get completed missions (status=3) with final scores and participant info for web UI.
+
+    Returns:
+        List of dicts with keys: mission_id, deploy, rules, cell, created_date,
+        battle_id, p1_score, p2_score, p1_id, p1_nick, p1_alliance, p2_id, p2_nick, p2_alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT ms.id, ms.deploy, ms.rules, ms.cell, ms.mission_description, ms.created_date,
+                   b.id as battle_id, b.fstplayer as p1_score, b.sndplayer as p2_score,
+                   ba1.attender_id as p1_id, w1.nickname as p1_nick, a1.name as p1_alliance,
+                   ba2.attender_id as p2_id, w2.nickname as p2_nick, a2.name as p2_alliance
+            FROM mission_stack ms
+            JOIN battles b ON b.mission_id = ms.id
+            JOIN (
+                SELECT battle_id, attender_id, MIN(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba1 ON ba1.battle_id = b.id
+            LEFT JOIN warmasters w1 ON w1.telegram_id = ba1.attender_id
+            LEFT JOIN alliances a1 ON a1.id = w1.alliance
+            JOIN (
+                SELECT battle_id, attender_id, MAX(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba2 ON ba2.battle_id = b.id AND ba2.attender_id != ba1.attender_id
+            LEFT JOIN warmasters w2 ON w2.telegram_id = ba2.attender_id
+            LEFT JOIN alliances a2 ON a2.id = w2.alliance
+            WHERE ms.status = 3
+            ORDER BY ms.created_date DESC
+        ''') as cursor:
+            rows = await cursor.fetchall()
+
+    result = []
+    for row in rows:
+        p1_score = row[7]
+        p2_score = row[8]
+        winner_nick = None
+        if p1_score is not None and p2_score is not None:
+            if p1_score > p2_score:
+                winner_nick = row[10] or str(row[9])
+            elif p2_score > p1_score:
+                winner_nick = row[13] or str(row[12])
+        result.append({
+            'mission_id': row[0],
+            'deploy': row[1],
+            'rules': row[2],
+            'cell': row[3],
+            'description': row[4],
+            'created_date': row[5],
+            'battle_id': row[6],
+            'p1_score': p1_score,
+            'p2_score': p2_score,
+            'p1_id': row[9],
+            'p1_nick': row[10] or str(row[9]),
+            'p1_alliance': row[11] or '—',
+            'p2_id': row[12],
+            'p2_nick': row[13] or str(row[12]),
+            'p2_alliance': row[14] or '—',
+            'winner_nick': winner_nick,
+        })
+    return result

@@ -135,6 +135,8 @@ function Sync-Files {
     
     $filesToSync = @(
         "CareBot/CareBot/handlers.py",
+        "CareBot/CareBot/views.py",
+        "CareBot/CareBot/map_export_service.py",
         "CareBot/CareBot/warmaster_helper.py", 
         "CareBot/CareBot/settings_helper.py",
         "CareBot/CareBot/schedule_helper.py",
@@ -154,6 +156,7 @@ function Sync-Files {
         "CareBot/CareBot/notification_service.py",
         "CareBot/CareBot/migrate_db.py",
         "CareBot/CareBot/config.py",
+        "CareBot/CareBot/templates/battles.html",
         "CareBot/run_hybrid.py",
         "CareBot/requirements.txt",
         "Dockerfile",
@@ -383,7 +386,7 @@ function Sync-Migrations {
 function Apply-Migrations {
     Write-Info "Applying migrations in production..."
     
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH && docker exec carebot_production python /app/CareBot/migrate_db.py"
+    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/CareBot/migrate_db.py"
     
     Write-Success "Migrations applied"
 }
@@ -392,7 +395,7 @@ function Apply-Migrations {
 function Check-MigrationStatus {
     Write-Info "Checking migration status..."
     
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH && docker exec carebot_production python /app/CareBot/migrate_db.py --status"
+    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/CareBot/migrate_db.py --status"
 }
 
 # Create backup

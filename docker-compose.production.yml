@@ -18,6 +18,9 @@ services:
       - SERVER_PORT=5555
       - DATABASE_PATH=/app/data/game_database.db
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - MAP_EXPORT_API_TOKEN=${MAP_EXPORT_API_TOKEN}
+    extra_hosts:
+      - "api.telegram.org:149.154.167.51"
     restart: unless-stopped
     networks:
       - carebot-network

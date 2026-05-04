@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" type="text/css" href="/static/content/bootstrap.min.css" />
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            background-color: #151515;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 18px;
+            min-height: 100vh;
+        }
+
+        /* ── Navbar ── */
+        .topbar {
+            background: #0e0e0e;
+            border-bottom: 3px solid #8b0000;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 66px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .topbar-brand {
+            color: #cc0000;
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-decoration: none;
+        }
+        .topbar-links { display: flex; gap: 24px; }
+        .topbar-links a {
+            color: #999;
+            text-decoration: none;
+            font-size: 1.08rem;
+            padding: 4px 0;
+            border-bottom: 2px solid transparent;
+            transition: color .15s, border-color .15s;
+        }
+        .topbar-links a:hover { color: #fff; border-color: #cc0000; }
+
+        /* ── Layout ── */
+        .page { max-width: 1760px; margin: 0 auto; padding: 36px 28px 72px; }
+
+        .page-title {
+            color: #cc0000;
+            font-size: 2.6rem;
+            font-weight: 700;
+            border-bottom: 2px solid #333;
+            padding-bottom: 16px;
+            margin-bottom: 34px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 36px 0 16px;
+        }
+        .section-title {
+            color: #e0a000;
+            font-size: 1.7rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 34px;
+            height: 34px;
+            padding: 0 8px;
+            border-radius: 17px;
+            font-size: 1rem;
+            font-weight: 700;
+            background: #e0a000;
+            color: #111;
+        }
+        .badge.red { background: #cc0000; color: #fff; }
+
+        /* ── Cards grid ── */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(540px, 1fr));
+            gap: 22px;
+        }
+
+        .battle-card {
+            background: #1e1e1e;
+            border: 1px solid #2e2e2e;
+            border-radius: 10px;
+            padding: 26px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            transition: border-color .2s;
+        }
+        .battle-card:hover { border-color: #444; }
+        .battle-card.card-pending { border-left: 4px solid #e0a000; }
+        .battle-card.card-active  { border-left: 4px solid #8b0000; }
+        .battle-card.card-applying { opacity: 0.5; pointer-events: none; }
+
+        /* ── Card header ── */
+        .card-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .card-mission {
+            font-size: 0.95rem;
+            color: #666;
+        }
+        .card-deploy {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+        .card-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .tag {
+            display: inline-block;
+            background: #252525;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.95rem;
+            color: #bbb;
+        }
+
+        /* ── Players row ── */
+        .players-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .player-box {
+            flex: 1;
+            background: #252525;
+            border-radius: 8px;
+            padding: 14px 16px;
+            min-width: 0;
+        }
+        .player-label { font-size: 0.86rem; color: #666; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+        .player-name  { font-size: 1.25rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .player-alliance { font-size: 0.98rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .vs-label {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #555;
+            flex-shrink: 0;
+        }
+
+        /* ── Score area (active) ── */
+        .score-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .score-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 250px;
+        }
+        .score-label { font-size: 0.95rem; color: #777; white-space: nowrap; }
+        .score-input {
+            width: 96px;
+            background: #2a2a2a;
+            border: 2px solid #3a3a3a;
+            color: #fff;
+            border-radius: 6px;
+            padding: 10px 12px;
+            text-align: center;
+            font-size: 1.55rem;
+            font-weight: 600;
+            transition: border-color .15s;
+        }
+        .score-input:focus { border-color: #cc0000; outline: none; background: #2f2f2f; }
+        .score-sep { color: #555; font-size: 1.7rem; font-weight: 700; flex-shrink: 0; }
+
+        /* ── Score display (pending) ── */
+        .score-display {
+            font-size: 2.4rem;
+            font-weight: 700;
+            color: #e0a000;
+            letter-spacing: 4px;
+            text-align: center;
+        }
+        .submitter-note { font-size: 0.95rem; color: #666; text-align: center; margin-top: 2px; }
+
+        /* ── Buttons ── */
+        .card-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn {
+            flex: 1;
+            min-width: 160px;
+            border: none;
+            border-radius: 6px;
+            padding: 14px 20px;
+            font-size: 1.08rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .15s, transform .1s;
+            text-align: center;
+        }
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+        .btn:active:not(:disabled) { transform: translateY(0); }
+        .btn-apply   { background: #8b0000; color: #fff; }
+        .btn-confirm { background: #1a7a1a; color: #fff; }
+        .btn-reject  { background: #3a3a3a; color: #ccc; }
+
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center;
+            color: #444;
+            padding: 48px 20px;
+            font-size: 1.1rem;
+            border: 2px dashed #2a2a2a;
+            border-radius: 10px;
+        }
+
+        /* ── Toast ── */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            padding: 14px 22px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            max-width: 420px;
+            z-index: 9999;
+            display: none;
+            box-shadow: 0 4px 20px rgba(0,0,0,.5);
+        }
+        #toast.ok    { background: #1a3a1a; border: 1px solid #2a6a2a; color: #80cc80; }
+        #toast.error { background: #3a1a1a; border: 1px solid #8b0000; color: #cc8080; }
+
+        /* ── Completed table ── */
+        .completed-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 1.02rem;
+        }
+        .completed-table th {
+            background: #1a1a1a;
+            color: #888;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.86rem;
+            letter-spacing: .5px;
+            padding: 14px 14px;
+            border-bottom: 2px solid #2a2a2a;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .completed-table td {
+            padding: 14px 14px;
+            border-bottom: 1px solid #222;
+            vertical-align: middle;
+        }
+        .completed-table tr:last-child td { border-bottom: none; }
+        .completed-table tr:hover td { background: #1d1d1d; }
+        .score-cell {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #e0e0e0;
+            letter-spacing: 2px;
+            white-space: nowrap;
+        }
+        .winner-name {
+            color: #4caf50;
+            font-weight: 600;
+        }
+        .loser-name { color: #888; }
+        .draw-name  { color: #e0a000; font-weight: 600; }
+        .completed-wrap {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .badge.green { background: #1a4a1a; color: #6dda6d; }
+
+        /* ── Create game ── */
+        .create-game-card {
+            background: #1a1a1a;
+            border: 1px solid #2e2e2e;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 34px;
+        }
+        .create-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .create-field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .create-field label {
+            color: #cfcfcf;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        .create-field input {
+            width: 100%;
+            background: #242424;
+            border: 2px solid #3a3a3a;
+            color: #fff;
+            border-radius: 8px;
+            padding: 12px 12px;
+            font-size: 1.1rem;
+        }
+        .create-field select {
+            width: 100%;
+            background: #242424;
+            border: 2px solid #3a3a3a;
+            color: #fff;
+            border-radius: 8px;
+            padding: 12px 12px;
+            font-size: 1.1rem;
+        }
+        .create-field input:focus {
+            border-color: #cc0000;
+            outline: none;
+            background: #2b2b2b;
+        }
+        .create-field select:focus {
+            border-color: #cc0000;
+            outline: none;
+            background: #2b2b2b;
+        }
+        .field-help {
+            font-size: 0.86rem;
+            color: #777;
+            line-height: 1.35;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 1200px) {
+            .create-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 900px) {
+            .create-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+            .page { padding: 16px 12px 40px; }
+            .page-title { font-size: 1.5rem; }
+            .cards-grid { grid-template-columns: 1fr; }
+            .players-row { flex-direction: column; }
+            .vs-label { display: none; }
+            .score-group { min-width: 0; }
+            .create-game-card { padding: 16px; }
+            .topbar-links { gap: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="topbar">
+    <a href="/battles" class="topbar-brand">⚔ CareBot Admin</a>
+    <div class="topbar-links">
+        <a href="/battles">Битвы</a>
+        <a href="/admin/map_export.png" target="_blank">Карта</a>
+        <a href="/health">Health</a>
+    </div>
+</nav>
+
+<div class="page">
+    <h1 class="page-title">Управление битвами</h1>
+
+    <div id="toast"></div>
+
+    <div class="create-game-card">
+        <div class="section-header" style="margin-top:0; margin-bottom:18px;">
+            <h2 class="section-title">Создать игру</h2>
+        </div>
+        <div class="create-grid">
+            <div class="create-field">
+                <label for="create-battle-id">Номер боя (battle_id) — необязательно</label>
+                <input id="create-battle-id" type="number" min="1" placeholder="Например: 30">
+                <div class="field-help">Используйте для восстановления данных. Если пусто, ID назначится автоматически.</div>
+            </div>
+            <div class="create-field">
+                <label for="create-mission-id">Номер миссии (mission_id) — необязательно</label>
+                <input id="create-mission-id" type="number" min="1" placeholder="Оставьте пустым для автогенерации"
+                       oninput="onMissionIdChange()">
+                <div class="field-help">Введите ID существующей миссии или оставьте пустым — миссия создастся автоматически.</div>
+            </div>
+            <div class="create-field" id="create-rules-field" style="display:none">
+                <label for="create-rules">Тип миссии (rules)</label>
+                <select id="create-rules">
+                    <option value="">Выберите тип</option>
+                    <option value="killteam">Kill Team</option>
+                    <option value="wh40k">Warhammer 40K</option>
+                    <option value="boarding_action">Boarding Action</option>
+                    <option value="combat_patrol">Combat Patrol</option>
+                    <option value="battlefleet">Battlefleet Gothica</option>
+                </select>
+                <div class="field-help">Обязательно при автогенерации миссии.</div>
+            </div>
+            <div class="create-field">
+                <label for="create-participant-1">Участник 1</label>
+                <select id="create-participant-1">
+                    <option value="">Выберите вармастера</option>
+                    {% for w in warmasters %}
+                    <option value="{{ w[0] }}">{{ w[1] }}</option>
+                    {% endfor %}
+                </select>
+                <div class="field-help">В списке отображаются только вармастера с никнеймами.</div>
+            </div>
+            <div class="create-field">
+                <label for="create-participant-2">Участник 2</label>
+                <select id="create-participant-2">
+                    <option value="">Выберите вармастера</option>
+                    {% for w in warmasters %}
+                    <option value="{{ w[0] }}">{{ w[1] }}</option>
+                    {% endfor %}
+                </select>
+                <div class="field-help">В списке отображаются только вармастера с никнеймами.</div>
+            </div>
+        </div>
+        <div class="card-actions" style="margin-top:16px;">
+            <button id="create-battle-btn" class="btn btn-apply" onclick="createBattle(this)">Создать игру</button>
+        </div>
+    </div>
+
+    <!-- ===== ACTIVE BATTLES ===== -->
+    <div class="section-header">
+        <h2 class="section-title">Активные битвы</h2>
+        <span class="badge red" id="active-count">{{ active_battles|length }}</span>
+    </div>
+
+    {% if active_battles %}
+    <div class="cards-grid" id="active-grid">
+        {% for b in active_battles %}
+        <div class="battle-card card-active" id="active-row-{{ b.battle_id }}">
+            <div class="card-head">
+                <div>
+                    <div class="card-mission">Миссия #{{ b.mission_id }} · Битва #{{ b.battle_id }}</div>
+                    <div class="card-deploy">{{ b.deploy }}</div>
+                </div>
+                <div class="card-meta">
+                    <span class="tag">{{ b.rules }}</span>
+                    {% if b.cell %}<span class="tag">{{ b.cell }}</span>{% endif %}
+                </div>
+            </div>
+
+            <div class="players-row">
+                <div class="player-box">
+                    <div class="player-label">Игрок 1</div>
+                    <div class="player-name">{{ b.p1_nick }}</div>
+                    <div class="player-alliance">{{ b.p1_alliance }}</div>
+                </div>
+                <div class="vs-label">VS</div>
+                <div class="player-box">
+                    <div class="player-label">Игрок 2</div>
+                    <div class="player-name">{{ b.p2_nick }}</div>
+                    <div class="player-alliance">{{ b.p2_alliance }}</div>
+                </div>
+            </div>
+
+            <div class="score-area">
+                <div class="score-group">
+                    <span class="score-label">{{ b.p1_nick }}</span>
+                    <input type="number" class="score-input score-p1" min="0" value="0">
+                    <span class="score-sep">:</span>
+                    <input type="number" class="score-input score-p2" min="0" value="0">
+                    <span class="score-label">{{ b.p2_nick }}</span>
+                </div>
+            </div>
+
+            <div class="card-actions">
+                <button class="btn btn-apply" onclick="submitResult({{ b.battle_id }}, '{{ b.p1_id }}', this)">
+                    Применить результат
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">Нет активных битв</div>
+    {% endif %}
+
+    <!-- ===== PENDING RESULTS ===== -->
+    <div class="section-header">
+        <h2 class="section-title">Ожидают подтверждения</h2>
+        <span class="badge" id="pending-count">{{ pending_battles|length }}</span>
+    </div>
+
+    {% if pending_battles %}
+    <div class="cards-grid" id="pending-grid">
+        {% for b in pending_battles %}
+        <div class="battle-card card-pending" id="pending-row-{{ b.battle_id }}">
+            <div class="card-head">
+                <div>
+                    <div class="card-mission">Миссия #{{ b.mission_id }} · Битва #{{ b.battle_id }}</div>
+                    <div class="card-deploy">{{ b.deploy }}</div>
+                </div>
+                <div class="card-meta">
+                    <span class="tag">{{ b.rules }}</span>
+                    {% if b.cell %}<span class="tag">{{ b.cell }}</span>{% endif %}
+                </div>
+            </div>
+
+            <div class="players-row">
+                <div class="player-box">
+                    <div class="player-label">Игрок 1</div>
+                    <div class="player-name">{{ b.p1_nick }}</div>
+                    <div class="player-alliance">{{ b.p1_alliance }}</div>
+                </div>
+                <div class="vs-label">VS</div>
+                <div class="player-box">
+                    <div class="player-label">Игрок 2</div>
+                    <div class="player-name">{{ b.p2_nick }}</div>
+                    <div class="player-alliance">{{ b.p2_alliance }}</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="score-display">{{ b.fst_score }} : {{ b.snd_score }}</div>
+                <div class="submitter-note">предложил: {{ b.submitter_id }}</div>
+            </div>
+
+            <div class="card-actions">
+                <button class="btn btn-confirm" onclick="confirmResult({{ b.battle_id }}, this)">
+                    ✓ Подтвердить
+                </button>
+                <button class="btn btn-reject" onclick="rejectResult({{ b.battle_id }}, this)">
+                    ✗ Отклонить
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">Нет ожидающих результатов</div>
+    {% endif %}
+
+    <!-- ===== COMPLETED BATTLES ===== -->
+    <div class="section-header">
+        <h2 class="section-title">Завершённые бои</h2>
+        <span class="badge green">{{ completed_battles|length }}</span>
+    </div>
+
+    {% if completed_battles %}
+    <div class="completed-wrap">
+        <table class="completed-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Деплой</th>
+                    <th>Правила</th>
+                    <th>Клетка</th>
+                    <th>Дата</th>
+                    <th>Игрок 1</th>
+                    <th>Счёт</th>
+                    <th>Игрок 2</th>
+                    <th>Победитель</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in completed_battles %}
+                {% set draw = b.p1_score == b.p2_score %}
+                {% set p1_win = b.p1_score is not none and b.p2_score is not none and b.p1_score > b.p2_score %}
+                {% set p2_win = b.p1_score is not none and b.p2_score is not none and b.p2_score > b.p1_score %}
+                <tr>
+                    <td style="color:#555;white-space:nowrap">
+                        М#{{ b.mission_id }}<br>
+                        <span style="font-size:0.75rem;color:#444">Б#{{ b.battle_id }}</span>
+                    </td>
+                    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.deploy }}</td>
+                    <td><span class="tag">{{ b.rules }}</span></td>
+                    <td style="color:#777">{{ b.cell or '—' }}</td>
+                    <td style="color:#666;white-space:nowrap;font-size:0.8rem">{{ b.created_date or '—' }}</td>
+                    <td>
+                        <span class="{{ 'winner-name' if p1_win else ('draw-name' if draw and b.p1_score is not none else 'loser-name') }}">{{ b.p1_nick }}</span>
+                        <div style="font-size:0.75rem;color:#555">{{ b.p1_alliance }}</div>
+                    </td>
+                    <td class="score-cell">
+                        {% if b.p1_score is not none %}{{ b.p1_score }} : {{ b.p2_score }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="{{ 'winner-name' if p2_win else ('draw-name' if draw and b.p2_score is not none else 'loser-name') }}">{{ b.p2_nick }}</span>
+                        <div style="font-size:0.75rem;color:#555">{{ b.p2_alliance }}</div>
+                    </td>
+                    <td>
+                        {% if b.winner_nick %}
+                            <span class="winner-name">🏆 {{ b.winner_nick }}</span>
+                        {% elif b.p1_score is not none and b.p1_score == b.p2_score %}
+                            <span class="draw-name">Ничья</span>
+                        {% else %}
+                            <span style="color:#555">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">Нет завершённых боёв</div>
+    {% endif %}
+</div>
+
+<script>
+const toastEl = document.getElementById('toast');
+let toastTimer;
+
+function showToast(msg, type) {
+    toastEl.className = type === 'ok' ? 'ok' : 'error';
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, 4500);
+}
+
+async function apiPost(url, body) {
+    const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    return await resp.json();
+}
+
+function onMissionIdChange() {
+    const missionVal = document.getElementById('create-mission-id').value.trim();
+    const rulesField = document.getElementById('create-rules-field');
+    rulesField.style.display = missionVal === '' ? 'flex' : 'none';
+}
+
+// Show rules field on page load if mission_id is empty
+document.addEventListener('DOMContentLoaded', onMissionIdChange);
+
+async function createBattle(btn) {
+    const battleRaw = document.getElementById('create-battle-id').value.trim();
+    const missionRaw = document.getElementById('create-mission-id').value.trim();
+    const participant1 = document.getElementById('create-participant-1').value;
+    const participant2 = document.getElementById('create-participant-2').value;
+    const useExplicit = missionRaw !== '';
+
+    if (!participant1 || !participant2) {
+        showToast('Выберите двух вармастеров', 'error');
+        return;
+    }
+    if (participant1 === participant2) {
+        showToast('Участники должны быть разными', 'error');
+        return;
+    }
+
+    const body = { participant_1_id: participant1, participant_2_id: participant2 };
+
+    if (battleRaw !== '') {
+        const battleId = parseInt(battleRaw, 10);
+        if (!Number.isInteger(battleId) || battleId <= 0) {
+            showToast('Некорректный battle_id', 'error');
+            return;
+        }
+        body.battle_id = battleId;
+    }
+
+    if (useExplicit) {
+        const missionId = parseInt(missionRaw, 10);
+        if (!Number.isInteger(missionId) || missionId <= 0) {
+            showToast('Некорректный mission_id', 'error');
+            return;
+        }
+        body.mission_id = missionId;
+    } else {
+        const rules = document.getElementById('create-rules').value;
+        if (!rules) {
+            showToast('Выберите тип миссии (rules)', 'error');
+            return;
+        }
+        body.rules = rules;
+    }
+
+    btn.disabled = true;
+    try {
+        const res = await apiPost('/api/battles/create', body);
+
+        if (res.ok) {
+            showToast('✓ Игра создана: битва #' + res.battle_id + ' для миссии #' + res.mission_id, 'ok');
+            setTimeout(() => window.location.reload(), 700);
+            return;
+        }
+
+        const errCode = res.error_code ? (' [' + res.error_code + ']') : '';
+        showToast('Ошибка' + errCode + ': ' + (res.error || 'неизвестная'), 'error');
+    } catch (e) {
+        showToast('Сетевая ошибка: ' + e, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function lockCard(card, btns) {
+    card.classList.add('card-applying');
+    btns.forEach(b => b.disabled = true);
+}
+
+function removeCard(card) {
+    card.style.transition = 'opacity .4s, transform .4s';
+    card.style.opacity = '0';
+    card.style.transform = 'scale(0.96)';
+    setTimeout(() => card.remove(), 420);
+}
+
+async function submitResult(battleId, submitterId, btn) {
+    const card = document.getElementById('active-row-' + battleId);
+    const p1Score = parseInt(card.querySelector('.score-p1').value, 10);
+    const p2Score = parseInt(card.querySelector('.score-p2').value, 10);
+
+    if (isNaN(p1Score) || isNaN(p2Score) || p1Score < 0 || p2Score < 0) {
+        showToast('Введите корректный счёт', 'error');
+        return;
+    }
+
+    lockCard(card, [btn]);
+    try {
+        const res = await apiPost('/api/battles/' + battleId + '/submit', {
+            p1_score: p1Score, p2_score: p2Score, submitter_id: submitterId
+        });
+        if (res.ok) {
+            showToast('✓ Результат применён — битва #' + battleId, 'ok');
+            removeCard(card);
+            adjustCount('active-count', -1);
+        } else {
+            showToast('Ошибка: ' + (res.error || 'неизвестная'), 'error');
+            card.classList.remove('card-applying');
+            btn.disabled = false;
+        }
+    } catch (e) {
+        showToast('Сетевая ошибка: ' + e, 'error');
+        card.classList.remove('card-applying');
+        btn.disabled = false;
+    }
+}
+
+async function confirmResult(battleId, btn) {
+    const card = document.getElementById('pending-row-' + battleId);
+    const btns = Array.from(card.querySelectorAll('.btn'));
+    lockCard(card, btns);
+    try {
+        const res = await apiPost('/api/battles/' + battleId + '/confirm', {});
+        if (res.ok) {
+            showToast('✓ Результат подтверждён — битва #' + battleId, 'ok');
+            removeCard(card);
+            adjustCount('pending-count', -1);
+        } else {
+            showToast('Ошибка: ' + (res.error || 'неизвестная'), 'error');
+            card.classList.remove('card-applying');
+            btns.forEach(b => b.disabled = false);
+        }
+    } catch (e) {
+        showToast('Сетевая ошибка: ' + e, 'error');
+        card.classList.remove('card-applying');
+        btns.forEach(b => b.disabled = false);
+    }
+}
+
+async function rejectResult(battleId, btn) {
+    if (!confirm('Отклонить результат битвы #' + battleId + '?\nСтатус вернётся к "Активна".')) return;
+    const card = document.getElementById('pending-row-' + battleId);
+    const btns = Array.from(card.querySelectorAll('.btn'));
+    lockCard(card, btns);
+    try {
+        const res = await apiPost('/api/battles/' + battleId + '/reject', {});
+        if (res.ok) {
+            showToast('Результат отклонён, битва #' + battleId + ' снова активна', 'ok');
+            removeCard(card);
+            adjustCount('pending-count', -1);
+        } else {
+            showToast('Ошибка: ' + (res.error || 'неизвестная'), 'error');
+            card.classList.remove('card-applying');
+            btns.forEach(b => b.disabled = false);
+        }
+    } catch (e) {
+        showToast('Сетевая ошибка: ' + e, 'error');
+        card.classList.remove('card-applying');
+        btns.forEach(b => b.disabled = false);
+    }
+}
+
+function adjustCount(elId, delta) {
+    const el = document.getElementById(elId);
+    if (el) el.textContent = Math.max(0, parseInt(el.textContent, 10) + delta);
+}
+</script>
+</body>
+</html>

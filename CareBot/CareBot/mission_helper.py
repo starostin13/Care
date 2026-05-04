@@ -269,6 +269,61 @@ def generate_new_one(rules):
         return ('Only War', rules, None, f'Generic mission for {rules}', None, None)
 
 
+async def ensure_mission_cell(mission_id: int, attacker_id: Optional[str], defender_id: Optional[str]):
+    """Assign a mission cell using attacker/defender alliances if it is still missing."""
+    mission = await sqllite_helper.get_mission_details(mission_id)
+    if not mission:
+        raise ValueError(f"Mission {mission_id} not found")
+
+    if mission.cell is not None or not attacker_id or not defender_id:
+        return mission.cell
+
+    attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
+    defender_alliance = await sqllite_helper.get_alliance_of_warmaster(defender_id)
+
+    if not attacker_alliance or not defender_alliance:
+        return None
+
+    attacker_alliance_id = attacker_alliance[0]
+    defender_alliance_id = defender_alliance[0]
+
+    adjacent_defender_hexes = await sqllite_helper.get_adjacent_hexes_between_alliances(
+        attacker_alliance_id, defender_alliance_id
+    )
+
+    adjacent_hexes_list = list(adjacent_defender_hexes) if adjacent_defender_hexes else []
+    cell_id = None
+    if adjacent_hexes_list:
+        cell_id = random.choice(adjacent_hexes_list)[0]
+        logger.info(
+            "Battle cell determined: %s (random hex from defender territory adjacent to attacker)",
+            cell_id,
+        )
+    else:
+        defender_hexes = await sqllite_helper.get_hexes_by_alliance(defender_alliance_id)
+        defender_hexes_list = list(defender_hexes) if defender_hexes else []
+        if defender_hexes_list:
+            selected_hex = random.choice(defender_hexes_list)
+            if isinstance(selected_hex, tuple):
+                cell_id = selected_hex[0]
+            elif isinstance(selected_hex, dict):
+                cell_id = selected_hex.get('id')
+            logger.info(
+                "Battle cell determined: %s (random defender hex, no adjacent hexes found)",
+                cell_id,
+            )
+        else:
+            logger.warning(
+                "No hexes found for defender alliance %s",
+                defender_alliance_id,
+            )
+
+    if cell_id is not None:
+        await sqllite_helper.update_mission_cell(mission.id, cell_id)
+
+    return cell_id
+
+
 async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, defender_id: Optional[str] = None):
     """Fetches an existing mission or generates a new one if none exists.
     
@@ -297,49 +352,11 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
         raise ValueError(f"Failed to get or create mission for rules: {rules}")
     
     # Determine cell_id based on participants
-    cell_id = mission.cell
-    
-    if attacker_id and defender_id and cell_id is None:
-        attacker_alliance = await sqllite_helper.get_alliance_of_warmaster(attacker_id)
-        defender_alliance = await sqllite_helper.get_alliance_of_warmaster(defender_id)
-        
-        if attacker_alliance and defender_alliance:
-            attacker_alliance_id = attacker_alliance[0]
-            defender_alliance_id = defender_alliance[0]
-            
-            # Find hexes of defender that are adjacent to hexes of attacker
-            adjacent_defender_hexes = await sqllite_helper.get_adjacent_hexes_between_alliances(
-                attacker_alliance_id, defender_alliance_id
-            )
-            
-            # Convert iterator to list if needed
-            adjacent_hexes_list = list(adjacent_defender_hexes) if adjacent_defender_hexes else []
-            if adjacent_hexes_list:
-                # Randomly select one adjacent hex from defender's territory
-                cell_id = random.choice(adjacent_hexes_list)[0]
-                logger.info(
-                    f"Battle cell determined: {cell_id} "
-                    f"(random hex from defender's territory adjacent to attacker)"
-                )
-            else:
-                # Fallback: no adjacent hexes, use random defender hex
-                defender_hexes = await sqllite_helper.get_hexes_by_alliance(defender_alliance_id)
-                defender_hexes_list = list(defender_hexes) if defender_hexes else []
-                if defender_hexes_list:
-                    cell_id = random.choice(defender_hexes_list)[0]
-                    logger.info(
-                        f"Battle cell determined: {cell_id} "
-                        f"(random defender hex, no adjacent hexes found)"
-                    )
-                else:
-                    logger.warning(
-                        f"No hexes found for defender alliance {defender_alliance_id}"
-                    )
-        
-        # Update mission with determined cell_id
-        if cell_id is not None:
-            await sqllite_helper.update_mission_cell(mission.id, cell_id)
-            mission.cell = cell_id  # Update local object
+    cell_id = await ensure_mission_cell(mission.id, attacker_id, defender_id)
+    if cell_id is None:
+        cell_id = mission.cell
+    else:
+        mission.cell = cell_id
 
     if rules == "killteam":
         if cell_id is not None:
@@ -458,10 +475,153 @@ async def write_battle_result(battle_id, user_reply):
     if not mission_id:
         logger.error(f"Could not find mission_id for battle {battle_id}")
         raise ValueError(f"Battle {battle_id} not found or has no mission_id")
-    
+
     await sqllite_helper.get_rules_of_mission(mission_id)
     await sqllite_helper.add_battle_result(
         mission_id, counts[0], counts[1])
+
+
+async def submit_pending_battle_result(
+    battle_id: int,
+    submitter_id: str,
+    fstplayer_score: int,
+    sndplayer_score: int,
+):
+    """Create/update a pending result for a battle and switch mission to pending."""
+    pending = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if pending:
+        raise ValueError("Pending result already exists")
+
+    participants = await sqllite_helper.get_battle_participants(battle_id)
+    if not participants:
+        raise ValueError("Battle participants not found")
+
+    fstplayer_id, sndplayer_id = participants
+    submitter_id = str(submitter_id)
+    if submitter_id not in (fstplayer_id, sndplayer_id):
+        raise PermissionError("Submitter is not a participant")
+
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        raise ValueError("Mission for battle not found")
+
+    pending_id = await sqllite_helper.create_pending_result(
+        battle_id,
+        submitter_id,
+        int(fstplayer_score),
+        int(sndplayer_score),
+    )
+    if not pending_id:
+        raise RuntimeError("Failed to save pending result")
+
+    await sqllite_helper.update_mission_status(mission_id, 2)
+
+    opponent_id = sndplayer_id if submitter_id == fstplayer_id else fstplayer_id
+    return {
+        "pending_id": pending_id,
+        "mission_id": mission_id,
+        "fstplayer_id": fstplayer_id,
+        "sndplayer_id": sndplayer_id,
+        "submitter_id": submitter_id,
+        "opponent_id": opponent_id,
+        "fstplayer_score": int(fstplayer_score),
+        "sndplayer_score": int(sndplayer_score),
+    }
+
+
+async def confirm_pending_battle_result(
+    battle_id: int,
+    confirmer_id: Optional[str] = None,
+    require_participant: bool = True,
+    allow_submitter_confirm: bool = False,
+):
+    """Apply pending result and finalize mission status=3."""
+    pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if not pending_result:
+        raise ValueError("Pending result not found")
+
+    participants = await sqllite_helper.get_battle_participants(battle_id)
+    if not participants:
+        raise ValueError("Battle participants not found")
+
+    fstplayer_id, sndplayer_id = participants
+
+    if confirmer_id is not None:
+        confirmer_id = str(confirmer_id)
+        if require_participant and confirmer_id not in (fstplayer_id, sndplayer_id):
+            raise PermissionError("Confirmer is not a participant")
+        if not allow_submitter_confirm and pending_result.submitter_id == confirmer_id:
+            raise PermissionError("Submitter cannot confirm own result")
+
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        raise ValueError("Mission for battle not found")
+
+    await ensure_mission_cell(mission_id, fstplayer_id, sndplayer_id)
+
+    user_reply = f"{pending_result.fstplayer_score} {pending_result.sndplayer_score}"
+
+    await write_battle_result(battle_id, user_reply)
+    await apply_mission_rewards(battle_id, user_reply, pending_result.submitter_id)
+
+    mission_details = await sqllite_helper.get_mission_details(mission_id)
+    scenario = mission_details.rules if mission_details else None
+    await map_helper.update_map(battle_id, user_reply, pending_result.submitter_id, scenario)
+
+    await sqllite_helper.update_mission_status(mission_id, 3)
+    await sqllite_helper.delete_pending_result(battle_id)
+
+    return {
+        "mission_id": mission_id,
+        "battle_id": battle_id,
+        "submitter_id": pending_result.submitter_id,
+        "fstplayer_id": fstplayer_id,
+        "sndplayer_id": sndplayer_id,
+        "fstplayer_score": pending_result.fstplayer_score,
+        "sndplayer_score": pending_result.sndplayer_score,
+    }
+
+
+async def reject_pending_battle_result(
+    battle_id: int,
+    rejector_id: Optional[str] = None,
+    require_participant: bool = True,
+    allow_submitter_reject: bool = False,
+):
+    """Reject pending result and reset mission status back to active (1)."""
+    pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+    if not pending_result:
+        raise ValueError("Pending result not found")
+
+    participants = await sqllite_helper.get_battle_participants(battle_id)
+    if not participants:
+        raise ValueError("Battle participants not found")
+
+    fstplayer_id, sndplayer_id = participants
+
+    if rejector_id is not None:
+        rejector_id = str(rejector_id)
+        if require_participant and rejector_id not in (fstplayer_id, sndplayer_id):
+            raise PermissionError("Rejector is not a participant")
+        if not allow_submitter_reject and pending_result.submitter_id == rejector_id:
+            raise PermissionError("Submitter cannot reject own result")
+
+    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
+    if not mission_id:
+        raise ValueError("Mission for battle not found")
+
+    await sqllite_helper.delete_pending_result(battle_id)
+    await sqllite_helper.update_mission_status(mission_id, 1)
+
+    return {
+        "mission_id": mission_id,
+        "battle_id": battle_id,
+        "submitter_id": pending_result.submitter_id,
+        "fstplayer_id": fstplayer_id,
+        "sndplayer_id": sndplayer_id,
+        "fstplayer_score": pending_result.fstplayer_score,
+        "sndplayer_score": pending_result.sndplayer_score,
+    }
 
 
 async def apply_mission_rewards(battle_id, user_reply, user_telegram_id):
@@ -729,13 +889,14 @@ async def handle_alliance_elimination(eliminated_alliance_id, context=None):
     logger.info("Alliance %s eliminated and cleaned up", eliminated_alliance_id)
 
 
-async def start_battle(mission_id, player1_id, player2_id):
+async def start_battle(mission_id, player1_id, player2_id, forced_battle_id=None):
     """Starts a new battle for the given mission with exactly 2 players.
     
     Args:
         mission_id: The mission ID
         player1_id: First player telegram ID (will be fstplayer)
         player2_id: Second player telegram ID (will be sndplayer)
+        forced_battle_id: Optional explicit battle ID for data recovery scenarios
     
     Returns:
         int: Battle ID
@@ -749,8 +910,14 @@ async def start_battle(mission_id, player1_id, player2_id):
             f"Got player1={player1_id}, player2={player2_id}"
         )
     
-    # Create battle without scores
-    battle_id_result = await sqllite_helper.add_battle(mission_id)
+    # Create battle without scores (or with explicit ID for recovery scenarios)
+    if forced_battle_id is not None:
+        add_battle_with_id_fn = getattr(sqllite_helper, 'add_battle_with_id', None)
+        if not add_battle_with_id_fn:
+            raise RuntimeError('add_battle_with_id is not available in current DB helper')
+        battle_id_result = await add_battle_with_id_fn(mission_id, forced_battle_id)
+    else:
+        battle_id_result = await sqllite_helper.add_battle(mission_id)
     
     if not battle_id_result:
         raise RuntimeError(f"Failed to create battle for mission {mission_id}")

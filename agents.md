@@ -2,6 +2,88 @@
 
 Этот файл содержит принципы и соглашения для разработчиков и AI агентов, работающих с проектом CareBot.
 
+## ⚔️ Миссии и Бои — Концепции и Жизненный цикл
+
+### Ключевое разграничение понятий
+
+**Миссия** (`mission_stack`) и **Бой** (`battles`) — это разные сущности:
+
+| Понятие | Таблица | Описание |
+|---------|---------|----------|
+| **Миссия** | `mission_stack` | Сценарий: правила, деплой, описание, бонусы победителя. Может существовать без боя. |
+| **Бой** | `battles` | Конкретный бой двух игроков. Всегда ссылается на миссию через `battle.mission_id`. |
+| **Участники** | `battle_attenders` | Telegram ID двух игроков, привязанных к конкретному бою. |
+
+### Жизненный цикл миссии (поле `mission_stack.status`)
+
+```
+status=0 (available)
+   │  Миссия создана, свободна для назначения боям.
+   │  Может быть создана заранее администратором.
+   ▼
+status=1 (active / locked)
+   │  Миссия захвачена и привязана к активному бою.
+   │  Другие бои не могут использовать эту миссию.
+   ▼
+status=2 (pending_confirmation)
+   │  Игрок отправил результат, ожидается подтверждение оппонента.
+   ▼
+status=3 (confirmed)
+      Результат подтверждён, применён к карте и рейтингам.
+```
+
+### Правила создания боя
+
+1. **Поиск свободной миссии**: `sqllite_helper.get_mission(rules)` — атомарно находит миссию со `status=0` и переводит её в `status=1`.
+2. **Если миссии нет**: автоматически генерируется новая через `mission_helper.generate_new_one(rules)` → `sqllite_helper.save_mission()` → снова `get_mission()`.
+3. **Создание боя**: `mission_helper.start_battle(mission_id, player1_id, player2_id)` — создаёт запись в `battles` и двух участников в `battle_attenders`.
+4. **Один бой — одна миссия**: у каждого боя ровно одна миссия. У одной миссии может быть только один бой.
+
+### Диаграмма флоу (Telegram)
+
+```
+Игрок нажал кнопку → handlers.get_the_mission()
+  ├─→ mission_helper.get_mission(rules)
+  │     ├─→ sqllite_helper.get_mission(rules) → нашли? → Mission (status=1)
+  │     └─→ не нашли → generate_new_one() → save_mission(status=0) → get_mission() → Mission (status=1)
+  └─→ mission_helper.start_battle(mission_id, attacker_id, defender_id)
+        └─→ sqllite_helper.add_battle(mission_id) → battles row
+            sqllite_helper.add_battle_participant(battle_id, p1) → battle_attenders
+            sqllite_helper.add_battle_participant(battle_id, p2) → battle_attenders
+```
+
+### Диаграмма флоу (Web UI /battles)
+
+```
+Администратор заполнил форму → POST /api/battles/create
+  ├─→ mission_id указан → проверить существование → использовать как есть
+  └─→ mission_id не указан, rules указан:
+        generate_new_one(rules) → save_mission(status=0) → get_mission(rules) → Mission (status=1)
+        start_battle(mission_id, p1, p2)
+```
+
+### Ключевые функции
+
+| Функция | Файл | Назначение |
+|---------|------|-----------|
+| `generate_new_one(rules)` | `mission_helper.py` | Генерирует кортеж с данными новой миссии |
+| `save_mission(mission_tuple)` | `sqllite_helper.py` | Сохраняет миссию в БД со `status=0` |
+| `get_mission(rules)` | `sqllite_helper.py` | Атомарно захватывает свободную миссию (status 0→1) |
+| `start_battle(mission_id, p1, p2)` | `mission_helper.py` | Создаёт бой и добавляет участников |
+| `get_mission_id_for_battle(battle_id)` | `sqllite_helper.py` | Получает mission_id по battle_id |
+| `get_battle_id_by_mission_id(mission_id)` | `sqllite_helper.py` | Получает battle_id по mission_id |
+
+### ⚠️ Важные правила для агентов
+
+- **НЕ** создавай бой без миссии. Каждый бой (`battles.mission_id`) обязан ссылаться на миссию.
+- **НЕ** используй `winner_bonus` до завершения боя — это секретная информация.
+- При ошибке создания боя — откатить статус миссии обратно в `status=0`.
+- В Web UI поле `mission_id` опциональное: если не задано — миссия генерируется автоматически по полю `rules`.
+- В Web UI поле `battle_id` опциональное и используется только для восстановления данных: перед вставкой нужно проверять, что такой `battle_id` ещё не существует.
+- Тип миссии (`rules`): `killteam`, `wh40k`, `boarding_action`, `combat_patrol`, `battlefleet`.
+
+---
+
 ## Миграции базы данных
 
 ### Структура миграций

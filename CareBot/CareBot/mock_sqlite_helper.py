@@ -11,7 +11,7 @@ import asyncio
 import random
 import os
 from typing import List, Tuple, Optional, Dict, Any
-from models import Mission
+from models import Mission, PendingResult
 
 # Критическая защита от использования в production
 if os.getenv('CAREBOT_TEST_MODE', 'false').lower() != 'true':
@@ -48,6 +48,9 @@ MOCK_WARMASTERS = {
 
 MOCK_MISSIONS = {}
 MOCK_BATTLES = {}
+MOCK_BATTLE_ATTENDERS = {}
+MOCK_PENDING_RESULTS = {}
+MOCK_PENDING_RESULT_SEQ = 1
 MOCK_SCHEDULES = {}
 MOCK_MAP_CELLS = [
     (1, 'Город', 1, 1),
@@ -66,11 +69,31 @@ MOCK_ALLIANCES = {
     5: {'id': 5, 'name': 'Void Seekers', 'color': 'purple', 'common_resource': 0}
 }
 
+MOCK_TERRAIN_COLORS = {
+    'Город': '#8B9EB7',
+    'Разрушенный город': '#A89AA6',
+    'Пустыня': '#D6B57A',
+    'Леса': '#6FA56F',
+    'Тундра/снег': '#DCE7EF',
+    'Горы': '#8F8F8F',
+    'Отравленные земли': '#9CC27A',
+    'Джунгли': '#4D8C57',
+    'Завод': '#6D7A8A',
+    'Равнина': '#9FB98B',
+    'Болото': '#6B8B77',
+    'Лава': '#C15A3D',
+}
+
 print("🧪 Mock SQLite Helper loaded for TEST MODE")
 
 # Battle functions
 async def add_battle_participant(battle_id, participant):
     print(f"🧪 Mock: add_battle_participant({battle_id}, {participant})")
+    battle_id = int(battle_id)
+    participant = str(participant)
+    attendees = MOCK_BATTLE_ATTENDERS.setdefault(battle_id, [])
+    if participant not in attendees:
+        attendees.append(participant)
     return True
 
 async def add_battle(mission_id):
@@ -79,11 +102,88 @@ async def add_battle(mission_id):
     MOCK_BATTLES[battle_id] = {'id': battle_id, 'mission_id': mission_id}
     return (battle_id,)
 
+
+async def add_battle_with_id(mission_id, battle_id):
+    print(f"🧪 Mock: add_battle_with_id({mission_id}, {battle_id})")
+    if battle_id in MOCK_BATTLES:
+        raise ValueError(f"Battle id {battle_id} already exists in mock")
+    MOCK_BATTLES[battle_id] = {'id': battle_id, 'mission_id': mission_id}
+    return (battle_id,)
+
+
+async def battle_exists(battle_id):
+    print(f"🧪 Mock: battle_exists({battle_id})")
+    return battle_id in MOCK_BATTLES
+
 async def get_mission_id_for_battle(battle_id):
     print(f"🧪 Mock: get_mission_id_for_battle({battle_id})")
+    battle_id = int(battle_id)
     if battle_id in MOCK_BATTLES:
         return MOCK_BATTLES[battle_id]['mission_id']
     return None
+
+
+async def get_battle_id_by_mission_id(mission_id):
+    print(f"🧪 Mock: get_battle_id_by_mission_id({mission_id})")
+    for battle_id, battle in MOCK_BATTLES.items():
+        if int(battle.get('mission_id', 0)) == int(mission_id):
+            return battle_id
+    return None
+
+
+async def get_battle_participants(battle_id):
+    print(f"🧪 Mock: get_battle_participants({battle_id})")
+    attendees = MOCK_BATTLE_ATTENDERS.get(int(battle_id), [])
+    if len(attendees) < 2:
+        return None
+    return (str(attendees[0]), str(attendees[1]))
+
+
+async def create_pending_result(battle_id, submitter_id, fstplayer_score, sndplayer_score):
+    print(
+        f"🧪 Mock: create_pending_result({battle_id}, {submitter_id}, {fstplayer_score}, {sndplayer_score})"
+    )
+    global MOCK_PENDING_RESULT_SEQ
+
+    battle_id = int(battle_id)
+    submitter_id = str(submitter_id)
+    if battle_id in MOCK_PENDING_RESULTS:
+        return None
+
+    now = datetime.datetime.now().isoformat()
+    pending_id = MOCK_PENDING_RESULT_SEQ
+    MOCK_PENDING_RESULT_SEQ += 1
+
+    MOCK_PENDING_RESULTS[battle_id] = {
+        'id': pending_id,
+        'battle_id': battle_id,
+        'submitter_id': submitter_id,
+        'fstplayer_score': int(fstplayer_score),
+        'sndplayer_score': int(sndplayer_score),
+        'created_at': now,
+    }
+    return pending_id
+
+
+async def get_pending_result_by_battle_id(battle_id):
+    print(f"🧪 Mock: get_pending_result_by_battle_id({battle_id})")
+    row = MOCK_PENDING_RESULTS.get(int(battle_id))
+    if not row:
+        return None
+    return PendingResult(
+        id=row['id'],
+        battle_id=row['battle_id'],
+        submitter_id=row['submitter_id'],
+        fstplayer_score=row['fstplayer_score'],
+        sndplayer_score=row['sndplayer_score'],
+        created_at=row['created_at'],
+    )
+
+
+async def delete_pending_result(battle_id):
+    print(f"🧪 Mock: delete_pending_result({battle_id})")
+    MOCK_PENDING_RESULTS.pop(int(battle_id), None)
+    return True
 
 # Map story functions
 async def add_to_story(cell_id, text):
@@ -133,6 +233,12 @@ async def get_alliances_for_map_export():
         (alliance['id'], alliance['name'], alliance.get('color'))
         for alliance in MOCK_ALLIANCES.values()
     ]
+
+
+async def get_terrain_colors():
+    """Get terrain colors for export (mock version)."""
+    print("🧪 Mock: get_terrain_colors()")
+    return dict(MOCK_TERRAIN_COLORS)
 
 
 async def create_alliance(name, initial_resources=0):
@@ -396,11 +502,33 @@ async def save_mission(mission_data):
     print(f"🧪 Mock: save_mission({mission_data})")
     mission_id = len(MOCK_MISSIONS) + 1
     today = datetime.date.today().isoformat()
+
+    if isinstance(mission_data, dict):
+        data = dict(mission_data)
+    elif isinstance(mission_data, (list, tuple)):
+        # mission tuple format from mission_helper.generate_new_one
+        data = {
+            'deploy': mission_data[0] if len(mission_data) > 0 else 'Mock Deploy',
+            'rules': mission_data[1] if len(mission_data) > 1 else 'wh40k',
+            'cell': mission_data[2] if len(mission_data) > 2 else random.randint(1, 50),
+            'mission_description': mission_data[3] if len(mission_data) > 3 else 'Test mission details',
+            'winner_bonus': mission_data[4] if len(mission_data) > 4 else None,
+            'map_description': mission_data[5] if len(mission_data) > 5 else None,
+            'reward_config': mission_data[6] if len(mission_data) > 6 else None,
+        }
+    else:
+        data = {
+            'deploy': 'Mock Deploy',
+            'rules': 'wh40k',
+            'cell': random.randint(1, 50),
+            'mission_description': 'Test mission details',
+        }
+
     MOCK_MISSIONS[mission_id] = {
-        **mission_data, 
+        **data,
         'id': mission_id,
-        'created_date': today,
-        'status': 0
+        'created_date': data.get('created_date', today),
+        'status': int(data.get('status', 0)),
     }
     return mission_id
 
@@ -569,36 +697,29 @@ async def get_faction_of_warmaster(user_telegram_id):
 async def get_mission(rules):
     """
     Mock реализация для получения миссии по правилам.
-    Возвращает Mission объект совместимо с реальной структурой.
+    Имитирует real flow: ищет status=0, переводит в status=1 и возвращает Mission.
     """
     print(f"🧪 Mock: get_mission({rules})")
-    
-    # Разблокируем просроченные миссии перед получением
+
     await unlock_expired_missions()
-    
-    # Генерируем тестовые данные
-    mission_id = random.randint(1, 100)
-    cell_id = random.randint(1, 50)
-    today = datetime.date.today().isoformat()
-    
-    # For battlefleet, include map description
-    map_description = None
-    if rules == "battlefleet":
-        map_description = "🗺️ BATTLEFLEET MAP - TEST\n\nCelestial Phenomena:\n  • Test Area: Mock Phenomenon"
-    
-    # Create Mission object
-    return Mission(
-        id=mission_id,
-        deploy=f"Mock {rules} Deploy",
-        rules=rules,
-        cell=cell_id,
-        mission_description=f"Тестовая миссия для {rules}",
-        winner_bonus=None,
-        status=0,
-        created_date=today,
-        map_description=map_description,
-        reward_config=None
-    )
+
+    for mission_id, mission in MOCK_MISSIONS.items():
+        if mission.get('rules') == rules and int(mission.get('status', 0)) == 0:
+            mission['status'] = 1
+            return Mission(
+                id=mission_id,
+                deploy=mission.get('deploy', f"Mock {rules} Deploy"),
+                rules=mission.get('rules', rules),
+                cell=mission.get('cell'),
+                mission_description=mission.get('mission_description', f"Тестовая миссия для {rules}"),
+                winner_bonus=mission.get('winner_bonus'),
+                status=1,
+                created_date=mission.get('created_date', datetime.date.today().isoformat()),
+                map_description=mission.get('map_description'),
+                reward_config=mission.get('reward_config'),
+            )
+
+    return None
 
 async def get_schedule_by_user(user_telegram, date=None):
     print(f"🧪 Mock: get_schedule_by_user({user_telegram}, {date})")
@@ -785,6 +906,10 @@ async def lock_mission(mission_id):
 
 async def update_mission_status(mission_id, status):
     print(f"🧪 Mock: update_mission_status({mission_id}, {status})")
+    mission_id = int(mission_id)
+    status = int(status)
+    if mission_id in MOCK_MISSIONS:
+        MOCK_MISSIONS[mission_id]['status'] = status
     return True
 
 async def set_mission_score_submitted(mission_id):
@@ -853,6 +978,13 @@ async def get_adjacent_hexes_between_alliances(alliance1_id, alliance2_id):
     # Return mock adjacent hexes belonging to alliance2
     return [(2,), (3,)]
 
+async def update_mission_cell(mission_id, cell_id):
+    print(f"🧪 Mock: update_mission_cell({mission_id}, {cell_id})")
+    mission_id = int(mission_id)
+    mission = MOCK_MISSIONS.setdefault(mission_id, {'id': mission_id})
+    mission['cell'] = cell_id
+    return True
+
 async def get_warehouse_count_by_alliance(alliance_id):
     print(f"🧪 Mock: get_warehouse_count_by_alliance({alliance_id})")
     return random.randint(1, 5)
@@ -863,18 +995,20 @@ async def get_mission_id_by_battle_id(battle_id):
 
 async def get_mission_details(mission_id):
     print(f"🧪 Mock: get_mission_details({mission_id})")
+    mission_id = int(mission_id)
     today = datetime.date.today().isoformat()
+    mission = MOCK_MISSIONS.get(mission_id, {})
     return Mission(
         id=mission_id,
-        deploy='Mock Deploy',
-        rules='wh40k',
-        cell=None,
-        mission_description='Test mission details',
-        winner_bonus=None,
-        status=0,
-        created_date=today,
-        map_description=None,
-        reward_config=None
+        deploy=mission.get('deploy', 'Mock Deploy'),
+        rules=mission.get('rules', 'wh40k'),
+        cell=mission.get('cell'),
+        mission_description=mission.get('mission_description', 'Test mission details'),
+        winner_bonus=mission.get('winner_bonus'),
+        status=int(mission.get('status', 0)),
+        created_date=mission.get('created_date', today),
+        map_description=mission.get('map_description'),
+        reward_config=mission.get('reward_config')
     )
 
 async def destroy_warehouse_by_alliance(alliance_id):
@@ -1015,6 +1149,13 @@ async def get_state(cell_id):
 
 async def add_battle_result(mission_id, counts1, counts2):
     print(f"🧪 Mock: add_battle_result({mission_id}, {counts1}, {counts2})")
+    mission_id = int(mission_id)
+    battle_id = await get_battle_id_by_mission_id(mission_id)
+    if battle_id is None:
+        return False
+    battle = MOCK_BATTLES.setdefault(int(battle_id), {'id': int(battle_id), 'mission_id': mission_id})
+    battle['fstplayer'] = int(counts1)
+    battle['sndplayer'] = int(counts2)
     return True
 
 print("🧪 Mock SQLite Helper fully initialized")
@@ -1066,7 +1207,7 @@ async def toggle_feature_flag(flag_name: str) -> bool:
 async def get_all_feature_flags() -> list:
     """
     Mock: Get all feature flags with their current status.
-    
+
     Returns:
         List of tuples: [(flag_name, enabled, description), ...]
     """
@@ -1075,3 +1216,89 @@ async def get_all_feature_flags() -> list:
         (flag_name, int(flag['enabled']), flag['description'])
         for flag_name, flag in _feature_flags.items()
     ]
+
+
+async def _mock_battle_row_for_web(mission_id, mission, battle_id, battle):
+    participants = MOCK_BATTLE_ATTENDERS.get(battle_id, [])
+    p1_id = str(participants[0]) if len(participants) > 0 else None
+    p2_id = str(participants[1]) if len(participants) > 1 else None
+
+    p1_user = await get_user_by_telegram_id(p1_id) if p1_id else None
+    p2_user = await get_user_by_telegram_id(p2_id) if p2_id else None
+
+    p1_nick = (p1_user or {}).get('nickname') if p1_user else None
+    p2_nick = (p2_user or {}).get('nickname') if p2_user else None
+
+    p1_alliance = (MOCK_ALLIANCES.get((p1_user or {}).get('alliance')) or {}).get('name') if p1_user else None
+    p2_alliance = (MOCK_ALLIANCES.get((p2_user or {}).get('alliance')) or {}).get('name') if p2_user else None
+
+    return {
+        'mission_id': mission_id,
+        'deploy': mission.get('deploy', 'Mock Deploy'),
+        'rules': mission.get('rules', 'wh40k'),
+        'cell': mission.get('cell'),
+        'description': mission.get('mission_description', 'Test mission details'),
+        'created_date': mission.get('created_date', datetime.date.today().isoformat()),
+        'battle_id': battle_id,
+        'p1_id': p1_id,
+        'p1_nick': p1_nick or (p1_id or '—'),
+        'p1_alliance': p1_alliance or '—',
+        'p2_id': p2_id,
+        'p2_nick': p2_nick or (p2_id or '—'),
+        'p2_alliance': p2_alliance or '—',
+        'p1_score': battle.get('fstplayer'),
+        'p2_score': battle.get('sndplayer'),
+    }
+
+
+async def get_active_battles_for_web():
+    print("🧪 Mock: get_active_battles_for_web()")
+    result = []
+    for battle_id, battle in MOCK_BATTLES.items():
+        mission_id = int(battle.get('mission_id', 0))
+        mission = MOCK_MISSIONS.get(mission_id, {})
+        if int(mission.get('status', 0)) == 1:
+            result.append(await _mock_battle_row_for_web(mission_id, mission, battle_id, battle))
+    return result
+
+
+async def get_pending_battles_for_web():
+    print("🧪 Mock: get_pending_battles_for_web()")
+    result = []
+    for battle_id, pending in MOCK_PENDING_RESULTS.items():
+        battle = MOCK_BATTLES.get(battle_id, {})
+        mission_id = int(battle.get('mission_id', 0))
+        mission = MOCK_MISSIONS.get(mission_id, {})
+        if int(mission.get('status', 0)) != 2:
+            continue
+        row = await _mock_battle_row_for_web(mission_id, mission, battle_id, battle)
+        row.update({
+            'pending_id': pending['id'],
+            'submitter_id': pending['submitter_id'],
+            'fst_score': pending['fstplayer_score'],
+            'snd_score': pending['sndplayer_score'],
+        })
+        result.append(row)
+    return result
+
+
+async def get_completed_battles_for_web():
+    print("🧪 Mock: get_completed_battles_for_web()")
+    result = []
+    for battle_id, battle in MOCK_BATTLES.items():
+        mission_id = int(battle.get('mission_id', 0))
+        mission = MOCK_MISSIONS.get(mission_id, {})
+        if int(mission.get('status', 0)) != 3:
+            continue
+        row = await _mock_battle_row_for_web(mission_id, mission, battle_id, battle)
+        p1_score = row.get('p1_score')
+        p2_score = row.get('p2_score')
+        winner_nick = None
+        if p1_score is not None and p2_score is not None:
+            if p1_score > p2_score:
+                winner_nick = row.get('p1_nick')
+            elif p2_score > p1_score:
+                winner_nick = row.get('p2_nick')
+        row['winner_nick'] = winner_nick
+        result.append(row)
+    return result
