@@ -1,0 +1,21 @@
+{
+  "name": "CareBot Admin",
+  "short_name": "CareBot",
+  "description": "Управление битвами CareBot",
+  "start_url": "/battles",
+  "display": "standalone",
+  "background_color": "#151515",
+  "theme_color": "#8b0000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "utilities"],
+  "lang": "ru",
+  "dir": "ltr"
+}

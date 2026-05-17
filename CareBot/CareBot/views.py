@@ -64,7 +64,7 @@ def health():
         # Check if database file exists
         db_path = os.environ.get('DATABASE_PATH', '/app/data/game_database.db')
         db_exists = os.path.exists(db_path)
-        
+
         return jsonify({
             'status': 'healthy',
             'timestamp': datetime.now().isoformat(),
@@ -78,6 +78,16 @@ def health():
             'error': str(e),
             'version': '1.0.0'
         }), 500
+
+
+@app.route('/offline.html')
+def offline():
+    """Offline fallback page for PWA."""
+    return render_template(
+        'offline.html',
+        title='Офлайн - CareBot',
+        year=datetime.now().year,
+    )
 
 
 @app.route('/admin/map_export.png', methods=['GET'])
