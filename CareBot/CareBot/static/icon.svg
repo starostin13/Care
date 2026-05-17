@@ -1,0 +1,27 @@
+<svg width="192" height="192" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="192" height="192" fill="#151515"/>
+
+  <!-- Red border -->
+  <rect x="8" y="8" width="176" height="176" fill="none" stroke="#8b0000" stroke-width="4"/>
+
+  <!-- Crossed swords icon -->
+  <g transform="translate(96, 96)">
+    <!-- Sword 1 -->
+    <g transform="rotate(-45)">
+      <rect x="-3" y="-50" width="6" height="100" fill="#cc0000"/>
+      <rect x="-8" y="-55" width="16" height="10" fill="#e0a000"/>
+      <circle cx="0" cy="-58" r="4" fill="#e0a000"/>
+    </g>
+
+    <!-- Sword 2 -->
+    <g transform="rotate(45)">
+      <rect x="-3" y="-50" width="6" height="100" fill="#cc0000"/>
+      <rect x="-8" y="-55" width="16" height="10" fill="#e0a000"/>
+      <circle cx="0" cy="-58" r="4" fill="#e0a000"/>
+    </g>
+  </g>
+
+  <!-- Text -->
+  <text x="96" y="150" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e0e0e0" text-anchor="middle">CareBot</text>
+</svg>
