@@ -426,6 +426,13 @@ function Remove-ConflictingProductionContainer {
         return $true
     }
 
+    # If the container is managed by docker compose, it is not a conflict.
+    ssh $SERVER_HOST "docker inspect $containerId --format '{{.Config.Labels}}' 2>/dev/null | grep -q 'com.docker.compose.project'"
+    if ($LASTEXITCODE -eq 0) {
+        Write-Info "Container is managed by docker compose; skipping removal"
+        return $true
+    }
+
     Write-Info "Removing existing container ID: $containerId"
     ssh $SERVER_HOST "docker rm -f $containerId"
 
