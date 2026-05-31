@@ -269,6 +269,58 @@ def generate_new_one(rules):
         return ('Only War', rules, None, f'Generic mission for {rules}', None, None)
 
 
+def _build_static_wh40k_mission_tuple(static_mission: dict) -> Tuple[str, str, None, str, Optional[str], None]:
+    """Convert static Armageddon row to mission_stack tuple format."""
+    mission_name = (static_mission.get('mission_name') or '').strip()
+    mission_code = (static_mission.get('mission_code') or '').strip()
+    mission_text = (static_mission.get('mission_text_full') or '').strip()
+
+    title_parts = [part for part in [mission_name, mission_code] if part]
+    title = f"{' - '.join(title_parts)}\n\n" if title_parts else ""
+    description = (title + mission_text).strip()
+
+    deploy_asset_path = (
+        static_mission.get('deploy_asset_path')
+        or static_mission.get('map_asset_path')
+        or "total_domination.jpg"
+    )
+
+    # Preserve existing WH40K mechanic: missions should have a winner bonus.
+    winner_bonus = generate_new_one("wh40k")[4]
+
+    # (deploy, rules, cell, mission_description, winner_bonus, map_description)
+    return (deploy_asset_path, "wh40k", None, description, winner_bonus, None)
+
+async def _try_create_static_wh40k_mission() -> bool:
+    """Create one static WH40K mission with 50% chance if dataset is available."""
+    try:
+        static_count = await sqllite_helper.get_static_armageddon_mission_count("wh40k")
+    except Exception as exc:
+        logger.warning("Static mission table is unavailable, fallback to generator: %s", exc)
+        return False
+
+    if static_count <= 0:
+        return False
+
+    # 50% chance to use static mission set when no free mission exists.
+    if random.random() >= 0.5:
+        return False
+
+    static_mission = await sqllite_helper.get_random_static_armageddon_mission("wh40k")
+    if not static_mission:
+        return False
+
+    mission_tuple = _build_static_wh40k_mission_tuple(static_mission)
+    await sqllite_helper.save_mission(mission_tuple)
+
+    logger.info(
+        "Created static WH40K mission from Armageddon dataset: %s (%s)",
+        static_mission.get('mission_name'),
+        static_mission.get('mission_code'),
+    )
+    return True
+
+
 async def ensure_mission_cell(mission_id: int, attacker_id: Optional[str], defender_id: Optional[str]):
     """Assign a mission cell using attacker/defender alliances if it is still missing."""
     mission = await sqllite_helper.get_mission_details(mission_id)
@@ -342,9 +394,18 @@ async def get_mission(rules: Optional[str], attacker_id: Optional[str] = None, d
     mission = await sqllite_helper.get_mission(rules)
     
     if not mission:
-        # Generate new mission (returns tuple)
-        mission_tuple = generate_new_one(rules)
-        await sqllite_helper.save_mission(mission_tuple)
+        static_created = False
+        if rules == "wh40k":
+            try:
+                static_created = await _try_create_static_wh40k_mission()
+            except Exception as exc:
+                logger.warning("Failed to create static WH40K mission, using generator: %s", exc)
+
+        if not static_created:
+            # Generate new mission (returns tuple)
+            mission_tuple = generate_new_one(rules)
+            await sqllite_helper.save_mission(mission_tuple)
+
         # Re-fetch from DB to get Mission object with ID
         mission = await sqllite_helper.get_mission(rules)
         

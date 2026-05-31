@@ -47,6 +47,7 @@ MOCK_WARMASTERS = {
 }
 
 MOCK_MISSIONS = {}
+MOCK_STATIC_ARMAGEDDON_MISSIONS = {}
 MOCK_BATTLES = {}
 MOCK_BATTLE_ATTENDERS = {}
 MOCK_PENDING_RESULTS = {}
@@ -748,6 +749,59 @@ async def get_mission(rules):
             )
 
     return None
+
+
+async def upsert_static_armageddon_mission(
+    rules,
+    source,
+    source_url,
+    mission_code,
+    mission_name,
+    mission_text_full,
+    deploy_asset_path,
+    map_asset_path,
+    is_active=1,
+):
+    """Mock upsert for static armageddon missions."""
+    print(
+        "🧪 Mock: upsert_static_armageddon_mission("
+        f"{rules}, {source}, {mission_code}, {mission_name})"
+    )
+    key = (rules, source, mission_code)
+    MOCK_STATIC_ARMAGEDDON_MISSIONS[key] = {
+        'rules': rules,
+        'source': source,
+        'source_url': source_url,
+        'mission_code': mission_code,
+        'mission_name': mission_name,
+        'mission_text_full': mission_text_full,
+        'deploy_asset_path': deploy_asset_path,
+        'map_asset_path': map_asset_path,
+        'is_active': int(is_active),
+    }
+    return True
+
+
+async def get_static_armageddon_mission_count(rules='wh40k'):
+    """Mock count of active static armageddon missions."""
+    print(f"🧪 Mock: get_static_armageddon_mission_count({rules})")
+    count = 0
+    for mission in MOCK_STATIC_ARMAGEDDON_MISSIONS.values():
+        if mission.get('rules') == rules and int(mission.get('is_active', 0)) == 1:
+            count += 1
+    return count
+
+
+async def get_random_static_armageddon_mission(rules='wh40k'):
+    """Mock random static armageddon mission selection."""
+    print(f"🧪 Mock: get_random_static_armageddon_mission({rules})")
+    candidates = [
+        mission for mission in MOCK_STATIC_ARMAGEDDON_MISSIONS.values()
+        if mission.get('rules') == rules and int(mission.get('is_active', 0)) == 1
+    ]
+    if not candidates:
+        return None
+    return random.choice(candidates)
 
 async def get_schedule_by_user(user_telegram, date=None):
     print(f"🧪 Mock: get_schedule_by_user({user_telegram}, {date})")

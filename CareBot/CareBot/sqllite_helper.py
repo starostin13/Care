@@ -9,7 +9,7 @@ import aiosqlite
 import os
 import random
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from models import Mission, Battle, MissionDetails, Warmaster, Alliance, MapCell, PendingResult
 
 logger = logging.getLogger(__name__)
@@ -822,6 +822,87 @@ async def save_mission(mission):
               mission[5] if len(mission) > 5 else None,
               mission[6] if len(mission) > 6 else None))
         await db.commit()
+
+
+async def upsert_static_armageddon_mission(
+    rules: str,
+    source: str,
+    source_url: str,
+    mission_code: str,
+    mission_name: str,
+    mission_text_full: str,
+    deploy_asset_path: Optional[str],
+    map_asset_path: Optional[str],
+    is_active: int = 1,
+):
+    """Insert or update one static Armageddon mission record."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            '''
+            INSERT INTO static_armageddon_missions(
+                rules, source, source_url, mission_code, mission_name,
+                mission_text_full, deploy_asset_path, map_asset_path,
+                is_active, created_at, updated_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(rules, source, mission_code)
+            DO UPDATE SET
+                source_url = excluded.source_url,
+                mission_name = excluded.mission_name,
+                mission_text_full = excluded.mission_text_full,
+                deploy_asset_path = excluded.deploy_asset_path,
+                map_asset_path = excluded.map_asset_path,
+                is_active = excluded.is_active,
+                updated_at = CURRENT_TIMESTAMP
+            ''',
+            (
+                rules,
+                source,
+                source_url,
+                mission_code,
+                mission_name,
+                mission_text_full,
+                deploy_asset_path,
+                map_asset_path,
+                is_active,
+            ),
+        )
+        await db.commit()
+
+
+async def get_static_armageddon_mission_count(rules: str = "wh40k") -> int:
+    """Return number of active static Armageddon missions for given rules."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute(
+            '''
+            SELECT COUNT(*)
+            FROM static_armageddon_missions
+            WHERE rules = ? AND is_active = 1
+            ''',
+            (rules,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+
+async def get_random_static_armageddon_mission(rules: str = "wh40k") -> Optional[Dict[str, Any]]:
+    """Return one random active static Armageddon mission record."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            '''
+            SELECT id, rules, source, source_url, mission_code,
+                   mission_name, mission_text_full, deploy_asset_path,
+                   map_asset_path, is_active
+            FROM static_armageddon_missions
+            WHERE rules = ? AND is_active = 1
+            ORDER BY RANDOM()
+            LIMIT 1
+            ''',
+            (rules,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
 
 
 async def set_nickname(user_telegram_id, nickname):

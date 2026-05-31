@@ -46,32 +46,22 @@ function Build-ProductionImage {
 # Safely stop and remove old container
 function Stop-OldContainer {
     Write-Info "Safely stopping old container..."
-    
-    # Check if container exists
-    $containerExists = ssh $SERVER_HOST "docker ps -a --filter 'name=carebot_production' --format '{{.Names}}' | grep -c carebot_production 2>/dev/null || echo '0'"
-    
-    if ($containerExists -eq "0" -or $null -eq $containerExists) {
+
+    $containerId = ssh $SERVER_HOST "docker ps -aq --filter 'name=^/carebot_production$'"
+
+    if (-not $containerId) {
         Write-Info "No old container found, skipping stop"
         return $true
     }
-    
-    # Check container status
-    $status = ssh $SERVER_HOST "docker ps --all --filter 'name=carebot_production' --format '{{.State}}' 2>/dev/null || echo 'not-found'"
-    
-    if ($status -eq "running") {
-        Write-Info "Container is running, stopping..."
-        ssh $SERVER_HOST "docker stop carebot_production --time=30 2>&1"
-        Start-Sleep -Seconds 2
-    }
-    
-    # Remove the container
-    Write-Info "Removing old container..."
-    ssh $SERVER_HOST "docker rm carebot_production 2>&1"
-    
+
+    Write-Info "Removing existing container ID: $containerId"
+    ssh $SERVER_HOST "docker rm -f $containerId 2>&1"
+
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Failed to remove container (may not exist), continuing..."
+        Write-Error "Failed to remove existing container: $containerId"
+        return $false
     }
-    
+
     Write-Success "Old container cleaned up"
     return $true
 }
@@ -133,52 +123,37 @@ function Test-Token {
 function Sync-Files {
     Write-Info "Syncing files to server..."
     
-    $filesToSync = @(
-        "CareBot/CareBot/handlers.py",
-        "CareBot/CareBot/views.py",
-        "CareBot/CareBot/map_export_service.py",
-        "CareBot/CareBot/warmaster_helper.py", 
-        "CareBot/CareBot/settings_helper.py",
-        "CareBot/CareBot/schedule_helper.py",
-        "CareBot/CareBot/mission_helper.py",
-        "CareBot/CareBot/features.py",
-        "CareBot/CareBot/register_features.py",
-        "CareBot/CareBot/common_resource_feature.py",
-        "CareBot/CareBot/players_helper.py",
-        "CareBot/CareBot/map_helper.py",
-        "CareBot/CareBot/map_exporter.py",
-        "CareBot/CareBot/sqllite_helper.py",
-        "CareBot/CareBot/models.py",
-        "CareBot/CareBot/mission_message_builder.py",
-        "CareBot/CareBot/feature_flags_helper.py",
-        "CareBot/CareBot/keyboard_constructor.py",
-        "CareBot/CareBot/localization.py",
-        "CareBot/CareBot/notification_service.py",
-        "CareBot/CareBot/migrate_db.py",
-        "CareBot/CareBot/config.py",
-        "CareBot/CareBot/templates/battles.html",
-        "CareBot/run_hybrid.py",
-        "CareBot/requirements.txt",
+    # Синхронизируем инфраструктурные файлы
+    $infraFiles = @(
         "Dockerfile",
         "entrypoint.sh",
-        "docker-compose.production.yml"
+        "docker-compose.production.yml",
+        "CareBot/requirements.txt",
+        "CareBot/run_hybrid.py",
+        "CareBot/run_bot.py",
+        "CareBot/runserver.py"
     )
-    
-    # Синхронизируем основные файлы
-    foreach ($file in $filesToSync) {
+
+    foreach ($file in $infraFiles) {
         if (Test-Path $file) {
             Write-Host "  Copying $file..."
-            
+
             $remoteDir = Split-Path $file -Parent
             if ($remoteDir) {
                 ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH/$remoteDir"
             }
-            
+
             scp $file "${SERVER_HOST}:${PRODUCTION_PATH}/$file"
         } else {
             Write-Warning "File $file not found, skipping"
         }
     }
+
+    # Синхронизируем весь пакет приложения рекурсивно,
+    # чтобы новые модули автоматически попадали в production build context.
+    Write-Info "Syncing full CareBot application package..."
+    ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH/CareBot"
+    scp -r "CareBot/CareBot" "${SERVER_HOST}:${PRODUCTION_PATH}/CareBot/"
     
     # Синхронизируем миграции в отдельную папку
     Write-Info "Syncing migrations to separate directory..."
@@ -190,16 +165,6 @@ function Sync-Files {
         scp "CareBot/CareBot/migrations/$($migration.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/migrations/$($migration.Name)"
     }
 
-    # Синхронизируем assets для деплоев WH40K
-    Write-Info "Syncing WH40K deploy assets..."
-    ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH/CareBot/CareBot/assets/deploys"
-
-    $deployAssetFiles = Get-ChildItem -Path "CareBot/CareBot/assets/deploys" -File -ErrorAction SilentlyContinue
-    foreach ($asset in $deployAssetFiles) {
-        Write-Host "  Copying deploy asset: $($asset.Name)..."
-        scp "CareBot/CareBot/assets/deploys/$($asset.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/CareBot/CareBot/assets/deploys/$($asset.Name)"
-    }
-    
     Write-Success "File sync completed"
     return $true
 }
@@ -211,7 +176,7 @@ function Test-Health {
     Start-Sleep -Seconds 10
     
     try {
-        $response = Invoke-WebRequest -Uri $HEALTH_URL -Method GET -TimeoutSec 10 -Proxy $null
+        $response = Invoke-WebRequest -Uri $HEALTH_URL -Method GET -TimeoutSec 10 -Proxy $null -UseBasicParsing
         
         if ($response.StatusCode -eq 200) {
             $healthData = $response.Content | ConvertFrom-Json

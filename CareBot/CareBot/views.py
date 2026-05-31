@@ -227,12 +227,19 @@ def create_battle():
                     )
             else:
                 # --- Auto-generate mission from rules ---
-                mission_tuple = mission_helper.generate_new_one(rules_raw)
-                await sqllite_helper.save_mission(mission_tuple)
-                new_mission = await sqllite_helper.get_mission(rules_raw)
-                if not new_mission:
+                try:
+                    mission_data = await mission_helper.get_mission(rules_raw)
+                except Exception:
+                    logger.error('Web UI: mission generation failed (rules=%s)', rules_raw, exc_info=True)
                     return _api_error('mission_gen_failed', 'Не удалось создать миссию. Попробуйте ещё раз.', 500)
-                selected_mission_id = new_mission.id
+                if not mission_data:
+                    return _api_error('mission_gen_failed', 'Не удалось создать миссию. Попробуйте ещё раз.', 500)
+
+                # Backward-compatible tuple format: (deploy, rules, cell, description, id, winner_bonus)
+                mission_id_raw = mission_data[4] if len(mission_data) > 4 else None
+                if mission_id_raw in (None, ''):
+                    return _api_error('mission_gen_failed', 'Не удалось определить mission_id для созданной миссии.', 500)
+                selected_mission_id = int(mission_id_raw)
                 logger.info('Web UI: auto-generated mission %s (rules=%s)', selected_mission_id, rules_raw)
 
             p1_id = str(participant_1_id)
