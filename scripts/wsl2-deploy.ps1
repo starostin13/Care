@@ -216,10 +216,8 @@ function Build-Image {
     
     Write-Info "Executing: $buildCmd"
     
-    Invoke-WSLCommand -Command $buildCmd
-    if ($LASTEXITCODE -ne 0) { return $false }
-    
-    if ($LASTEXITCODE -eq 0) {
+    $ok = Invoke-ExternalWithProgress -FilePath "wsl" -Arguments @("-d", $WSL_DISTRO, "--cd", "/", "/bin/sh", "-lc", $buildCmd) -Activity "Building Docker image in WSL2" -TimeoutSec $TIMEOUT_BUILD_SEC
+    if ($ok) {
         Write-Success "Image built successfully: ${IMAGE_NAME}:${Tag}"
         return $true
     } else {
