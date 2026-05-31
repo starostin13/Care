@@ -227,7 +227,11 @@ def create_battle():
                     )
             else:
                 # --- Auto-generate mission from rules ---
-                mission_data = await mission_helper.get_mission(rules_raw)
+                try:
+                    mission_data = await mission_helper.get_mission(rules_raw)
+                except Exception:
+                    logger.error('Web UI: mission generation failed (rules=%s)', rules_raw, exc_info=True)
+                    return _api_error('mission_gen_failed', 'Не удалось создать миссию. Попробуйте ещё раз.', 500)
                 if not mission_data:
                     return _api_error('mission_gen_failed', 'Не удалось создать миссию. Попробуйте ещё раз.', 500)
 
