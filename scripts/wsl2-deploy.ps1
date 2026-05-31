@@ -508,7 +508,7 @@ function Set-ProductionImageTag {
 
     Write-Info "Setting production image tag to $ImageTag..."
     ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH"
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH && if [ -f .env ]; then sed -i '/CAREBOT_IMAGE_TAG=/d' .env; fi; printf '\n%s\n' 'CAREBOT_IMAGE_TAG=$ImageTag' >> .env"
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH && if [ -f .env ]; then sed -i '/^CAREBOT_IMAGE_TAG=/d' .env; fi; printf '\n%s\n' 'CAREBOT_IMAGE_TAG=$ImageTag' >> .env"
     Write-Success "Production image tag set"
 }
 
