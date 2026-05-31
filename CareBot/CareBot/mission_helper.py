@@ -269,7 +269,7 @@ def generate_new_one(rules):
         return ('Only War', rules, None, f'Generic mission for {rules}', None, None)
 
 
-def _build_static_wh40k_mission_tuple(static_mission: dict) -> Tuple[str, str, None, str, None, None]:
+def _build_static_wh40k_mission_tuple(static_mission: dict) -> Tuple[str, str, None, str, Optional[str], None]:
     """Convert static Armageddon row to mission_stack tuple format."""
     mission_name = (static_mission.get('mission_name') or '').strip()
     mission_code = (static_mission.get('mission_code') or '').strip()
@@ -285,9 +285,11 @@ def _build_static_wh40k_mission_tuple(static_mission: dict) -> Tuple[str, str, N
         or "total_domination.jpg"
     )
 
-    # (deploy, rules, cell, mission_description, winner_bonus, map_description)
-    return (deploy_asset_path, "wh40k", None, description, None, None)
+    # Preserve existing WH40K mechanic: missions should have a winner bonus.
+    winner_bonus = generate_new_one("wh40k")[4]
 
+    # (deploy, rules, cell, mission_description, winner_bonus, map_description)
+    return (deploy_asset_path, "wh40k", None, description, winner_bonus, None)
 
 async def _try_create_static_wh40k_mission() -> bool:
     """Create one static WH40K mission with 50% chance if dataset is available."""
