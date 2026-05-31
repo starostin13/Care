@@ -6,14 +6,18 @@ Usage:
 
 import asyncio
 import html
+import os
 import re
 from pathlib import Path
 from typing import Dict, List
 from urllib.parse import urljoin
 from urllib.request import urlopen, urlretrieve
 
-import sqllite_helper
+# Ensure a portable default DB path for local runs (can be overridden via DATABASE_PATH).
+DEFAULT_DB_PATH = Path(__file__).resolve().parent / "db" / "database.db"
+os.environ.setdefault("DATABASE_PATH", str(DEFAULT_DB_PATH))
 
+import sqllite_helper
 WAHAPEDIA_URL = "https://wahapedia.ru/wh40k10ed/the-rules/armageddon/#Mission-Map-Key"
 WAHAPEDIA_BASE_URL = "https://wahapedia.ru"
 SOURCE = "wahapedia_armageddon"
