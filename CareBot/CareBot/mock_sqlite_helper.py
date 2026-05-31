@@ -1247,6 +1247,42 @@ async def get_all_feature_flags() -> list:
     ]
 
 
+async def get_adjacent_cells(cell_id):
+    """
+    Mock: Get all cells adjacent to a given cell.
+
+    Args:
+        cell_id: The cell ID to find neighbors for
+
+    Returns:
+        List of adjacent cell IDs
+    """
+    print(f"🧪 Mock: get_adjacent_cells({cell_id})")
+    # Mock data: simple adjacency
+    # In test mode, cell 1 is adjacent to cell 2
+    # Cell 2 is adjacent to cells 1 and 3, etc.
+    if cell_id == 1:
+        return [2]
+    elif cell_id == 2:
+        return [1, 3]
+    elif cell_id == 3:
+        return [2, 4]
+    else:
+        return []
+
+
+async def update_mission_description(mission_id, new_description):
+    """
+    Mock: Update mission description.
+
+    Args:
+        mission_id: Mission ID
+        new_description: New description text
+    """
+    print(f"🧪 Mock: update_mission_description({mission_id}, {new_description[:50]}...)")
+    if mission_id in MOCK_MISSIONS:
+        MOCK_MISSIONS[mission_id]['mission_description'] = new_description
+
 async def _mock_battle_row_for_web(mission_id, mission, battle_id, battle):
     participants = MOCK_BATTLE_ATTENDERS.get(battle_id, [])
     p1_id = str(participants[0]) if len(participants) > 0 else None
