@@ -303,8 +303,9 @@ async def this_week(rule, user_id):
 async def today_schedule(user_id):
     """Create schedule keyboard with opponent info in callback_data.
     
-    appointments format: (schedule_id, rules, opponent_nickname, opponent_telegram_id)
-    callback_data format: mission_sch_{schedule_id}_{opponent_telegram_id}
+    appointments format: (schedule_id, rules, opponent_nickname, warmaster_id)
+    callback_data format: mission_sch_{schedule_id}_{warmaster_id}
+    Uses warmaster.id instead of telegram_id for security.
     """
     today = dt.today()
     appointments = await sqllite_helper.get_schedule_with_warmasters(user_id, str(today.date()))

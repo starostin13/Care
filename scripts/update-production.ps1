@@ -17,6 +17,65 @@ function Write-Error($text) { Write-Host "ERROR: $text" -ForegroundColor Red }
 function Write-Info($text) { Write-Host "INFO: $text" -ForegroundColor Cyan }
 function Write-Warning($text) { Write-Host "WARNING: $text" -ForegroundColor Yellow }
 
+# Get latest image SHA
+function Get-LatestImageSHA {
+    Write-Info "Getting latest built image SHA..."
+    $imageSHA = ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker images --format '{{.ID}}' --filter 'reference=carebot:latest' | head -1 | cut -d':' -f2 | cut -c1-12"
+    
+    if ($LASTEXITCODE -eq 0 -and $imageSHA) {
+        Write-Success "Latest image SHA: $imageSHA"
+        return $imageSHA
+    }
+    return $null
+}
+
+# Build image on production host
+function Build-ProductionImage {
+    Write-Info "Building production image on server..."
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker build -t carebot:latest -f Dockerfile ."
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Server-side Docker build failed"
+        return $false
+    }
+
+    Write-Success "Production image built successfully"
+    return $true
+}
+
+# Safely stop and remove old container
+function Stop-OldContainer {
+    Write-Info "Safely stopping old container..."
+    
+    # Check if container exists
+    $containerExists = ssh $SERVER_HOST "docker ps -a --filter 'name=carebot_production' --format '{{.Names}}' | grep -c carebot_production 2>/dev/null || echo '0'"
+    
+    if ($containerExists -eq "0" -or $null -eq $containerExists) {
+        Write-Info "No old container found, skipping stop"
+        return $true
+    }
+    
+    # Check container status
+    $status = ssh $SERVER_HOST "docker ps --all --filter 'name=carebot_production' --format '{{.State}}' 2>/dev/null || echo 'not-found'"
+    
+    if ($status -eq "running") {
+        Write-Info "Container is running, stopping..."
+        ssh $SERVER_HOST "docker stop carebot_production --time=30 2>&1"
+        Start-Sleep -Seconds 2
+    }
+    
+    # Remove the container
+    Write-Info "Removing old container..."
+    ssh $SERVER_HOST "docker rm carebot_production 2>&1"
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Failed to remove container (may not exist), continuing..."
+    }
+    
+    Write-Success "Old container cleaned up"
+    return $true
+}
+
 # Production safety check
 function Test-ProductionSafety {
     Write-Info "Running production safety check..."
@@ -39,7 +98,18 @@ function Test-ProductionSafety {
     }
 }
 
-# Check token
+# Get telegram token from .env
+function Get-TelegramToken {
+    if (-not (Test-Path $LOCAL_ENV_FILE)) {
+        Write-Error "File $LOCAL_ENV_FILE not found!"
+        return $null
+    }
+    
+    $token = Get-Content $LOCAL_ENV_FILE | Where-Object { $_ -match "TELEGRAM_BOT_TOKEN=" } | ForEach-Object { $_.Split('=')[1] }
+    return $token
+}
+
+# Get telegram token
 function Test-Token {
     Write-Info "Checking Telegram token..."
     
@@ -48,7 +118,7 @@ function Test-Token {
         return $false
     }
     
-    $token = Get-Content $LOCAL_ENV_FILE | Where-Object { $_ -match "TELEGRAM_BOT_TOKEN=" } | ForEach-Object { $_.Split('=')[1] }
+    $token = Get-TelegramToken
     
     if (-not $token) {
         Write-Error "Token not found in $LOCAL_ENV_FILE"
@@ -65,20 +135,28 @@ function Sync-Files {
     
     $filesToSync = @(
         "CareBot/CareBot/handlers.py",
+        "CareBot/CareBot/views.py",
+        "CareBot/CareBot/map_export_service.py",
         "CareBot/CareBot/warmaster_helper.py", 
         "CareBot/CareBot/settings_helper.py",
         "CareBot/CareBot/schedule_helper.py",
         "CareBot/CareBot/mission_helper.py",
+        "CareBot/CareBot/features.py",
+        "CareBot/CareBot/register_features.py",
+        "CareBot/CareBot/common_resource_feature.py",
         "CareBot/CareBot/players_helper.py",
         "CareBot/CareBot/map_helper.py",
+        "CareBot/CareBot/map_exporter.py",
         "CareBot/CareBot/sqllite_helper.py",
         "CareBot/CareBot/models.py",
         "CareBot/CareBot/mission_message_builder.py",
+        "CareBot/CareBot/feature_flags_helper.py",
         "CareBot/CareBot/keyboard_constructor.py",
         "CareBot/CareBot/localization.py",
         "CareBot/CareBot/notification_service.py",
         "CareBot/CareBot/migrate_db.py",
         "CareBot/CareBot/config.py",
+        "CareBot/CareBot/templates/battles.html",
         "CareBot/run_hybrid.py",
         "CareBot/requirements.txt",
         "Dockerfile",
@@ -111,6 +189,16 @@ function Sync-Files {
         Write-Host "  Copying migration: $($migration.Name)..."
         scp "CareBot/CareBot/migrations/$($migration.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/migrations/$($migration.Name)"
     }
+
+    # Синхронизируем assets для деплоев WH40K
+    Write-Info "Syncing WH40K deploy assets..."
+    ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH/CareBot/CareBot/assets/deploys"
+
+    $deployAssetFiles = Get-ChildItem -Path "CareBot/CareBot/assets/deploys" -File -ErrorAction SilentlyContinue
+    foreach ($asset in $deployAssetFiles) {
+        Write-Host "  Copying deploy asset: $($asset.Name)..."
+        scp "CareBot/CareBot/assets/deploys/$($asset.Name)" "${SERVER_HOST}:${PRODUCTION_PATH}/CareBot/CareBot/assets/deploys/$($asset.Name)"
+    }
     
     Write-Success "File sync completed"
     return $true
@@ -139,7 +227,7 @@ function Test-Health {
     return $false
 }
 
-# Update production
+# Update production with safe container handling
 function Update-Production {
     Write-Host "Starting CareBot Production Update (LEGACY)" -ForegroundColor Yellow
     Write-Warning "This legacy flow builds on the server. Prefer scripts/wsl2-deploy.ps1 for WSL2 builds."
@@ -153,6 +241,12 @@ function Update-Production {
     
     if (-not (Test-Token)) { return $false }
     
+    $token = Get-TelegramToken
+    if (-not $token) {
+        Write-Error "Failed to get Telegram token"
+        return $false
+    }
+    
     # Create backup before update
     if (-not $Force) {
         $answer = Read-Host "Create backup before update? (Y/n)"
@@ -164,9 +258,33 @@ function Update-Production {
     }
     
     if (-not (Sync-Files)) { return $false }
+
+    if (-not (Build-ProductionImage)) { return $false }
     
-    Write-Info "Restarting production service (no server-side build)..."
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d"
+    # Get the new image SHA
+    $imageSHA = Get-LatestImageSHA
+    if (-not $imageSHA) {
+        Write-Error "Failed to get built image SHA"
+        return $false
+    }
+    
+    # Safely stop and remove old container
+    if (-not (Stop-OldContainer)) {
+        Write-Error "Failed to stop old container"
+        return $false
+    }
+    
+    Write-Info "Starting new container with image: $imageSHA..."
+    
+    # Create new container using docker run (bypasses docker-compose metadata issues)
+    ssh $SERVER_HOST "docker run -d --name carebot_production -p 5555:5555 -v carebot_data:/app/data -v ${PRODUCTION_PATH}/migrations:/app/CareBot/migrations -e SERVER_HOST=0.0.0.0 -e SERVER_PORT=5555 -e DATABASE_PATH=/app/data/game_database.db -e TELEGRAM_BOT_TOKEN='${token}' --restart unless-stopped --network carebot-network carebot:latest 2>&1"
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to start new container"
+        return $false
+    }
+    
+    Write-Success "New container started!"
     
     if (-not $SkipHealthCheck) {
         Test-Health
@@ -210,9 +328,38 @@ function Stop-Service {
 }
 
 function Restart-Service {
-    Write-Info "Restarting service (no server-side build)..."
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH; docker compose -f docker-compose.production.yml up -d"
-    Write-Success "Service restarted"
+    Write-Info "Rebuilding image and restarting service..."
+    if (-not (Build-ProductionImage)) { return }
+    
+    # Get the new image SHA
+    $imageSHA = Get-LatestImageSHA
+    if (-not $imageSHA) {
+        Write-Error "Failed to get built image SHA"
+        return $false
+    }
+    
+    # Get token
+    $token = Get-TelegramToken
+    if (-not $token) {
+        Write-Error "Failed to get Telegram token"
+        return $false
+    }
+    
+    # Safely stop and remove old container
+    if (-not (Stop-OldContainer)) {
+        Write-Warning "Failed to stop old container, continuing..."
+    }
+    
+    # Start new container
+    Write-Info "Starting container with rebuilt image: $imageSHA..."
+    ssh $SERVER_HOST "docker run -d --name carebot_production -p 5555:5555 -v carebot_data:/app/data -v ${PRODUCTION_PATH}/migrations:/app/CareBot/migrations -e SERVER_HOST=0.0.0.0 -e SERVER_PORT=5555 -e DATABASE_PATH=/app/data/game_database.db -e TELEGRAM_BOT_TOKEN='${token}' --restart unless-stopped --network carebot-network carebot:latest 2>&1"
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Service restarted successfully"
+    } else {
+        Write-Error "Failed to restart service"
+        return $false
+    }
 }
 
 # Sync only migrations
@@ -239,7 +386,7 @@ function Sync-Migrations {
 function Apply-Migrations {
     Write-Info "Applying migrations in production..."
     
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH && docker exec carebot_production python /app/CareBot/migrate_db.py"
+    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/CareBot/migrate_db.py"
     
     Write-Success "Migrations applied"
 }
@@ -248,7 +395,7 @@ function Apply-Migrations {
 function Check-MigrationStatus {
     Write-Info "Checking migration status..."
     
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH && docker exec carebot_production python /app/CareBot/migrate_db.py --status"
+    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/CareBot/migrate_db.py --status"
 }
 
 # Create backup
@@ -297,6 +444,9 @@ switch ($Action.ToLower()) {
     "migration-status" {
         Check-MigrationStatus
     }
+    "build" {
+        Build-ProductionImage
+    }
     "backup" {
         Create-Backup
     }
@@ -322,6 +472,7 @@ switch ($Action.ToLower()) {
         Write-Host "  migrations       - Sync only migration files"
         Write-Host "  apply-migrations - Apply migrations manually"
         Write-Host "  migration-status - Check migration status"
+        Write-Host "  build            - Build production image on server"
         Write-Host "  safety-check     - Run production safety validation"
         Write-Host ""
         Write-Host "Options:"
