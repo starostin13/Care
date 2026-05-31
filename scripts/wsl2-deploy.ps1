@@ -349,10 +349,9 @@ function Save-Image {
     $outputPathWSL = $OutputPath -replace '\\', '/' -replace 'C:', '/mnt/c' -replace 'c:', '/mnt/c'
     
     Write-Info "Saving ${IMAGE_NAME}:${Tag} to $OutputPath..."
-    Invoke-WSLCommand -Command "docker save ${IMAGE_NAME}:${Tag} -o '$outputPathWSL'"
-    if ($LASTEXITCODE -ne 0) { return $false }
-    
-    if ($LASTEXITCODE -eq 0) {
+    $saveCmd = "docker save ${IMAGE_NAME}:${Tag} -o '$outputPathWSL'"
+    $ok = Invoke-ExternalWithProgress -FilePath "wsl" -Arguments @("-d", $WSL_DISTRO, "--cd", "/", "/bin/sh", "-lc", $saveCmd) -Activity "Saving Docker image to tar" -TimeoutSec $TIMEOUT_SAVE_SEC
+    if ($ok) {
         $fileSize = (Get-Item $OutputPath).Length / 1MB
         Write-Success "Image saved: $OutputPath ($([math]::Round($fileSize, 2)) MB)"
         return $true
