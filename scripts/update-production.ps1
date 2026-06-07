@@ -351,7 +351,7 @@ function Sync-Migrations {
 function Apply-Migrations {
     Write-Info "Applying migrations in production..."
     
-    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/CareBot/migrate_db.py"
+    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/migrate_db.py"
     
     Write-Success "Migrations applied"
 }
@@ -360,7 +360,7 @@ function Apply-Migrations {
 function Check-MigrationStatus {
     Write-Info "Checking migration status..."
     
-    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/CareBot/migrate_db.py --status"
+    ssh $SERVER_HOST "docker exec carebot_production python /app/CareBot/migrate_db.py --status"
 }
 
 # Create backup

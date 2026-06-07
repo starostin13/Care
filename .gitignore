@@ -181,3 +181,10 @@ carebot-latest.tar
 
 # Local certificate artifacts
 *.pfx
+
+# Android/Gradle local and generated files
+/.tools/
+/android-app/.gradle/
+/android-app/build/
+/android-app/app/build/
+/android-app/local.properties

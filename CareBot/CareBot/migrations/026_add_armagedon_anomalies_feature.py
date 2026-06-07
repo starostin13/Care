@@ -44,6 +44,10 @@ def add_armagedon_anomalies_texts(conn):
     """Add localization texts for armagedon_anomalies feature."""
     cursor = conn.cursor()
 
+    cursor.execute("PRAGMA table_info(texts)")
+    text_columns = {row[1] for row in cursor.fetchall()}
+    text_value_column = "text" if "text" in text_columns else "value"
+
     texts_to_add = [
         # Feature flag names and descriptions
         ('feature_armagedon_anomalies_name', 'ru', '🌀 Аномалии Армагеддона'),
@@ -59,10 +63,10 @@ def add_armagedon_anomalies_texts(conn):
         """, (key, lang))
 
         if not cursor.fetchone():
-            cursor.execute("""
-                INSERT INTO texts (key, language, text)
-                VALUES (?, ?, ?)
-            """, (key, lang, text))
+            cursor.execute(
+                f"INSERT INTO texts (key, language, {text_value_column}) VALUES (?, ?, ?)",
+                (key, lang, text),
+            )
             print(f"✅ Added text: {key} ({lang})")
         else:
             print(f"⏭️  Text already exists: {key} ({lang})")
