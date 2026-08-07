@@ -42,7 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: TextField(
                 controller: _urlCtrl,
                 decoration: const InputDecoration(
-                  hintText: 'http://192.168.1.125:5555',
+                  hintText: 'http://192.168.0.125:5555',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.url,

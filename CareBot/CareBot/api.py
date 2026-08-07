@@ -5,14 +5,20 @@ result synchronization using existing mission/map helpers.
 """
 
 import asyncio
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, jsonify, request
 
+import config
 import map_helper
 import mission_helper
-import sqllite_helper
+
+if config.TEST_MODE:
+    import mock_sqlite_helper as sqllite_helper
+else:
+    import sqllite_helper
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -98,19 +104,20 @@ def create_mission():
     defender_id = str(defender_id)
 
     try:
-        mission_tuple = run_async(
-            mission_helper.get_mission(
+        async def _create():
+            mission_tuple = await mission_helper.get_mission(
                 rules=rules, attacker_id=attacker_id, defender_id=defender_id
             )
-        )
-        mission_id = mission_tuple[4]
-        battle_id = run_async(
-            mission_helper.start_battle(mission_id, attacker_id, defender_id)
-        )
-        run_async(sqllite_helper.lock_mission(mission_id))
-        mission_details = run_async(sqllite_helper.get_mission_details(mission_id))
+            mission_id = mission_tuple[4]
+            battle_id = await mission_helper.start_battle(mission_id, attacker_id, defender_id)
+            await sqllite_helper.lock_mission(mission_id)
+            mission_details = await sqllite_helper.get_mission_details(mission_id)
+            return battle_id, mission_details
+
+        battle_id, mission_details = run_async(_create())
     except Exception as exc:  # pragma: no cover - defensive
-        return jsonify({"error": str(exc)}), 500
+        logging.exception("Error creating mission")
+        return jsonify({"error": "Internal server error"}), 500
 
     response = {
         "battle_id": battle_id,
@@ -153,6 +160,7 @@ async def process_battle_result(
     scenario = mission_details.rules if mission_details else None
     await map_helper.update_map(battle_id, user_reply, submitter_id, scenario)
     await sqllite_helper.update_mission_status(mission_id, 3)
+    await sqllite_helper.delete_pending_result(battle_id)
 
     return {
         "status": "applied",
@@ -193,7 +201,8 @@ def submit_battle_result(battle_id: int):
             )
         )
     except Exception as exc:  # pragma: no cover - defensive
-        return jsonify({"error": str(exc)}), 500
+        logging.exception("Error processing battle result")
+        return jsonify({"error": "Internal server error"}), 500
 
     status = 200
     if result["status"] == "not_found":
@@ -212,6 +221,7 @@ def sync_battle_results():
     if not isinstance(results_payload, list):
         return jsonify({"error": "results array is required"}), 400
 
+    valid_entries: List[Dict[str, Any]] = []
     processed: List[Dict[str, Any]] = []
     for entry in results_payload:
         scores = _extract_scores(entry) if isinstance(entry, dict) else None
@@ -229,23 +239,29 @@ def sync_battle_results():
                     "message": "battle_id, submitter_id, fstplayer_score, sndplayer_score are required",
                 }
             )
-            continue
+        else:
+            valid_entries.append(
+                {"battle_id": int(battle_id), "scores": scores, "submitter_id": str(submitter_id)}
+            )
 
-        try:
-            processed.append(
-                run_async(
-                    process_battle_result(
-                        int(battle_id), scores[0], scores[1], str(submitter_id)
-                    )
+    async def _process_all():
+        results = []
+        for e in valid_entries:
+            try:
+                result = await process_battle_result(
+                    e["battle_id"], e["scores"][0], e["scores"][1], e["submitter_id"]
                 )
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            processed.append(
-                {
-                    "status": "error",
-                    "battle_id": battle_id,
-                    "message": str(exc),
-                }
-            )
+                results.append(result)
+            except Exception:
+                logging.exception("Error processing battle %s in sync", e["battle_id"])
+                results.append(
+                    {
+                        "status": "error",
+                        "battle_id": e["battle_id"],
+                        "message": "Internal server error",
+                    }
+                )
+        return results
 
+    processed.extend(run_async(_process_all()))
     return jsonify({"results": processed})

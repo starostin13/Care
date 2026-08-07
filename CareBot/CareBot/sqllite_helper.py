@@ -1079,7 +1079,7 @@ async def get_all_alliances_detailed():
     """Return alliances with resource totals for API consumers."""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT id, name, common_resource
+            SELECT id, name, common_resource, color
             FROM alliances
             ORDER BY id
         ''') as cursor:
@@ -1088,7 +1088,8 @@ async def get_all_alliances_detailed():
                 {
                     "id": row[0],
                     "name": row[1],
-                    "common_resource": row[2]
+                    "common_resource": row[2],
+                    "color": row[3]
                 } for row in rows
             ]
 
@@ -1160,7 +1161,7 @@ async def get_map_cells_snapshot():
                     "id": row[0],
                     "planet_id": row[1],
                     "state": row[2],
-                    "patron": row[3],
+                    "patron": None if row[3] == 0 else row[3],
                     "has_warehouse": bool(row[4]) if row[4] is not None else False
                 }
                 for row in rows

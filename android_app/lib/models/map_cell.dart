@@ -18,10 +18,12 @@ class MapCell {
     final bool hasWarehouse =
         rawHasWarehouse == true || rawHasWarehouse == 1;
 
+    final int? patron = json['patron'] as int?;
+
     return MapCell(
       id: json['id'] as int,
       planetId: json['planet_id'] as int?,
-      patron: json['patron'] as int?,
+      patron: patron == 0 ? null : patron,
       state: json['state'] as String?,
       hasWarehouse: hasWarehouse,
     );

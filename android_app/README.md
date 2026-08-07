@@ -32,7 +32,7 @@ Set the server URL in the **Settings** tab to point to your CareBot backend:
 http://<your-server-ip>:5555
 ```
 
-The default is `http://192.168.1.125:5555`.
+The default is `http://192.168.0.125:5555`.
 
 ## Architecture
 

@@ -17,7 +17,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
     'boarding_action',
     'combat_patrol',
     'wh40k',
-    'battlefleet_gothica',
+    'battlefleet',
   ];
 
   String? _selectedRules;

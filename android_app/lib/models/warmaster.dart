@@ -27,9 +27,12 @@ class Warmaster {
         rawNotificationsEnabled == 1 ||
         rawNotificationEnabled == 1;
 
+    final int? rawAllianceId = json['alliance'] as int?;
+    final int? allianceId = rawAllianceId == 0 ? null : rawAllianceId;
+
     return Warmaster(
       telegramId: json['telegram_id'].toString(),
-      allianceId: json['alliance'] as int?,
+      allianceId: allianceId,
       nickname: json['nickname'] as String?,
       faction: json['faction'] as String?,
       language: json['language'] as String?,

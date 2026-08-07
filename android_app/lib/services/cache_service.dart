@@ -15,7 +15,7 @@ class CacheService {
   static const _keyBootstrapJson = 'bootstrap_json';
   static const _keyPendingResults = 'pending_results_json';
   static const _keyBaseUrl = 'server_base_url';
-  static const _defaultBaseUrl = 'http://192.168.1.125:5555';
+  static const _defaultBaseUrl = 'http://192.168.0.125:5555';
 
   final SharedPreferences _prefs;
 
