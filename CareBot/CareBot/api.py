@@ -135,9 +135,20 @@ async def process_battle_result(
         }
 
     user_reply = f"{fstplayer_score} {sndplayer_score}"
+    rewards_reply = user_reply
+
+    battle_details = await sqllite_helper.get_battle_details(battle_id)
+    if battle_details:
+        fstplayer_id = str(battle_details[1])
+        sndplayer_id = str(battle_details[2])
+        if submitter_id == sndplayer_id:
+            rewards_reply = f"{sndplayer_score} {fstplayer_score}"
+        elif submitter_id == fstplayer_id:
+            rewards_reply = user_reply
+
     await mission_helper.write_battle_result(battle_id, user_reply)
     rewards = await mission_helper.apply_mission_rewards(
-        battle_id, user_reply, submitter_id
+        battle_id, rewards_reply, submitter_id
     )
     scenario = mission_details.rules if mission_details else None
     await map_helper.update_map(battle_id, user_reply, submitter_id, scenario)
