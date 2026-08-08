@@ -6,6 +6,8 @@ result synchronization using existing mission/map helpers.
 
 import asyncio
 import logging
+import os
+import secrets
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +23,27 @@ else:
     import sqllite_helper
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+
+def _get_api_token() -> Optional[str]:
+    """Return configured API token, preferring environment variable over config."""
+    token = os.environ.get("API_TOKEN") or getattr(config, "API_TOKEN", None)
+    return token or None
+
+
+@api_bp.before_request
+def require_api_token():
+    """Reject requests that do not carry the correct ******"""
+    expected = _get_api_token()
+    if not expected:
+        return None  # token not configured — allow unrestricted access on trusted LAN
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized"}), 401
+    provided = auth_header[len("Bearer "):]
+    if not secrets.compare_digest(provided, expected):
+        return jsonify({"error": "Unauthorized"}), 401
+    return None
 
 
 def run_async(coro):
