@@ -9,7 +9,7 @@ import aiosqlite
 import os
 import random
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from models import Mission, Battle, MissionDetails, Warmaster, Alliance, MapCell, PendingResult
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,34 @@ async def add_battle(mission_id):
         await db.commit()
         async with db.execute('SELECT last_insert_rowid()') as cursor:
             return await cursor.fetchone()
+
+
+async def add_battle_with_id(mission_id, battle_id):
+    """Create a new battle record with a specific battle_id.
+
+    Args:
+        mission_id: The mission ID
+        battle_id: The explicit battle ID to use
+
+    Returns:
+        Tuple with battle ID
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            INSERT INTO battles(id, mission_id) VALUES(?, ?)
+        ''', (battle_id, mission_id))
+        await db.commit()
+        return (battle_id,)
+
+
+async def battle_exists(battle_id: int) -> bool:
+    """Check whether a battle with the specified ID already exists."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT 1 FROM battles WHERE id = ? LIMIT 1
+        ''', (battle_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row is not None
 
 
 async def get_mission_id_for_battle(battle_id):
@@ -289,6 +317,44 @@ async def get_event_participants(eventId):
             return await cursor.fetchall()
 
 
+async def get_user_telegram_by_schedule_id(schedule_id):
+    """Get the user_telegram for a specific schedule entry by its ID.
+    
+    Args:
+        schedule_id: The ID of the schedule entry
+        
+    Returns:
+        str: The user_telegram ID from the schedule entry, or None if not found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT user_telegram 
+            FROM schedule 
+            WHERE id = ?
+        ''', (schedule_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
+async def get_telegram_id_by_warmaster_id(warmaster_id):
+    """Get the telegram_id for a warmaster by their internal ID.
+    
+    Args:
+        warmaster_id: The internal ID of the warmaster (warmasters.id)
+        
+    Returns:
+        str: The telegram_id of the warmaster, or None if not found
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT telegram_id 
+            FROM warmasters 
+            WHERE id = ?
+        ''', (warmaster_id,)) as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else None
+
+
 async def get_faction_of_warmaster(user_telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
          async with db.execute('''
@@ -320,26 +386,107 @@ async def unlock_expired_missions():
         return cursor.rowcount
 
 
+async def fix_mission_null_id(db, mission_data):
+    """Fix a mission with NULL id by regenerating it.
+
+    Args:
+        db: Database connection
+        mission_data: Tuple of mission data (id, deploy, rules, cell, mission_description, winner_bonus, status, created_date)
+
+    Returns:
+        New mission_id
+    """
+    _, deploy, rules, cell, mission_description, winner_bonus, status, created_date = mission_data
+
+    logger.warning(
+        f"Found mission with NULL id: {rules}/{deploy}. Regenerating id..."
+    )
+
+    # Delete the NULL id mission
+    await db.execute("""
+        DELETE FROM mission_stack
+        WHERE id IS NULL
+        AND deploy = ?
+        AND rules = ?
+        AND ((cell IS NULL AND ? IS NULL) OR cell = ?)
+        AND mission_description = ?
+        LIMIT 1
+    """, (deploy, rules, cell, cell, mission_description))
+
+    # Re-insert to get auto-generated id
+    await db.execute("""
+        INSERT INTO mission_stack (deploy, rules, cell, mission_description, winner_bonus, status, created_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (deploy, rules, cell, mission_description, winner_bonus, status, created_date))
+
+    await db.commit()
+
+    # Get the new id
+    async with db.execute('SELECT last_insert_rowid()') as cursor:
+        result = await cursor.fetchone()
+        new_id = result[0] if result else None
+
+    logger.info(f"Generated new id {new_id} for mission {rules}/{deploy}")
+    return new_id
+
+
 async def get_mission(rules) -> Optional[Mission]:
-    """Get an available mission by rules.
-    
+    """Atomically claim an available mission by rules.
+
     Args:
         rules: Mission ruleset (killteam, wh40k, etc.)
-    
+
     Returns:
-        Mission object or None if no mission found
+        Mission object (already locked with status=1) or None if no mission found
+
+    Note:
+        Missions with NULL id will have a new id generated and updated in the database.
     """
     # Unlock any expired missions before fetching
     await unlock_expired_missions()
-    
+
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("BEGIN IMMEDIATE")
+
         async with db.execute('''
             SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description, reward_config
             FROM mission_stack
             WHERE status=0 AND rules=?
+            ORDER BY id ASC
+            LIMIT 1
         ''', (rules,)) as cursor:
             row = await cursor.fetchone()
-            return Mission.from_db_row(row)
+
+        if not row:
+            await db.commit()
+            return None
+
+        # Check if id is NULL and fix it before locking
+        if row[0] is None:
+            new_id = await fix_mission_null_id(db, row)
+            async with db.execute('''
+                SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description, reward_config
+                FROM mission_stack
+                WHERE id=?
+            ''', (new_id,)) as new_cursor:
+                row = await new_cursor.fetchone()
+
+        mission_id = row[0]
+        cursor = await db.execute('''
+            UPDATE mission_stack
+            SET status=1
+            WHERE id=? AND status=0
+        ''', (mission_id,))
+
+        # Defensive guard: if row wasn't updated, mission was already claimed.
+        if cursor.rowcount != 1:
+            await db.commit()
+            return None
+
+        await db.commit()
+        return Mission.from_db_row((
+            row[0], row[1], row[2], row[3], row[4], row[5], 1, row[7], row[8], row[9]
+        ))
 
 async def get_schedule_by_user(user_telegram, date=None):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -354,21 +501,31 @@ async def get_schedule_by_user(user_telegram, date=None):
 async def get_schedule_with_warmasters(user_telegram, date=None):
     """Get schedule with opponent info including their telegram_id.
     
-    Returns: List of tuples (schedule_id, rules, opponent_nickname, opponent_telegram_id)
+    Returns: List of tuples (schedule_id, rules, opponent_nickname, warmaster_id)
+    Uses warmaster.id instead of telegram_id for security.
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT schedule.id, schedule.rules, warmasters.nickname, warmasters.telegram_id
-            FROM schedule
-            JOIN warmasters ON schedule.user_telegram = warmasters.telegram_id
-            JOIN warmasters AS current_user ON current_user.telegram_id = ?
-            WHERE schedule.date = ?
-              AND (
-                  current_user.alliance IS NULL
-                  OR current_user.alliance = 0
-                  OR warmasters.alliance <> current_user.alliance
-              )
-        ''', (user_telegram, date)) as cursor:
+            WITH current_user_alliance AS (
+                SELECT alliance FROM warmasters WHERE telegram_id=?
+            )
+            SELECT schedule.id, schedule.rules, warmasters.nickname, warmasters.id
+            FROM schedule 
+            JOIN warmasters ON schedule.user_telegram=warmasters.telegram_id 
+            CROSS JOIN current_user_alliance
+            WHERE schedule.user_telegram<>? 
+            AND schedule.date=?
+            AND (
+                -- Exclude allies: both users must have valid alliances AND they must be the same
+                NOT (
+                    warmasters.alliance IS NOT NULL 
+                    AND warmasters.alliance != 0
+                    AND current_user_alliance.alliance IS NOT NULL
+                    AND current_user_alliance.alliance != 0
+                    AND warmasters.alliance = current_user_alliance.alliance
+                )
+            )
+        ''', (user_telegram, user_telegram, date)) as cursor:
             return await cursor.fetchall()
 
 
@@ -667,6 +824,87 @@ async def save_mission(mission):
         await db.commit()
 
 
+async def upsert_static_armageddon_mission(
+    rules: str,
+    source: str,
+    source_url: str,
+    mission_code: str,
+    mission_name: str,
+    mission_text_full: str,
+    deploy_asset_path: Optional[str],
+    map_asset_path: Optional[str],
+    is_active: int = 1,
+):
+    """Insert or update one static Armageddon mission record."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            '''
+            INSERT INTO static_armageddon_missions(
+                rules, source, source_url, mission_code, mission_name,
+                mission_text_full, deploy_asset_path, map_asset_path,
+                is_active, created_at, updated_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(rules, source, mission_code)
+            DO UPDATE SET
+                source_url = excluded.source_url,
+                mission_name = excluded.mission_name,
+                mission_text_full = excluded.mission_text_full,
+                deploy_asset_path = excluded.deploy_asset_path,
+                map_asset_path = excluded.map_asset_path,
+                is_active = excluded.is_active,
+                updated_at = CURRENT_TIMESTAMP
+            ''',
+            (
+                rules,
+                source,
+                source_url,
+                mission_code,
+                mission_name,
+                mission_text_full,
+                deploy_asset_path,
+                map_asset_path,
+                is_active,
+            ),
+        )
+        await db.commit()
+
+
+async def get_static_armageddon_mission_count(rules: str = "wh40k") -> int:
+    """Return number of active static Armageddon missions for given rules."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute(
+            '''
+            SELECT COUNT(*)
+            FROM static_armageddon_missions
+            WHERE rules = ? AND is_active = 1
+            ''',
+            (rules,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+
+async def get_random_static_armageddon_mission(rules: str = "wh40k") -> Optional[Dict[str, Any]]:
+    """Return one random active static Armageddon mission record."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            '''
+            SELECT id, rules, source, source_url, mission_code,
+                   mission_name, mission_text_full, deploy_asset_path,
+                   map_asset_path, is_active
+            FROM static_armageddon_missions
+            WHERE rules = ? AND is_active = 1
+            ORDER BY RANDOM()
+            LIMIT 1
+            ''',
+            (rules,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+
 async def set_nickname(user_telegram_id, nickname):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
@@ -887,11 +1125,20 @@ async def get_mission_details(mission_id) -> Optional[Mission]:
 
     Args:
         mission_id: The mission ID
-    
+
     Returns:
         Mission object or None if not found
+
+    Note:
+        Returns None if mission_id is NULL (defensive check).
     """
     logger.info("get_mission_details(mission_id=%s)", mission_id)
+
+    # If mission_id is None, return None immediately
+    if mission_id is None:
+        logger.warning("get_mission_details called with None mission_id")
+        return None
+
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
             SELECT id, deploy, rules, cell, mission_description, winner_bonus, status, created_date, map_description, reward_config
@@ -1092,6 +1339,62 @@ async def get_all_alliances_detailed():
                     "color": row[3]
                 } for row in rows
             ]
+
+
+async def get_map_cells_for_export():
+    """Get full map dataset for rendering export.
+
+    Returns:
+        List of tuples: [(id, state, patron, has_warehouse), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, state, patron, COALESCE(has_warehouse, 0)
+            FROM map
+            ORDER BY id
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_alliances_for_map_export():
+    """Get alliances for map export legend and ownership coloring.
+
+    Returns:
+        List of tuples: [(id, name, color), ...]
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("PRAGMA table_info(alliances)") as cursor:
+            columns = [row[1] for row in await cursor.fetchall()]
+
+        if "color" in columns:
+            async with db.execute('''
+                SELECT id, name, color
+                FROM alliances
+                ORDER BY id
+            ''') as cursor:
+                return await cursor.fetchall()
+
+        async with db.execute('''
+            SELECT id, name, NULL as color
+            FROM alliances
+            ORDER BY id
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_terrain_colors():
+    """Get terrain type colors from DB for map export customization.
+
+    Returns:
+        Dict mapping terrain name -> hex color string, or {} on error.
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            async with db.execute("SELECT name, color FROM terrain_colors") as cursor:
+                rows = await cursor.fetchall()
+                return {row[0]: row[1] for row in rows}
+        except Exception:
+            return {}
 
 
 async def get_alliance_player_count(alliance_id):
@@ -1942,14 +2245,238 @@ async def toggle_feature_flag(flag_name: str) -> bool:
 async def get_all_feature_flags() -> list:
     """
     Get all feature flags with their current status.
-    
+
     Returns:
         List of tuples: [(flag_name, enabled, description), ...]
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute('''
-            SELECT flag_name, enabled, description 
-            FROM feature_flags 
+            SELECT flag_name, enabled, description
+            FROM feature_flags
             ORDER BY flag_name
         ''') as cursor:
             return await cursor.fetchall()
+
+
+async def get_adjacent_cells(cell_id):
+    """
+    Get all cells adjacent to a given cell.
+
+    Args:
+        cell_id: The cell ID to find neighbors for
+
+    Returns:
+        List of adjacent cell IDs
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT DISTINCT
+                CASE
+                    WHEN left_hexagon = ? THEN right_hexagon
+                    ELSE left_hexagon
+                END AS adjacent_id
+            FROM edges
+            WHERE left_hexagon = ? OR right_hexagon = ?
+        ''', (cell_id, cell_id, cell_id)) as cursor:
+            results = await cursor.fetchall()
+            return [row[0] for row in results]
+
+
+async def update_mission_description(mission_id, new_description):
+    """
+    Update mission description.
+
+    Args:
+        mission_id: Mission ID
+        new_description: New description text
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('''
+            UPDATE mission_stack
+            SET mission_description = ?
+            WHERE id = ?
+        ''', (new_description, mission_id))
+        await db.commit()
+
+# ============================================================================
+# Web UI Helpers
+# ============================================================================
+
+async def get_active_battles_for_web():
+    """Get all active missions (status=1) with battle and participant info for web UI.
+
+    Returns:
+        List of dicts with keys: mission_id, deploy, rules, cell, description,
+        created_date, battle_id, p1_id, p1_nick, p1_alliance, p2_id, p2_nick, p2_alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT ms.id, ms.deploy, ms.rules, ms.cell, ms.mission_description, ms.created_date,
+                   b.id as battle_id,
+                   ba1.attender_id as p1_id, w1.nickname as p1_nick, a1.name as p1_alliance,
+                   ba2.attender_id as p2_id, w2.nickname as p2_nick, a2.name as p2_alliance
+            FROM mission_stack ms
+            JOIN battles b ON b.mission_id = ms.id
+            JOIN (
+                SELECT battle_id, attender_id, MIN(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba1 ON ba1.battle_id = b.id
+            LEFT JOIN warmasters w1 ON w1.telegram_id = ba1.attender_id
+            LEFT JOIN alliances a1 ON a1.id = w1.alliance
+            JOIN (
+                SELECT battle_id, attender_id, MAX(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba2 ON ba2.battle_id = b.id AND ba2.attender_id != ba1.attender_id
+            LEFT JOIN warmasters w2 ON w2.telegram_id = ba2.attender_id
+            LEFT JOIN alliances a2 ON a2.id = w2.alliance
+            WHERE ms.status = 1
+            ORDER BY ms.created_date DESC
+        ''') as cursor:
+            rows = await cursor.fetchall()
+
+    result = []
+    for row in rows:
+        result.append({
+            'mission_id': row[0],
+            'deploy': row[1],
+            'rules': row[2],
+            'cell': row[3],
+            'description': row[4],
+            'created_date': row[5],
+            'battle_id': row[6],
+            'p1_id': row[7],
+            'p1_nick': row[8] or str(row[7]),
+            'p1_alliance': row[9] or '—',
+            'p2_id': row[10],
+            'p2_nick': row[11] or str(row[10]),
+            'p2_alliance': row[12] or '—',
+        })
+    return result
+
+
+async def get_pending_battles_for_web():
+    """Get all missions (status=2) with pending results and participant info for web UI.
+
+    Returns:
+        List of dicts with keys: mission_id, deploy, rules, cell, description,
+        created_date, battle_id, pending_id, submitter_id, fst_score, snd_score,
+        p1_id, p1_nick, p1_alliance, p2_id, p2_nick, p2_alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT ms.id, ms.deploy, ms.rules, ms.cell, ms.mission_description, ms.created_date,
+                   b.id as battle_id,
+                   pr.id as pending_id, pr.submitter_id, pr.fstplayer_score, pr.sndplayer_score,
+                   ba1.attender_id as p1_id, w1.nickname as p1_nick, a1.name as p1_alliance,
+                   ba2.attender_id as p2_id, w2.nickname as p2_nick, a2.name as p2_alliance
+            FROM mission_stack ms
+            JOIN battles b ON b.mission_id = ms.id
+            JOIN pending_results pr ON pr.battle_id = b.id
+            JOIN (
+                SELECT battle_id, attender_id, MIN(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba1 ON ba1.battle_id = b.id
+            LEFT JOIN warmasters w1 ON w1.telegram_id = ba1.attender_id
+            LEFT JOIN alliances a1 ON a1.id = w1.alliance
+            JOIN (
+                SELECT battle_id, attender_id, MAX(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba2 ON ba2.battle_id = b.id AND ba2.attender_id != ba1.attender_id
+            LEFT JOIN warmasters w2 ON w2.telegram_id = ba2.attender_id
+            LEFT JOIN alliances a2 ON a2.id = w2.alliance
+            WHERE ms.status = 2
+            ORDER BY ms.created_date DESC
+        ''') as cursor:
+            rows = await cursor.fetchall()
+
+    result = []
+    for row in rows:
+        result.append({
+            'mission_id': row[0],
+            'deploy': row[1],
+            'rules': row[2],
+            'cell': row[3],
+            'description': row[4],
+            'created_date': row[5],
+            'battle_id': row[6],
+            'pending_id': row[7],
+            'submitter_id': row[8],
+            'fst_score': row[9],
+            'snd_score': row[10],
+            'p1_id': row[11],
+            'p1_nick': row[12] or str(row[11]),
+            'p1_alliance': row[13] or '—',
+            'p2_id': row[14],
+            'p2_nick': row[15] or str(row[14]),
+            'p2_alliance': row[16] or '—',
+        })
+    return result
+
+
+async def get_completed_battles_for_web():
+    """Get completed missions (status=3) with final scores and participant info for web UI.
+
+    Returns:
+        List of dicts with keys: mission_id, deploy, rules, cell, created_date,
+        battle_id, p1_score, p2_score, p1_id, p1_nick, p1_alliance, p2_id, p2_nick, p2_alliance
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT ms.id, ms.deploy, ms.rules, ms.cell, ms.mission_description, ms.created_date,
+                   b.id as battle_id, b.fstplayer as p1_score, b.sndplayer as p2_score,
+                   ba1.attender_id as p1_id, w1.nickname as p1_nick, a1.name as p1_alliance,
+                   ba2.attender_id as p2_id, w2.nickname as p2_nick, a2.name as p2_alliance
+            FROM mission_stack ms
+            JOIN battles b ON b.mission_id = ms.id
+            JOIN (
+                SELECT battle_id, attender_id, MIN(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba1 ON ba1.battle_id = b.id
+            LEFT JOIN warmasters w1 ON w1.telegram_id = ba1.attender_id
+            LEFT JOIN alliances a1 ON a1.id = w1.alliance
+            JOIN (
+                SELECT battle_id, attender_id, MAX(rowid) as rn
+                FROM battle_attenders
+                GROUP BY battle_id
+            ) ba2 ON ba2.battle_id = b.id AND ba2.attender_id != ba1.attender_id
+            LEFT JOIN warmasters w2 ON w2.telegram_id = ba2.attender_id
+            LEFT JOIN alliances a2 ON a2.id = w2.alliance
+            WHERE ms.status = 3
+            ORDER BY ms.created_date DESC
+        ''') as cursor:
+            rows = await cursor.fetchall()
+
+    result = []
+    for row in rows:
+        p1_score = row[7]
+        p2_score = row[8]
+        winner_nick = None
+        if p1_score is not None and p2_score is not None:
+            if p1_score > p2_score:
+                winner_nick = row[10] or str(row[9])
+            elif p2_score > p1_score:
+                winner_nick = row[13] or str(row[12])
+        result.append({
+            'mission_id': row[0],
+            'deploy': row[1],
+            'rules': row[2],
+            'cell': row[3],
+            'description': row[4],
+            'created_date': row[5],
+            'battle_id': row[6],
+            'p1_score': p1_score,
+            'p2_score': p2_score,
+            'p1_id': row[9],
+            'p1_nick': row[10] or str(row[9]),
+            'p1_alliance': row[11] or '—',
+            'p2_id': row[12],
+            'p2_nick': row[13] or str(row[12]),
+            'p2_alliance': row[14] or '—',
+            'winner_nick': winner_nick,
+        })
+    return result

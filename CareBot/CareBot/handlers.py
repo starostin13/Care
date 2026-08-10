@@ -15,6 +15,7 @@ import settings_helper
 import schedule_helper
 import mission_message_builder
 import feature_flags_helper
+import map_export_service
 # Автоматическое переключение на mock версию в тестовом режиме
 if config.TEST_MODE:
     import mock_sqlite_helper as sqllite_helper
@@ -23,10 +24,11 @@ else:
     import sqllite_helper
     print("✅ Handlers using REAL SQLite helper")
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import InputFile, InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, Update
 from datetime import datetime
 import re
 import tracemalloc
+from pathlib import Path
 tracemalloc.start()
 
 
@@ -38,6 +40,8 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+DEPLOY_ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "deploys"
 
 MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS, ALLIANCE_INPUT, CUSTOM_NOTIFICATION = range(7)
 # Callback data
@@ -62,8 +66,43 @@ async def contact_callback(update, bot):
     await warmaster_helper.register_warmaster(userid, phone)
 
 
+async def export_realistic_map(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Export full planet map as PNG with terrain and alliance ownership overlays."""
+    if not update.effective_user or not update.message:
+        return MAIN_MENU
+
+    user_id = update.effective_user.id
+    if not await sqllite_helper.is_user_admin(user_id):
+        await update.message.reply_text("Команда /map_export доступна только администраторам.")
+        return MAIN_MENU
+
+    status_message = await update.message.reply_text("Формирую реалистичную карту планеты...")
+    try:
+        png_bytes = await map_export_service.generate_realistic_map_png()
+    except map_export_service.EmptyMapExportError:
+        await status_message.edit_text("Карта пуста, экспортировать нечего.")
+        return MAIN_MENU
+    except Exception as e:
+        logger.error("Failed to export realistic map: %s", e, exc_info=True)
+        await status_message.edit_text("Не удалось экспортировать карту. Проверьте логи приложения.")
+        return MAIN_MENU
+
+    try:
+        await update.message.reply_photo(
+            photo=InputFile(png_bytes, filename="carebot_realistic_map.png"),
+            caption="Реалистичная карта: местность, склады и контроль альянсов.",
+        )
+        await status_message.delete()
+    except Exception as e:
+        logger.error("Failed to send realistic map: %s", e, exc_info=True)
+        await status_message.edit_text("Не удалось экспортировать карту. Проверьте логи приложения.")
+
+    return MAIN_MENU
+
+
 async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # update.callback_query.data 'mission_sch_{schedule_id}_{opponent_telegram_id}'
+    # update.callback_query.data format: 'mission_sch_{schedule_id}_{warmaster_id}'
+    # Uses warmaster_id instead of telegram_id for security
     query = update.callback_query
     await query.answer()  # Acknowledge the callback query
     
@@ -75,17 +114,28 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return MISSIONS
     
     try:
-        # Parse callback data: mission_sch_{schedule_id}_{opponent_telegram_id}
+        # Parse callback data: mission_sch_{schedule_id}_{warmaster_id}
         data_parts = query.data.replace("mission_sch_", "").split("_")
-        mission_number = int(data_parts[0])
-        defender_id = str(data_parts[1])  # Opponent telegram_id from callback
+        if len(data_parts) < 2:
+            raise ValueError(f"Invalid callback data format: {query.data}")
+        
+        schedule_id = int(data_parts[0])
+        warmaster_id = int(data_parts[1])
+        
+        # Get defender's telegram_id from warmaster_id (security: use internal DB ID)
+        defender_id = await sqllite_helper.get_telegram_id_by_warmaster_id(warmaster_id)
+        
+        if not defender_id:
+            raise ValueError(f"Failed to find telegram_id for warmaster ID: {warmaster_id}")
+            
     except (ValueError, AttributeError, IndexError) as e:
         logger.error(f"Failed to parse mission callback data '{query.data}': {e}")
         error_msg = await localization.get_text_for_user(update.effective_user.id, "error_mission_info_failed")
         await query.edit_message_text(error_msg)
         return MISSIONS
     
-    rules = await schedule_helper.get_mission_rules(mission_number)
+    # Get mission rules for this schedule entry
+    rules = await schedule_helper.get_mission_rules(schedule_id)
     
     # Определяем атакующего (кто нажал кнопку) и защищающегося (из callback_data)
     attacker_id = str(update.effective_user.id)
@@ -112,12 +162,20 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         battle_id = await mission_helper.start_battle(mission_id, attacker_id, defender_id)
     except ValueError as e:
         logger.error(f"Failed to start battle: {e}")
+        if mission_id is not None:
+            await sqllite_helper.update_mission_status(mission_id, 0)
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_battle_creation", error=str(e))
+        await query.edit_message_text(error_msg)
+        return MISSIONS
+    except Exception as e:
+        logger.error(f"Unexpected error while starting battle for mission {mission_id}: {e}", exc_info=True)
+        if mission_id is not None:
+            await sqllite_helper.update_mission_status(mission_id, 0)
         error_msg = await localization.get_text_for_user(update.effective_user.id, "error_battle_creation", error=str(e))
         await query.edit_message_text(error_msg)
         return MISSIONS
 
-    # Lock the mission now that battle has been successfully created
-    await sqllite_helper.lock_mission(mission_id)
+    # Mission is already locked atomically in sqllite_helper.get_mission()
 
     situation = await mission_helper.get_situation(battle_id, [(attacker_id,), (defender_id,)])
     
@@ -201,10 +259,27 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     back_markup = InlineKeyboardMarkup(back_button)
     
     score_instructions = await localization.get_text_for_user(update.effective_user.id, "mission_score_instructions")
-    await query.edit_message_text(
-        f"{attacker_message}\n{score_instructions}",
-        reply_markup=back_markup
-    )
+    attacker_text = f"{attacker_message}\n{score_instructions}"
+
+    deploy_asset_path = None
+    if mission_rules == "wh40k" and len(mission) > 0 and isinstance(mission[0], str):
+        deploy_asset_name = mission[0]
+        deploy_asset_path = DEPLOY_ASSETS_DIR / deploy_asset_name
+
+    if deploy_asset_path and deploy_asset_path.exists():
+        with deploy_asset_path.open("rb") as deploy_photo:
+            await context.bot.send_photo(
+                chat_id=update.effective_user.id,
+                photo=deploy_photo,
+                caption=attacker_text,
+                reply_markup=back_markup,
+            )
+        await query.edit_message_text("Mission sent as a separate message.")
+    else:
+        await query.edit_message_text(
+            attacker_text,
+            reply_markup=back_markup
+        )
 
     # Отправляем сообщение с миссией дефендеру
     if defender_id:
@@ -212,10 +287,19 @@ async def get_the_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             defender_message = await build_mission_message(attacker_is_dominant, attacker_nickname, defender_lang)
             new_mission_prefix = await localization.get_text("new_mission_prefix", defender_lang)
             
-            await context.bot.send_message(
-                chat_id=defender_id, 
-                text=f"{new_mission_prefix}\n{defender_message}"
-            )
+            defender_text = f"{new_mission_prefix}\n{defender_message}"
+            if deploy_asset_path and deploy_asset_path.exists():
+                with deploy_asset_path.open("rb") as deploy_photo:
+                    await context.bot.send_photo(
+                        chat_id=defender_id,
+                        photo=deploy_photo,
+                        caption=defender_text,
+                    )
+            else:
+                await context.bot.send_message(
+                    chat_id=defender_id,
+                    text=defender_text
+                )
         except Exception as e:
             logger.error(
                 f"Ошибка при отправке сообщения дефендеру {defender_id}: {e}")
@@ -547,54 +631,53 @@ async def handle_mission_reply(
         await update.message.reply_text(error_msg)
         return MAIN_MENU
     
-    # Check if there's already a pending result for this battle
-    existing_pending = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
-    if existing_pending:
-        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_already_submitted")
-        await update.message.reply_text(error_msg)
-        return MAIN_MENU
-    
     logger.info(f"Found battle_id {battle_id} for mission_id {mission_id}")
-    
-    # Get battle participants
+
+    # Get battle participants to convert user-entered scores into DB order.
     participants = await sqllite_helper.get_battle_participants(battle_id)
     if not participants:
         error_msg = await localization.get_text_for_user(update.effective_user.id, "error_not_participant")
         await update.message.reply_text(error_msg)
         return MAIN_MENU
-    
+
     fstplayer_id, sndplayer_id = participants
     submitter_id = str(update.effective_user.id)
-    
-    # Determine scores in database order (fstplayer, sndplayer)
-    # User always enters their own score first, then opponent's score
+
+    # User enters "my score opponent score", but DB stores "fstplayer sndplayer".
     if submitter_id == fstplayer_id:
         fstplayer_score = submitter_score
         sndplayer_score = opponent_score
-        opponent_id = sndplayer_id
     elif submitter_id == sndplayer_id:
         fstplayer_score = opponent_score
         sndplayer_score = submitter_score
-        opponent_id = fstplayer_id
     else:
         error_msg = await localization.get_text_for_user(update.effective_user.id, "error_not_participant")
         await update.message.reply_text(error_msg)
         return MAIN_MENU
-    
-    # Create pending result
-    pending_id = await sqllite_helper.create_pending_result(
-        battle_id, submitter_id, fstplayer_score, sndplayer_score
-    )
-    
-    if not pending_id:
+
+    try:
+        pending_meta = await mission_helper.submit_pending_battle_result(
+            battle_id=battle_id,
+            submitter_id=submitter_id,
+            fstplayer_score=fstplayer_score,
+            sndplayer_score=sndplayer_score,
+        )
+    except ValueError:
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_already_submitted")
+        await update.message.reply_text(error_msg)
+        return MAIN_MENU
+    except PermissionError:
+        error_msg = await localization.get_text_for_user(update.effective_user.id, "error_not_participant")
+        await update.message.reply_text(error_msg)
+        return MAIN_MENU
+    except Exception:
         error_msg = await localization.get_text_for_user(update.effective_user.id, "error_saving_result")
         await update.message.reply_text(error_msg)
         return MAIN_MENU
-    
-    # Update mission status to 2 (pending confirmation)
-    await sqllite_helper.update_mission_status(mission_id, 2)
-    logger.info(f"Mission {mission_id} status set to 2 (pending confirmation)")
-    
+
+    mission_id = pending_meta["mission_id"]
+    opponent_id = pending_meta["opponent_id"]
+
     # Get submitter and opponent nicknames
     submitter_nickname = await sqllite_helper.get_nickname_by_telegram_id(submitter_id)
     opponent_nickname = await sqllite_helper.get_nickname_by_telegram_id(opponent_id)
@@ -670,121 +753,78 @@ async def confirm_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Handler for confirming a pending battle result."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = str(update.effective_user.id)
     battle_id = int(query.data.replace("confirm_result_", ""))
-    
+
     logger.info(f"User {user_id} confirming result for battle {battle_id}")
-    
-    # Get the pending result
+
     pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
     if not pending_result:
         error_msg = await localization.get_text_for_user(user_id, "error_pending_not_found")
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
-    # Verify that the user is not the submitter
-    if pending_result.submitter_id == user_id:
-        error_msg = await localization.get_text_for_user(user_id, "error_no_permission_confirm")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    # Get battle participants
-    participants = await sqllite_helper.get_battle_participants(battle_id)
-    if not participants:
-        error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    fstplayer_id, sndplayer_id = participants
-    
-    # Verify that the user is a participant
-    if user_id not in [fstplayer_id, sndplayer_id]:
-        error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    # Get mission_id
-    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
-    if not mission_id:
-        error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    # Construct user_reply for existing functions
-    user_reply = f"{pending_result.fstplayer_score} {pending_result.sndplayer_score}"
-    
+
     try:
-        # Apply the battle result using existing functions
-        await mission_helper.write_battle_result(battle_id, user_reply)
-        
-        # Apply mission-specific rewards - use submitter_id as they originally entered the result
-        rewards = await mission_helper.apply_mission_rewards(
-            battle_id, user_reply, pending_result.submitter_id
+        result = await mission_helper.confirm_pending_battle_result(
+            battle_id=battle_id,
+            confirmer_id=user_id,
+            require_participant=True,
+            allow_submitter_confirm=False,
         )
-        
-        if rewards is None:
-            logger.warning(
-                "Could not apply mission rewards for battle %s - "
-                "check that both players are assigned to alliances",
-                battle_id
-            )
-        
-        # Update the map based on battle results
-        # Get scenario from mission details if available
-        mission_details = await sqllite_helper.get_mission_details(mission_id)
-        scenario = mission_details.rules if mission_details else None
-        
-        await map_helper.update_map(
-            battle_id,
-            user_reply,
-            pending_result.submitter_id,
-            scenario
-        )
-        
-        # Update mission status to 3 (confirmed)
-        await sqllite_helper.update_mission_status(mission_id, 3)
-        logger.info(f"Mission {mission_id} status set to 3 (confirmed)")
-        
-        # Delete the pending result
-        await sqllite_helper.delete_pending_result(battle_id)
-        
-        # Get nicknames for message
-        submitter_nickname = await sqllite_helper.get_nickname_by_telegram_id(pending_result.submitter_id)
-        
-        # Send success message
+
         success_msg = await localization.get_text_for_user(
             user_id,
             "result_confirmed",
-            my_score=pending_result.fstplayer_score,
-            opponent_score=pending_result.sndplayer_score
+            my_score=result["fstplayer_score"],
+            opponent_score=result["sndplayer_score"],
         )
         await query.edit_message_text(success_msg)
-        
+
         # Notify the submitter that result was confirmed
         try:
             confirmer_nickname = await sqllite_helper.get_nickname_by_telegram_id(user_id)
             notification_msg = await localization.get_text_for_user(
-                pending_result.submitter_id,
+                result["submitter_id"],
                 "result_confirmed_notification",
-                mission_id=mission_id,
+                mission_id=result["mission_id"],
                 confirmer_name=confirmer_nickname,
-                fst_score=pending_result.fstplayer_score,
-                snd_score=pending_result.sndplayer_score
+                fst_score=result["fstplayer_score"],
+                snd_score=result["sndplayer_score"],
             )
             await context.bot.send_message(
-                chat_id=pending_result.submitter_id,
-                text=notification_msg
+                chat_id=result["submitter_id"],
+                text=notification_msg,
             )
         except Exception as e:
-            logger.error(f"Failed to notify submitter {pending_result.submitter_id}: {e}")
-        
+            logger.error(f"Failed to notify submitter {result['submitter_id']}: {e}")
+
+    except PermissionError as e:
+        if "Submitter cannot confirm own result" in str(e):
+            error_msg = await localization.get_text_for_user(user_id, "error_no_permission_confirm")
+        else:
+            error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
+    except ValueError as e:
+        if "Pending result not found" in str(e):
+            error_msg = await localization.get_text_for_user(user_id, "error_pending_not_found")
+        elif "Mission for battle not found" in str(e):
+            error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
+        else:
+            error_msg = await localization.get_text_for_user(
+                user_id,
+                "error_result_application",
+                error=str(e),
+            )
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
     except Exception as e:
         logger.error(f"Error confirming result for battle {battle_id}: {e}", exc_info=True)
         error_msg = await localization.get_text_for_user(user_id, "error_result_application", error=str(e))
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
+
     return MAIN_MENU
 
 
@@ -792,80 +832,67 @@ async def cancel_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     """Handler for canceling a pending battle result."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = str(update.effective_user.id)
     battle_id = int(query.data.replace("cancel_result_", ""))
-    
+
     logger.info(f"User {user_id} canceling result for battle {battle_id}")
-    
-    # Get the pending result
+
     pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
     if not pending_result:
         error_msg = await localization.get_text_for_user(user_id, "error_cancel_not_found")
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
-    # Verify that the user is not the submitter
-    if pending_result.submitter_id == user_id:
-        error_msg = await localization.get_text_for_user(user_id, "error_cannot_cancel_own")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    # Get battle participants
-    participants = await sqllite_helper.get_battle_participants(battle_id)
-    if not participants:
-        error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    fstplayer_id, sndplayer_id = participants
-    
-    # Verify that the user is a participant
-    if user_id not in [fstplayer_id, sndplayer_id]:
-        error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    # Get mission_id
-    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
-    if not mission_id:
-        error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
+
     try:
-        # Delete the pending result
-        await sqllite_helper.delete_pending_result(battle_id)
-        
-        # Reset mission status to 1 (active) so they can resubmit
-        await sqllite_helper.update_mission_status(mission_id, 1)
-        logger.info(f"Mission {mission_id} status reset to 1 (active)")
-        
+        result = await mission_helper.reject_pending_battle_result(
+            battle_id=battle_id,
+            rejector_id=user_id,
+            require_participant=True,
+            allow_submitter_reject=False,
+        )
+
         cancel_msg = await localization.get_text_for_user(user_id, "result_cancelled_success")
         await query.edit_message_text(cancel_msg)
-        
+
         # Notify the submitter that result was canceled
         try:
             canceler_nickname = await sqllite_helper.get_nickname_by_telegram_id(user_id)
             notification_msg = await localization.get_text_for_user(
-                pending_result.submitter_id,
+                result["submitter_id"],
                 "result_cancelled_by_opponent",
-                mission_id=mission_id,
-                canceler_name=canceler_nickname
+                mission_id=result["mission_id"],
+                canceler_name=canceler_nickname,
             )
             await context.bot.send_message(
-                chat_id=pending_result.submitter_id,
-                text=notification_msg
+                chat_id=result["submitter_id"],
+                text=notification_msg,
             )
         except Exception as e:
-            logger.error(f"Failed to notify submitter {pending_result.submitter_id}: {e}")
-        
+            logger.error(f"Failed to notify submitter {result['submitter_id']}: {e}")
+
+    except PermissionError as e:
+        if "Submitter cannot reject own result" in str(e):
+            error_msg = await localization.get_text_for_user(user_id, "error_cannot_cancel_own")
+        else:
+            error_msg = await localization.get_text_for_user(user_id, "error_not_participant")
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
+    except ValueError as e:
+        if "Pending result not found" in str(e):
+            error_msg = await localization.get_text_for_user(user_id, "error_cancel_not_found")
+        elif "Mission for battle not found" in str(e):
+            error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
+        else:
+            error_msg = await localization.get_text_for_user(user_id, "error_cancellation_failed", error=str(e))
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
     except Exception as e:
         logger.error(f"Error canceling result for battle {battle_id}: {e}", exc_info=True)
         error_msg = await localization.get_text_for_user(user_id, "error_cancellation_failed", error=str(e))
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
+
     return MAIN_MENU
 
 
@@ -1943,68 +1970,31 @@ async def admin_do_confirm_mission(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     query = update.callback_query
     await query.answer()
-    
+
     # Check if user is admin
     is_admin = await sqllite_helper.is_user_admin(user_id)
     if not is_admin:
         error_msg = await localization.get_text_for_user(user_id, "error_no_admin_rights")
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
+
     # Extract battle_id from callback data
     battle_id = int(query.data.split(':')[1])
-    
-    # Get pending result
+
     pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
     if not pending_result:
         error_msg = await localization.get_text_for_user(user_id, "error_pending_not_found")
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
-    # Get mission_id
-    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
-    if not mission_id:
-        error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
-    # Construct user_reply for existing functions
-    user_reply = f"{pending_result.fstplayer_score} {pending_result.sndplayer_score}"
-    
+
     try:
-        # Apply the battle result
-        await mission_helper.write_battle_result(battle_id, user_reply)
-        
-        # Apply mission-specific rewards
-        rewards = await mission_helper.apply_mission_rewards(
-            battle_id, user_reply, pending_result.submitter_id
+        result = await mission_helper.confirm_pending_battle_result(
+            battle_id=battle_id,
+            confirmer_id=str(user_id),
+            require_participant=False,
+            allow_submitter_confirm=True,
         )
-        
-        if rewards is None:
-            logger.warning(
-                "Could not apply mission rewards for battle %s - "
-                "check that both players are assigned to alliances",
-                battle_id
-            )
-        
-        # Update the map
-        mission_details = await sqllite_helper.get_mission_details(mission_id)
-        scenario = mission_details.rules if mission_details else None
-        
-        await map_helper.update_map(
-            battle_id,
-            user_reply,
-            pending_result.submitter_id,
-            scenario
-        )
-        
-        # Update mission status to 3 (confirmed)
-        await sqllite_helper.update_mission_status(mission_id, 3)
-        logger.info(f"Admin confirmed mission {mission_id}, status set to 3")
-        
-        # Delete the pending result
-        await sqllite_helper.delete_pending_result(battle_id)
-        
+
         # Notify participants
         participants = await sqllite_helper.get_battle_participants(battle_id)
         if participants:
@@ -2013,23 +2003,23 @@ async def admin_do_confirm_mission(update: Update, context: ContextTypes.DEFAULT
                     notification_msg = await localization.get_text_for_user(
                         participant_id,
                         "admin_confirmed_by_admin",
-                        mission_id=mission_id,
-                        fst_score=pending_result.fstplayer_score,
-                        snd_score=pending_result.sndplayer_score
+                        mission_id=result["mission_id"],
+                        fst_score=result["fstplayer_score"],
+                        snd_score=result["sndplayer_score"],
                     )
                     await context.bot.send_message(
                         chat_id=participant_id,
-                        text=notification_msg
+                        text=notification_msg,
                     )
                 except Exception as e:
                     logger.error(f"Failed to notify participant {participant_id}: {e}")
-        
+
         success_msg = await localization.get_text_for_user(
             user_id,
             "admin_confirm_result_success",
-            mission_id=mission_id,
-            fst_score=pending_result.fstplayer_score,
-            snd_score=pending_result.sndplayer_score
+            mission_id=result["mission_id"],
+            fst_score=result["fstplayer_score"],
+            snd_score=result["sndplayer_score"],
         )
         btn_back_text = await localization.get_text_for_user(user_id, "btn_back")
         await query.edit_message_text(
@@ -2038,12 +2028,12 @@ async def admin_do_confirm_mission(update: Update, context: ContextTypes.DEFAULT
                 InlineKeyboardButton(btn_back_text, callback_data="admin_pending_confirmations")
             ]])
         )
-        
+
     except Exception as e:
-        logger.error(f"Error confirming mission {mission_id}: {e}", exc_info=True)
+        logger.error(f"Error confirming battle {battle_id}: {e}", exc_info=True)
         error_msg = await localization.get_text_for_user(user_id, "error_confirm_failed", error=str(e))
         await query.edit_message_text(error_msg)
-    
+
     return MAIN_MENU
 
 
@@ -2052,39 +2042,31 @@ async def admin_do_reject_mission(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     query = update.callback_query
     await query.answer()
-    
+
     # Check if user is admin
     is_admin = await sqllite_helper.is_user_admin(user_id)
     if not is_admin:
         error_msg = await localization.get_text_for_user(user_id, "error_no_admin_rights")
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
+
     # Extract battle_id from callback data
     battle_id = int(query.data.split(':')[1])
-    
-    # Get pending result
+
     pending_result = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
     if not pending_result:
         error_msg = await localization.get_text_for_user(user_id, "error_pending_not_found")
         await query.edit_message_text(error_msg)
         return MAIN_MENU
-    
-    # Get mission_id
-    mission_id = await sqllite_helper.get_mission_id_for_battle(battle_id)
-    if not mission_id:
-        error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
-        await query.edit_message_text(error_msg)
-        return MAIN_MENU
-    
+
     try:
-        # Delete the pending result
-        await sqllite_helper.delete_pending_result(battle_id)
-        
-        # Reset mission status to 1 (active)
-        await sqllite_helper.update_mission_status(mission_id, 1)
-        logger.info(f"Admin rejected mission {mission_id}, status reset to 1")
-        
+        result = await mission_helper.reject_pending_battle_result(
+            battle_id=battle_id,
+            rejector_id=str(user_id),
+            require_participant=False,
+            allow_submitter_reject=True,
+        )
+
         # Notify participants
         participants = await sqllite_helper.get_battle_participants(battle_id)
         if participants:
@@ -2093,19 +2075,19 @@ async def admin_do_reject_mission(update: Update, context: ContextTypes.DEFAULT_
                     notification_msg = await localization.get_text_for_user(
                         participant_id,
                         "admin_rejected_by_admin",
-                        mission_id=mission_id
+                        mission_id=result["mission_id"],
                     )
                     await context.bot.send_message(
                         chat_id=participant_id,
-                        text=notification_msg
+                        text=notification_msg,
                     )
                 except Exception as e:
                     logger.error(f"Failed to notify participant {participant_id}: {e}")
-        
+
         success_msg = await localization.get_text_for_user(
             user_id,
             "admin_reject_result_success",
-            mission_id=mission_id
+            mission_id=result["mission_id"],
         )
         btn_back_text = await localization.get_text_for_user(user_id, "btn_back")
         await query.edit_message_text(
@@ -2114,12 +2096,12 @@ async def admin_do_reject_mission(update: Update, context: ContextTypes.DEFAULT_
                 InlineKeyboardButton(btn_back_text, callback_data="admin_pending_confirmations")
             ]])
         )
-        
+
     except Exception as e:
-        logger.error(f"Error rejecting mission {mission_id}: {e}", exc_info=True)
+        logger.error(f"Error rejecting battle {battle_id}: {e}", exc_info=True)
         error_msg = await localization.get_text_for_user(user_id, "error_reject_failed", error=str(e))
         await query.edit_message_text(error_msg)
-    
+
     return MAIN_MENU
 
 
@@ -2455,7 +2437,19 @@ def start_bot():
         return False
     print("✅ Database migrations completed successfully.")
 
-    bot = ApplicationBuilder().token(config.crusade_care_bot_telegram_token).build()
+    bot = (
+        ApplicationBuilder()
+        .token(config.crusade_care_bot_telegram_token)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .get_updates_connect_timeout(30)
+        .get_updates_read_timeout(30)
+        .get_updates_write_timeout(30)
+        .get_updates_pool_timeout(30)
+        .build()
+    )
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", hello),
@@ -2565,6 +2559,7 @@ def start_bot():
     )
     bot.add_handler(conv_handler)
     bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    bot.add_handler(CommandHandler("map_export", export_realistic_map))
     bot.add_handler(CommandHandler("setname", input_name))
     bot.add_handler(CommandHandler("regme", contact))
     bot.add_handler(MessageHandler(filters.CONTACT, contact_callback))

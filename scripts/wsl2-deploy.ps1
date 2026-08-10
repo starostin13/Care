@@ -36,6 +36,15 @@ function Write-Error($text) { Write-Host "ERROR: $text" -ForegroundColor Red }
 function Write-Info($text) { Write-Host "INFO: $text" -ForegroundColor Cyan }
 function Write-Warning($text) { Write-Host "WARNING: $text" -ForegroundColor Yellow }
 
+function Invoke-WSLCommand {
+    param(
+        [string]$Command,
+        [string]$WorkingDirectory = "/"
+    )
+
+    & wsl -d $WSL_DISTRO --cd $WorkingDirectory /bin/sh -lc $Command
+}
+
 # Run external command with spinner and optional timeout
 function Invoke-ExternalWithProgress {
     param(
@@ -47,8 +56,8 @@ function Invoke-ExternalWithProgress {
     )
 
     $job = Start-Job -ScriptBlock {
-        param($exe, $args)
-        $output = & $exe @args 2>&1
+        param($exe, $cmdArgs)
+        $output = & $exe @cmdArgs 2>&1
         $exitCode = $LASTEXITCODE
         [pscustomobject]@{ Output = $output; ExitCode = $exitCode }
     } -ArgumentList $FilePath, $Arguments
@@ -120,7 +129,7 @@ function Test-WSL2 {
 function Test-DockerWSL {
     Write-Info "Checking Docker in WSL2..."
     
-    $result = wsl -d $WSL_DISTRO -e bash -c "docker --version" 2>&1
+    $result = Invoke-WSLCommand -Command "docker --version" 2>&1
     
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Docker not installed in WSL2"
@@ -134,10 +143,10 @@ function Test-DockerWSL {
     Write-Success "Docker is available: $result"
 
     # Check if Docker daemon is running and accessible without sudo
-    $dockerInfo = wsl -d $WSL_DISTRO -e bash -c "docker info" 2>&1
+    $dockerInfo = Invoke-WSLCommand -Command "docker info" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Docker daemon is not running or permission denied"
-        Write-Info "If needed, start it manually: wsl -d $WSL_DISTRO -e bash -lc 'sudo service docker start'"
+        Write-Info "If needed, start it manually: wsl -d $WSL_DISTRO --cd / /bin/sh -lc 'sudo service docker start'"
         Write-Info "If permission denied, add user to docker group and restart WSL"
         return $false
     }
@@ -207,10 +216,8 @@ function Build-Image {
     
     Write-Info "Executing: $buildCmd"
     
-    $ok = Invoke-ExternalWithProgress -FilePath "wsl" -Arguments @("-d", $WSL_DISTRO, "-e", "bash", "-c", $buildCmd) -Activity "Building Docker image" -TimeoutSec $TIMEOUT_BUILD_SEC
-    if (-not $ok) { return $false }
-    
-    if ($LASTEXITCODE -eq 0) {
+    $ok = Invoke-ExternalWithProgress -FilePath "wsl" -Arguments @("-d", $WSL_DISTRO, "--cd", "/", "/bin/sh", "-lc", $buildCmd) -Activity "Building Docker image in WSL2" -TimeoutSec $TIMEOUT_BUILD_SEC
+    if ($ok) {
         Write-Success "Image built successfully: ${IMAGE_NAME}:${Tag}"
         return $true
     } else {
@@ -226,10 +233,10 @@ function Show-ImageInspect {
     if (-not (Test-DockerWSL)) { return }
     
     Write-Info "Image details:"
-    wsl -d $WSL_DISTRO -e bash -c "docker images ${IMAGE_NAME}:${Tag}"
+    Invoke-WSLCommand -Command "docker images ${IMAGE_NAME}:${Tag}"
     
     Write-Info "`nListing files in image /app/CareBot/:"
-    wsl -d $WSL_DISTRO -e bash -c "docker run --rm ${IMAGE_NAME}:${Tag} ls -lah /app/CareBot/"
+    Invoke-WSLCommand -Command "docker run --rm ${IMAGE_NAME}:${Tag} ls -lah /app/CareBot/"
     
     Write-Info "`nChecking key files:"
     $keyFiles = @(
@@ -241,7 +248,7 @@ function Show-ImageInspect {
     )
     
     foreach ($file in $keyFiles) {
-        $exists = wsl -d $WSL_DISTRO -e bash -c "docker run --rm ${IMAGE_NAME}:${Tag} test -f $file && echo 'EXISTS' || echo 'MISSING'"
+        $exists = Invoke-WSLCommand -Command "docker run --rm ${IMAGE_NAME}:${Tag} test -f $file && echo 'EXISTS' || echo 'MISSING'"
         if ($exists -match "EXISTS") {
             Write-Success "$file - EXISTS"
         } else {
@@ -250,13 +257,13 @@ function Show-ImageInspect {
     }
     
     Write-Info "`nEnvironment variables:"
-    wsl -d $WSL_DISTRO -e bash -c "docker inspect ${IMAGE_NAME}:${Tag} --format='{{.Config.Env}}'"
+    Invoke-WSLCommand -Command "docker inspect ${IMAGE_NAME}:${Tag} --format='{{.Config.Env}}'"
     
     Write-Info "`nExposed ports:"
-    wsl -d $WSL_DISTRO -e bash -c "docker inspect ${IMAGE_NAME}:${Tag} --format='{{.Config.ExposedPorts}}'"
+    Invoke-WSLCommand -Command "docker inspect ${IMAGE_NAME}:${Tag} --format='{{.Config.ExposedPorts}}'"
     
     Write-Info "`nImage layers:"
-    wsl -d $WSL_DISTRO -e bash -c "docker history ${IMAGE_NAME}:${Tag}"
+    Invoke-WSLCommand -Command "docker history ${IMAGE_NAME}:${Tag}"
 }
 
 # Test image locally
@@ -268,8 +275,8 @@ function Test-ImageLocally {
     
     # Stop existing test container
     Write-Info "Stopping existing test container..."
-    wsl -d $WSL_DISTRO -e bash -c "docker stop carebot_test 2>/dev/null || true"
-    wsl -d $WSL_DISTRO -e bash -c "docker rm carebot_test 2>/dev/null || true"
+    Invoke-WSLCommand -Command "docker stop carebot_test 2>/dev/null || true"
+    Invoke-WSLCommand -Command "docker rm carebot_test 2>/dev/null || true"
     
     # Get token
     $token = Get-Content $LOCAL_ENV_FILE | Where-Object { $_ -match "TELEGRAM_BOT_TOKEN=" } | ForEach-Object { $_.Split('=')[1] }
@@ -294,7 +301,7 @@ function Test-ImageLocally {
               "-e SERVER_PORT='5555' " +
               "${IMAGE_NAME}:${Tag}"
     
-    wsl -d $WSL_DISTRO -e bash -c $runCmd
+    Invoke-WSLCommand -Command $runCmd
     
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to start test container"
@@ -305,11 +312,11 @@ function Test-ImageLocally {
     Start-Sleep -Seconds 10
     
     Write-Info "Container logs:"
-    wsl -d $WSL_DISTRO -e bash -c "docker logs carebot_test --tail=20"
+    Invoke-WSLCommand -Command "docker logs carebot_test --tail=20"
     
     Write-Info "`nTesting health endpoint..."
     try {
-        $response = Invoke-WebRequest -Uri $LOCAL_HEALTH_URL -Method GET -TimeoutSec 10
+        $response = Invoke-WebRequest -Uri $LOCAL_HEALTH_URL -Method GET -TimeoutSec 10 -UseBasicParsing
         if ($response.StatusCode -eq 200) {
             Write-Success "Health check passed!"
             Write-Info "Response: $($response.Content)"
@@ -320,7 +327,7 @@ function Test-ImageLocally {
     }
     catch {
         Write-Error "Health check failed: $($_.Exception.Message)"
-        Write-Info "Check logs: wsl -d $WSL_DISTRO -e bash -c 'docker logs carebot_test'"
+        Write-Info "Check logs: wsl -d $WSL_DISTRO --cd / /bin/sh -lc 'docker logs carebot_test'"
         return $false
     }
 }
@@ -328,8 +335,8 @@ function Test-ImageLocally {
 # Stop test container
 function Stop-TestContainer {
     Write-Info "Stopping test container..."
-    wsl -d $WSL_DISTRO -e bash -c "docker stop carebot_test 2>/dev/null || true"
-    wsl -d $WSL_DISTRO -e bash -c "docker rm carebot_test 2>/dev/null || true"
+    Invoke-WSLCommand -Command "docker stop carebot_test 2>/dev/null || true"
+    Invoke-WSLCommand -Command "docker rm carebot_test 2>/dev/null || true"
     Write-Success "Test container stopped"
 }
 
@@ -342,10 +349,9 @@ function Save-Image {
     $outputPathWSL = $OutputPath -replace '\\', '/' -replace 'C:', '/mnt/c' -replace 'c:', '/mnt/c'
     
     Write-Info "Saving ${IMAGE_NAME}:${Tag} to $OutputPath..."
-    $ok = Invoke-ExternalWithProgress -FilePath "wsl" -Arguments @("-d", $WSL_DISTRO, "-e", "bash", "-c", "docker save ${IMAGE_NAME}:${Tag} -o '$outputPathWSL'") -Activity "Saving Docker image" -TimeoutSec $TIMEOUT_SAVE_SEC
-    if (-not $ok) { return $false }
-    
-    if ($LASTEXITCODE -eq 0) {
+    $saveCmd = "docker save ${IMAGE_NAME}:${Tag} -o '$outputPathWSL'"
+    $ok = Invoke-ExternalWithProgress -FilePath "wsl" -Arguments @("-d", $WSL_DISTRO, "--cd", "/", "/bin/sh", "-lc", $saveCmd) -Activity "Saving Docker image to tar" -TimeoutSec $TIMEOUT_SAVE_SEC
+    if ($ok) {
         $fileSize = (Get-Item $OutputPath).Length / 1MB
         Write-Success "Image saved: $OutputPath ($([math]::Round($fileSize, 2)) MB)"
         return $true
@@ -408,6 +414,34 @@ function Transfer-Image {
 }
 
 # Deploy to production
+function Remove-ConflictingProductionContainer {
+    Write-Info "Removing any existing production container outside compose..."
+
+    $containerId = ssh $SERVER_HOST "docker ps -aq --filter 'name=^/${CONTAINER_NAME}$'"
+    if (-not $containerId) {
+        Write-Info "No conflicting production container found"
+        return $true
+    }
+
+    # If the container is managed by docker compose, it is not a conflict.
+    ssh $SERVER_HOST "docker inspect $containerId --format '{{.Config.Labels}}' 2>/dev/null | grep -q 'com.docker.compose.project'"
+    if ($LASTEXITCODE -eq 0) {
+        Write-Info "Container is managed by docker compose; skipping removal"
+        return $true
+    }
+
+    Write-Info "Removing existing container ID: $containerId"
+    ssh $SERVER_HOST "docker rm -f $containerId"
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to remove existing production container: $containerId"
+        return $false
+    }
+
+    Write-Success "Existing production container removed"
+    return $true
+}
+
 function Deploy-Production {
     Write-Info "Deploying to production..."
     
@@ -429,6 +463,8 @@ function Deploy-Production {
 
     # Update image tag in production .env
     Set-ProductionImageTag -ImageTag $Tag
+
+    if (-not (Remove-ConflictingProductionContainer)) { return $false }
     
     # Restart production container with new image
     Write-Info "Restarting production container..."
@@ -472,7 +508,7 @@ function Set-ProductionImageTag {
 
     Write-Info "Setting production image tag to $ImageTag..."
     ssh $SERVER_HOST "mkdir -p $PRODUCTION_PATH"
-    ssh $SERVER_HOST "cd $PRODUCTION_PATH && if [ -f .env ]; then sed -i '/^CAREBOT_IMAGE_TAG=/d' .env; fi; echo \"CAREBOT_IMAGE_TAG=$ImageTag\" >> .env"
+    ssh $SERVER_HOST "cd $PRODUCTION_PATH && if [ -f .env ]; then sed -i '/^CAREBOT_IMAGE_TAG=/d' .env; fi; printf '\n%s\n' 'CAREBOT_IMAGE_TAG=$ImageTag' >> .env"
     Write-Success "Production image tag set"
 }
 
@@ -483,7 +519,7 @@ function Test-ProductionHealth {
     Start-Sleep -Seconds 5
     
     try {
-        $response = Invoke-WebRequest -Uri $HEALTH_URL -Method GET -TimeoutSec 10
+        $response = Invoke-WebRequest -Uri $HEALTH_URL -Method GET -TimeoutSec 10 -UseBasicParsing
         
         if ($response.StatusCode -eq 200) {
             $healthData = $response.Content | ConvertFrom-Json
@@ -513,7 +549,7 @@ function Create-Backup {
 # List images
 function Show-Images {
     Write-Info "Docker images in WSL2:"
-    wsl -d $WSL_DISTRO -e bash -c "docker images | grep -E '(REPOSITORY|carebot)'"
+    Invoke-WSLCommand -Command "docker images | grep -E '(REPOSITORY|carebot)'"
 }
 
 # Cleanup old images
@@ -521,10 +557,10 @@ function Clean-Images {
     Write-Info "Cleaning up old Docker images..."
     
     # Remove dangling images
-    wsl -d $WSL_DISTRO -e bash -c "docker image prune -f"
+    Invoke-WSLCommand -Command "docker image prune -f"
     
     # Remove old carebot images (keep latest)
-    wsl -d $WSL_DISTRO -e bash -c "docker images ${IMAGE_NAME} --format '{{.Tag}}' | grep -v 'latest' | xargs -r -I {} docker rmi ${IMAGE_NAME}:{}"
+    Invoke-WSLCommand -Command "docker images ${IMAGE_NAME} --format '{{.Tag}}' | grep -v 'latest' | xargs -r -I {} docker rmi ${IMAGE_NAME}:{}"
     
     Write-Success "Cleanup completed"
 }
@@ -547,6 +583,7 @@ function Show-ProductionLogs {
 # Restart production
 function Restart-Production {
     Write-Info "Restarting production..."
+    if (-not (Remove-ConflictingProductionContainer)) { return $false }
     ssh $SERVER_HOST "cd $PRODUCTION_PATH && docker compose -f docker-compose.production.yml restart"
     
     Start-Sleep -Seconds 10

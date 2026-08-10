@@ -2,7 +2,8 @@
 Migration 019: Final fix for battles.mission_id corruption
 
 This migration ensures all battles have valid mission_id values and creates
-a trigger to prevent future corruptions.
+a trigger to prevent future corruptions. Invalid mission references are
+normalized to NULL without deleting battle history.
 
 The root cause has been fixed in mission_helper.py where mission[0] (id) is now
 correctly used instead of mission[4] (winner_bonus or mission_description).
@@ -50,18 +51,15 @@ def fix_battles_mission_id(conn):
     print(f"   Valid battles: {len(valid)}")
     print(f"   Corrupted battles: {len(corrupted)}")
     
-    # Step 3: Clean corrupted battles
+    # Step 3: Normalize corrupted battles
     if corrupted:
-        print(f"\n🧹 Cleaning {len(corrupted)} corrupted battle records...")
+        print(f"\n🧹 Normalizing {len(corrupted)} corrupted battle records...")
         
         for battle_id, bad_mission_id, reason in corrupted:
-            # Remove battle_attenders
-            cursor.execute("DELETE FROM battle_attenders WHERE battle_id = ?", (battle_id,))
-            # Remove battle
-            cursor.execute("DELETE FROM battles WHERE id = ?", (battle_id,))
-            print(f"   ✓ Removed battle {battle_id} (reason: {reason}, bad_mission_id: {repr(bad_mission_id)[:30]})")
+            cursor.execute("UPDATE battles SET mission_id = NULL WHERE id = ?", (battle_id,))
+            print(f"   ✓ Updated battle {battle_id} (reason: {reason}, old_mission_id: {repr(bad_mission_id)[:30]})")
         
-        print(f"✅ Successfully cleaned {len(corrupted)} corrupted battles")
+        print(f"✅ Successfully normalized {len(corrupted)} corrupted battles")
     else:
         print("\n✅ No corrupted battles found!")
     

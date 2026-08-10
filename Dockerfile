@@ -37,7 +37,7 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Health check (проверяем Flask сервер)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:5555/health')" || exit 1
+    CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:5555/health', timeout=10)" || exit 1
 
 # Run the hybrid application (Flask + Telegram bot)
 CMD ["python", "run_hybrid.py"]

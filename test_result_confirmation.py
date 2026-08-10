@@ -120,28 +120,28 @@ async def test_migration_file_exists():
     """Test that the migration file exists."""
     try:
         migration_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), 
+            os.path.dirname(os.path.abspath(__file__)),
             'CareBot', 'CareBot', 'migrations', '020_add_status_and_pending_results.py'
         )
-        
+
         if os.path.exists(migration_path):
             print(f"✅ Migration file exists: {migration_path}")
-            
+
             # Check migration content
-            with open(migration_path, 'r') as f:
+            with open(migration_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 if 'ALTER TABLE mission_stack ADD COLUMN status' in content:
                     print("✅ Migration includes status column addition")
                 else:
                     print("❌ Migration missing status column addition")
                     return False
-                
+
                 if 'CREATE TABLE pending_results' in content:
                     print("✅ Migration includes pending_results table creation")
                 else:
                     print("❌ Migration missing pending_results table creation")
                     return False
-            
+
             return True
         else:
             print(f"❌ Migration file does NOT exist: {migration_path}")
@@ -151,6 +151,162 @@ async def test_migration_file_exists():
         import traceback
         traceback.print_exc()
         return False
+
+
+async def test_unified_flow_behavior():
+    """Behavior test for shared pending/confirm/reject mission flow in test mode."""
+    try:
+        import mission_helper
+        import mock_sqlite_helper as sqllite_helper
+        import mock_sqlite_helper
+
+        player_1 = '325313837'
+        player_2 = '123456789'
+
+        # --- Branch 1: submit -> confirm ---
+        mission_id_confirm = await sqllite_helper.save_mission({
+            'deploy': 'Behavior Deploy Confirm',
+            'rules': 'killteam',
+            'cell': 3,
+            'mission_description': 'Behavior test: confirm branch',
+            'status': 0,
+        })
+
+        battle_id_confirm = int((await mission_helper.start_battle(
+            mission_id_confirm,
+            player_1,
+            player_2,
+            forced_battle_id=910001,
+        )))
+
+        await sqllite_helper.update_mission_status(mission_id_confirm, 1)
+
+        submit_result = await mission_helper.submit_pending_battle_result(
+            battle_id=battle_id_confirm,
+            submitter_id=player_1,
+            fstplayer_score=17,
+            sndplayer_score=10,
+        )
+
+        if submit_result['mission_id'] != mission_id_confirm:
+            print("❌ submit_pending_battle_result returned unexpected mission_id")
+            return False
+
+        mission_after_submit = await sqllite_helper.get_mission_details(mission_id_confirm)
+        if int(mission_after_submit.status) != 2:
+            print("❌ Mission status did not transition to pending (2) after submit")
+            return False
+
+        # Submitter must not be allowed to confirm own result.
+        try:
+            await mission_helper.confirm_pending_battle_result(
+                battle_id=battle_id_confirm,
+                confirmer_id=player_1,
+                require_participant=True,
+                allow_submitter_confirm=False,
+            )
+            print("❌ Submitter unexpectedly confirmed own result")
+            return False
+        except PermissionError:
+            print("✅ Submitter cannot confirm own result")
+
+        confirm_result = await mission_helper.confirm_pending_battle_result(
+            battle_id=battle_id_confirm,
+            confirmer_id=player_2,
+            require_participant=True,
+            allow_submitter_confirm=False,
+        )
+
+        if confirm_result['mission_id'] != mission_id_confirm:
+            print("❌ confirm_pending_battle_result returned unexpected mission_id")
+            return False
+
+        mission_after_confirm = await sqllite_helper.get_mission_details(mission_id_confirm)
+        pending_after_confirm = await sqllite_helper.get_pending_result_by_battle_id(battle_id_confirm)
+        battle_after_confirm = mock_sqlite_helper.MOCK_BATTLES.get(battle_id_confirm, {})
+
+        if int(mission_after_confirm.status) != 3:
+            print("❌ Mission status did not transition to confirmed (3) after confirm")
+            return False
+        if pending_after_confirm is not None:
+            print("❌ Pending result was not deleted after confirm")
+            return False
+        if int(battle_after_confirm.get('fstplayer', -1)) != 17 or int(battle_after_confirm.get('sndplayer', -1)) != 10:
+            print("❌ Final battle scores were not persisted on confirm")
+            return False
+
+        # --- Branch 2: submit -> reject ---
+        mission_id_reject = await sqllite_helper.save_mission({
+            'deploy': 'Behavior Deploy Reject',
+            'rules': 'killteam',
+            'cell': 4,
+            'mission_description': 'Behavior test: reject branch',
+            'status': 0,
+        })
+
+        battle_id_reject = int((await mission_helper.start_battle(
+            mission_id_reject,
+            player_1,
+            player_2,
+            forced_battle_id=910002,
+        )))
+
+        await sqllite_helper.update_mission_status(mission_id_reject, 1)
+
+        await mission_helper.submit_pending_battle_result(
+            battle_id=battle_id_reject,
+            submitter_id=player_1,
+            fstplayer_score=12,
+            sndplayer_score=14,
+        )
+
+        mission_after_submit_reject = await sqllite_helper.get_mission_details(mission_id_reject)
+        if int(mission_after_submit_reject.status) != 2:
+            print("❌ Mission status did not transition to pending (2) in reject branch")
+            return False
+
+        # Submitter must not be allowed to reject own result.
+        try:
+            await mission_helper.reject_pending_battle_result(
+                battle_id=battle_id_reject,
+                rejector_id=player_1,
+                require_participant=True,
+                allow_submitter_reject=False,
+            )
+            print("❌ Submitter unexpectedly rejected own result")
+            return False
+        except PermissionError:
+            print("✅ Submitter cannot reject own result")
+
+        reject_result = await mission_helper.reject_pending_battle_result(
+            battle_id=battle_id_reject,
+            rejector_id=player_2,
+            require_participant=True,
+            allow_submitter_reject=False,
+        )
+
+        if reject_result['mission_id'] != mission_id_reject:
+            print("❌ reject_pending_battle_result returned unexpected mission_id")
+            return False
+
+        mission_after_reject = await sqllite_helper.get_mission_details(mission_id_reject)
+        pending_after_reject = await sqllite_helper.get_pending_result_by_battle_id(battle_id_reject)
+
+        if int(mission_after_reject.status) != 1:
+            print("❌ Mission status did not roll back to active (1) after reject")
+            return False
+        if pending_after_reject is not None:
+            print("❌ Pending result was not deleted after reject")
+            return False
+
+        print("✅ Unified flow behavior validated (submit/confirm/reject)")
+        return True
+    except Exception as e:
+        print(f"❌ Error in unified flow behavior test: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 
 async def run_all_tests():
     """Run all tests and report results."""
@@ -165,6 +321,7 @@ async def run_all_tests():
         ("PendingResult model exists", test_pending_result_model_exists),
         ("Pending result functions exist", test_pending_result_functions_exist),
         ("Confirmation handlers exist", test_confirmation_handlers_exist),
+        ("Unified flow behavior", test_unified_flow_behavior),
     ]
     
     results = []

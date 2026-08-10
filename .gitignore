@@ -175,3 +175,16 @@ cython_debug/
 /CareBot/.vs/CareBot/CopilotIndices
 *.tar.gz
 carebot-latest.tar
+
+# WH40K deploy images are local assets, keep them out of git
+/CareBot/CareBot/assets/deploys/
+
+# Local certificate artifacts
+*.pfx
+
+# Android/Gradle local and generated files
+/.tools/
+/android-app/.gradle/
+/android-app/build/
+/android-app/app/build/
+/android-app/local.properties

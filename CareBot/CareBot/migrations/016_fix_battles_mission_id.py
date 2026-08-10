@@ -1,14 +1,14 @@
 """
 Migration 016: Fix incorrect mission_id values in battles table
-and remove test/corrupted battle records
+and preserve historical battle records
 
 Problem: Some battle records have mission_id set to invalid values:
 - mission_id equal to battle_id (off-by-one errors)
 - mission_id containing text descriptions instead of IDs
 - mission_id pointing to non-existent missions
 
-This migration removes all corrupted battle records where mission_id
-is not NULL and does not reference an existing mission in mission_stack.
+This migration now keeps corrupted battle records by setting invalid
+mission_id values to NULL, instead of deleting battles.
 
 Root cause: Bug in write_battle_result() which was passing battle_id
 instead of mission_id to add_battle_result(). This has been fixed in
@@ -19,7 +19,7 @@ from yoyo import step
 
 
 def clean_corrupted_battles(conn):
-    """Remove all battle records with invalid mission_id values."""
+    """Set invalid mission_id values to NULL while preserving battles."""
     cursor = conn.cursor()
     
     # First, get all valid mission IDs
@@ -50,17 +50,13 @@ def clean_corrupted_battles(conn):
             print(f"✅ Battle {battle_id}: mission_id={mission_id} (valid)")
     
     if corrupted_battles:
-        print(f"\n🧹 Removing {len(corrupted_battles)} corrupted battle records...")
-        
-        # Remove corrupted battles and their participants
+        print(f"\n🧹 Normalizing {len(corrupted_battles)} corrupted battle records...")
+
         for battle_id in corrupted_battles:
-            # Remove battle_attenders records
-            cursor.execute("DELETE FROM battle_attenders WHERE battle_id = ?", (battle_id,))
-            # Remove battle record
-            cursor.execute("DELETE FROM battles WHERE id = ?", (battle_id,))
-            print(f"   Removed battle {battle_id}")
-        
-        print(f"✅ Successfully removed {len(corrupted_battles)} corrupted battles")
+            cursor.execute("UPDATE battles SET mission_id = NULL WHERE id = ?", (battle_id,))
+            print(f"   Updated battle {battle_id}: mission_id -> NULL")
+
+        print(f"✅ Successfully normalized {len(corrupted_battles)} corrupted battles")
     else:
         print("✅ No corrupted battles found")
     
