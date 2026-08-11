@@ -995,6 +995,28 @@ async def update_mission_status(mission_id, status):
         MOCK_MISSIONS[mission_id]['status'] = status
     return True
 
+async def get_all_active_missions():
+    """Mock: get missions with status=1."""
+    print("🧪 Mock: get_all_active_missions()")
+    result = []
+    for m in MOCK_MISSIONS.values():
+        if m.get('status') == 1:
+            result.append((
+                m.get('id', 0),
+                m.get('deploy', ''),
+                m.get('rules', ''),
+                m.get('cell', ''),
+                m.get('mission_description', ''),
+                m.get('created_date', ''),
+            ))
+    return result
+
+async def get_active_missions_count():
+    """Mock: count missions with status=1."""
+    print("🧪 Mock: get_active_missions_count()")
+    return sum(1 for m in MOCK_MISSIONS.values() if m.get('status') == 1)
+
+
 async def set_mission_score_submitted(mission_id):
     """Set mission locked status to 2 when battle score is submitted."""
     print(f"🧪 Mock: set_mission_score_submitted({mission_id})")

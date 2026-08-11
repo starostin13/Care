@@ -498,6 +498,21 @@ async def get_admin_menu(userId):
             callback_data="admin_feature_flags")
     ])
     
+    # Active missions management (status=1) - only show if there are active missions
+    active_count = await sqllite_helper.get_active_missions_count()
+    if active_count > 0:
+        user_lang = await localization.get_user_language(userId)
+        active_button_text = await localization.get_text(
+            "admin_active_count",
+            user_lang,
+            active_count=active_count
+        )
+        items.append([
+            InlineKeyboardButton(
+                active_button_text,
+                callback_data="admin_active_missions")
+        ])
+
     # Pending mission confirmations - only show if there are pending missions
     pending_count = await sqllite_helper.get_pending_missions_count()
     if pending_count > 0:

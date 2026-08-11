@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 DEPLOY_ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "deploys"
 
-MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS, ALLIANCE_INPUT, CUSTOM_NOTIFICATION = range(7)
+MAIN_MENU, SETTINGS, GAMES, SCHEDULE, MISSIONS, ALLIANCE_INPUT, CUSTOM_NOTIFICATION, ADMIN_SCORE_INPUT = range(8)
 # Callback data
 ONE, TWO, THREE, FOUR = range(4)
 TYPING_CHOICE, TYPING_REPLY = range(2)
@@ -1788,6 +1788,288 @@ async def handle_alliance_text_input(update: Update, context: ContextTypes.DEFAU
         return await handle_alliance_name_input(update, context)
 
 
+async def admin_active_missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of missions with status=1 (active/locked)."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_msg = await localization.get_text_for_user(user_id, "error_no_admin_rights")
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
+
+    active_missions = await sqllite_helper.get_all_active_missions()
+
+    if not active_missions:
+        no_active_msg = await localization.get_text_for_user(user_id, "admin_no_active_missions")
+        btn_back_text = await localization.get_text_for_user(user_id, "btn_back_admin_menu")
+        await query.edit_message_text(
+            no_active_msg,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(btn_back_text, callback_data="admin_menu")
+            ]])
+        )
+        return MAIN_MENU
+
+    keyboard = []
+    for mission in active_missions:
+        mission_id, deploy, rules, cell, description, created_date = mission
+        button_text = f"#{mission_id} - {rules} ({cell or '?'})"
+        keyboard.append([
+            InlineKeyboardButton(
+                button_text,
+                callback_data=f"admin_active_mission:{mission_id}"
+            )
+        ])
+
+    btn_back_text = await localization.get_text_for_user(user_id, "btn_back_admin_menu")
+    keyboard.append([InlineKeyboardButton(btn_back_text, callback_data="admin_menu")])
+
+    title = await localization.get_text_for_user(
+        user_id,
+        "admin_active_missions_title",
+        count=len(active_missions)
+    )
+    await query.edit_message_text(title, reply_markup=InlineKeyboardMarkup(keyboard))
+    return MAIN_MENU
+
+
+async def admin_active_mission_detail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show detail of an active (status=1) mission with management options."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_msg = await localization.get_text_for_user(user_id, "error_no_admin_rights")
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
+
+    mission_id = int(query.data.split(':')[1])
+    mission_details = await sqllite_helper.get_mission_details(mission_id)
+    if not mission_details:
+        error_msg = await localization.get_text_for_user(user_id, "error_mission_not_found")
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
+
+    battle_id = await sqllite_helper.get_battle_id_by_mission_id(mission_id)
+    p1_name, p2_name = "?", "?"
+    if battle_id:
+        participants = await sqllite_helper.get_battle_participants(battle_id)
+        if participants:
+            p1_id, p2_id = participants
+            p1_name = await sqllite_helper.get_nickname_by_telegram_id(p1_id) or str(p1_id)
+            p2_name = await sqllite_helper.get_nickname_by_telegram_id(p2_id) or str(p2_id)
+
+    btn_unlock_text = await localization.get_text_for_user(user_id, "btn_unlock_mission")
+    btn_enter_score_text = await localization.get_text_for_user(user_id, "btn_enter_score")
+    btn_back_text = await localization.get_text_for_user(user_id, "btn_back")
+
+    keyboard = [
+        [InlineKeyboardButton(btn_unlock_text, callback_data=f"admin_unlock_mission:{mission_id}")],
+    ]
+    if battle_id:
+        keyboard.insert(0, [InlineKeyboardButton(btn_enter_score_text, callback_data=f"admin_enter_score:{mission_id}")])
+    keyboard.append([InlineKeyboardButton(btn_back_text, callback_data="admin_active_missions")])
+
+    if battle_id:
+        message_text = await localization.get_text_for_user(
+            user_id,
+            "admin_active_mission_detail",
+            mission_id=mission_id,
+            created_date=mission_details.created_date or "?",
+            rules=mission_details.rules or "?",
+            cell=mission_details.cell or "?",
+            p1_name=p1_name,
+            p2_name=p2_name,
+        )
+    else:
+        message_text = await localization.get_text_for_user(
+            user_id,
+            "admin_active_mission_no_battle",
+            mission_id=mission_id,
+            created_date=mission_details.created_date or "?",
+            rules=mission_details.rules or "?",
+        )
+
+    await query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    return MAIN_MENU
+
+
+async def admin_unlock_mission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Unlock a mission by setting its status back to 0."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_msg = await localization.get_text_for_user(user_id, "error_no_admin_rights")
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
+
+    mission_id = int(query.data.split(':')[1])
+
+    # Check if a battle already references this mission
+    battle_id = await sqllite_helper.get_battle_id_by_mission_id(mission_id)
+    if battle_id:
+        # Warn admin and require confirmation before unlocking
+        parts = query.data.split(':')
+        if len(parts) < 3 or parts[2] != 'confirm':
+            warn_msg = await localization.get_text_for_user(
+                user_id, "admin_unlock_mission_battle_warning", mission_id=mission_id, battle_id=battle_id
+            )
+            btn_confirm_text = await localization.get_text_for_user(user_id, "btn_confirm")
+            btn_back_text = await localization.get_text_for_user(user_id, "btn_back")
+            await query.edit_message_text(
+                warn_msg,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(btn_confirm_text, callback_data=f"admin_unlock_mission:{mission_id}:confirm")],
+                    [InlineKeyboardButton(btn_back_text, callback_data=f"admin_active_mission:{mission_id}")]
+                ])
+            )
+            return MAIN_MENU
+
+    await sqllite_helper.update_mission_status(mission_id, 0)
+
+    success_msg = await localization.get_text_for_user(
+        user_id, "admin_mission_unlocked", mission_id=mission_id
+    )
+    btn_back_text = await localization.get_text_for_user(user_id, "btn_back_admin_menu")
+    await query.edit_message_text(
+        success_msg,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(btn_back_text, callback_data="admin_active_missions")
+        ]])
+    )
+    return MAIN_MENU
+
+
+async def admin_enter_score(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Prompt admin to enter a score for a mission (status=1 or status=2 override)."""
+    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    is_admin = await sqllite_helper.is_user_admin(user_id)
+    if not is_admin:
+        error_msg = await localization.get_text_for_user(user_id, "error_no_admin_rights")
+        await query.edit_message_text(error_msg)
+        return MAIN_MENU
+
+    parts = query.data.split(':')
+    mission_id = int(parts[1])
+    # Determine source (active or pending) from callback prefix
+    source = "active" if query.data.startswith("admin_enter_score:") else "pending"
+
+    context.user_data['admin_score_mission_id'] = mission_id
+    context.user_data['admin_score_source'] = source
+
+    prompt = await localization.get_text_for_user(
+        user_id, "admin_enter_score_prompt", mission_id=mission_id
+    )
+    btn_cancel_text = await localization.get_text_for_user(user_id, "btn_back")
+    back_cb = "admin_active_missions" if source == "active" else "admin_pending_confirmations"
+    await query.edit_message_text(
+        prompt,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(btn_cancel_text, callback_data=back_cb)
+        ]])
+    )
+    return ADMIN_SCORE_INPUT
+
+
+async def handle_admin_score_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the score text entered by admin in ADMIN_SCORE_INPUT state."""
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    mission_id = context.user_data.get('admin_score_mission_id')
+    source = context.user_data.get('admin_score_source', 'active')
+
+    if not mission_id:
+        return MAIN_MENU
+
+    # Parse score in format "X:Y" or "X Y" or "X-Y"
+    score_match = re.match(r'^(\d+)\s*[:\-]\s*(\d+)$', text)
+    if not score_match:
+        invalid_msg = await localization.get_text_for_user(user_id, "admin_score_invalid_format")
+        await update.message.reply_text(invalid_msg)
+        return ADMIN_SCORE_INPUT
+
+    fst_score = int(score_match.group(1))
+    snd_score = int(score_match.group(2))
+
+    battle_id = await sqllite_helper.get_battle_id_by_mission_id(mission_id)
+    if not battle_id:
+        error_msg = await localization.get_text_for_user(
+            user_id, "admin_score_no_battle", mission_id=mission_id
+        )
+        await update.message.reply_text(error_msg)
+        context.user_data.pop('admin_score_mission_id', None)
+        context.user_data.pop('admin_score_source', None)
+        return MAIN_MENU
+
+    try:
+        participants = await sqllite_helper.get_battle_participants(battle_id)
+        if not participants:
+            raise ValueError("Battle participants not found")
+        fstplayer_id, sndplayer_id = participants
+
+        mission_details = await sqllite_helper.get_mission_details(mission_id)
+        scenario = mission_details.rules if mission_details else None
+
+        await mission_helper.ensure_mission_cell(mission_id, fstplayer_id, sndplayer_id)
+
+        user_reply = f"{fst_score} {snd_score}"
+        await mission_helper.write_battle_result(battle_id, user_reply)
+        await mission_helper.apply_mission_rewards(battle_id, user_reply, fstplayer_id)
+        await map_helper.update_map(battle_id, user_reply, fstplayer_id, scenario)
+
+        # If there is a pending result (status=2 override), remove it first
+        pending = await sqllite_helper.get_pending_result_by_battle_id(battle_id)
+        if pending:
+            await sqllite_helper.delete_pending_result(battle_id)
+
+        await sqllite_helper.update_mission_status(mission_id, 3)
+
+        success_msg = await localization.get_text_for_user(
+            user_id,
+            "admin_score_saved",
+            mission_id=mission_id,
+            fst_score=fst_score,
+            snd_score=snd_score,
+        )
+        menu = await keyboard_constructor.get_admin_menu(user_id)
+        await update.message.reply_text(success_msg, reply_markup=InlineKeyboardMarkup(menu))
+
+        # Notify participants
+        for participant_id in participants:
+            try:
+                notification_msg = await localization.get_text_for_user(
+                    participant_id,
+                    "admin_confirmed_by_admin",
+                    mission_id=mission_id,
+                    fst_score=fst_score,
+                    snd_score=snd_score,
+                )
+                await context.bot.send_message(chat_id=participant_id, text=notification_msg)
+            except Exception as e:
+                logger.error(f"Failed to notify participant {participant_id}: {e}")
+
+    except Exception as e:
+        logger.error(f"Error applying admin score for mission {mission_id}: {e}", exc_info=True)
+        error_msg = await localization.get_text_for_user(user_id, "admin_score_apply_error", error=str(e))
+        await update.message.reply_text(error_msg)
+
+    context.user_data.pop('admin_score_mission_id', None)
+    context.user_data.pop('admin_score_source', None)
+    return MAIN_MENU
+
+
 async def admin_pending_confirmations(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show list of missions pending confirmation."""
     user_id = update.effective_user.id
@@ -1951,10 +2233,14 @@ async def admin_confirm_mission(update: Update, context: ContextTypes.DEFAULT_TY
     
     btn_confirm_text = await localization.get_text_for_user(user_id, "btn_confirm")
     btn_reject_text = await localization.get_text_for_user(user_id, "btn_reject")
+    btn_override_score_text = await localization.get_text_for_user(user_id, "btn_override_score")
     keyboard = [
         [
             InlineKeyboardButton(btn_confirm_text, callback_data=f"admin_do_confirm:{battle_id}"),
             InlineKeyboardButton(btn_reject_text, callback_data=f"admin_do_reject:{battle_id}")
+        ],
+        [
+            InlineKeyboardButton(btn_override_score_text, callback_data=f"admin_enter_score_pending:{mission_id}")
         ],
         [
             InlineKeyboardButton(await localization.get_text_for_user(user_id, "btn_back"), callback_data="admin_pending_confirmations")
@@ -2498,6 +2784,12 @@ def start_bot():
                 CallbackQueryHandler(admin_confirm_mission, pattern='^admin_confirm_mission:'),
                 CallbackQueryHandler(admin_do_confirm_mission, pattern='^admin_do_confirm:'),
                 CallbackQueryHandler(admin_do_reject_mission, pattern='^admin_do_reject:'),
+                # Active missions management handlers
+                CallbackQueryHandler(admin_active_missions, pattern='^admin_active_missions$'),
+                CallbackQueryHandler(admin_active_mission_detail, pattern='^admin_active_mission:'),
+                CallbackQueryHandler(admin_unlock_mission, pattern='^admin_unlock_mission:'),
+                CallbackQueryHandler(admin_enter_score, pattern='^admin_enter_score:'),
+                CallbackQueryHandler(admin_enter_score, pattern='^admin_enter_score_pending:'),
                 # Feature flags handlers
                 CallbackQueryHandler(admin_feature_flags, pattern='^admin_feature_flags$'),
                 CallbackQueryHandler(admin_toggle_feature, pattern='^admin_toggle_feature:'),
@@ -2543,6 +2835,12 @@ def start_bot():
                 CallbackQueryHandler(admin_alliance_management, pattern='^admin_alliance_management$'),
                 CallbackQueryHandler(admin_adjust_resources_menu, pattern='^admin_adjust_resources$'),
                 CallbackQueryHandler(admin_edit_alliances, pattern='^admin_edit_alliances$')
+            ],
+            ADMIN_SCORE_INPUT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_score_input),
+                CallbackQueryHandler(admin_active_missions, pattern='^admin_active_missions$'),
+                CallbackQueryHandler(admin_pending_confirmations, pattern='^admin_pending_confirmations$'),
+                CallbackQueryHandler(admin_menu, pattern='^admin_menu$'),
             ],
             CUSTOM_NOTIFICATION: [
                 MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_notification_message),

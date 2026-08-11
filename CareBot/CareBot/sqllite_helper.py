@@ -1998,6 +1998,36 @@ async def delete_pending_result(battle_id: int):
         await db.commit()
 
 
+async def get_all_active_missions():
+    """Get all missions with status=1 (active/locked).
+
+    Returns:
+        List of tuples: (mission_id, deploy, rules, cell, description, created_date)
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, deploy, rules, cell, mission_description, created_date
+            FROM mission_stack
+            WHERE status = 1
+            ORDER BY created_date DESC
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_active_missions_count():
+    """Get the count of missions with status=1 (active/locked).
+
+    Returns:
+        int: Number of active/locked missions
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM mission_stack WHERE status = 1
+        ''') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
 async def get_all_pending_missions():
     """Get all missions with status=2 (pending confirmation).
     
