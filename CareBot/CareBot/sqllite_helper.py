@@ -2215,6 +2215,25 @@ async def get_battle_id_by_mission_id(mission_id: int):
             return result[0] if result else None
 
 
+async def cancel_battle(battle_id: int) -> bool:
+    """Delete a battle and its participants from battle_attenders and battles tables.
+
+    Used when unlocking a mission that has an associated battle, to prevent
+    orphaned battle records that would violate the one-battle-per-mission invariant.
+
+    Args:
+        battle_id: The battle ID to cancel
+
+    Returns:
+        bool: True if deletion was successful
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('DELETE FROM battle_attenders WHERE battle_id = ?', (battle_id,))
+        await db.execute('DELETE FROM battles WHERE id = ?', (battle_id,))
+        await db.commit()
+        return True
+
+
 # ==================== Feature Flags Functions ====================
 
 async def is_feature_enabled(flag_name: str) -> bool:

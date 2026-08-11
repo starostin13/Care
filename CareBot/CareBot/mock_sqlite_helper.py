@@ -132,6 +132,13 @@ async def get_battle_id_by_mission_id(mission_id):
     return None
 
 
+async def cancel_battle(battle_id: int) -> bool:
+    print(f"🧪 Mock: cancel_battle({battle_id})")
+    MOCK_BATTLES.pop(int(battle_id), None)
+    MOCK_BATTLE_ATTENDERS.pop(int(battle_id), None)
+    return True
+
+
 async def get_battle_participants(battle_id):
     print(f"🧪 Mock: get_battle_participants({battle_id})")
     attendees = MOCK_BATTLE_ATTENDERS.get(int(battle_id), [])

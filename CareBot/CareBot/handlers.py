@@ -1913,25 +1913,12 @@ async def admin_unlock_mission(update: Update, context: ContextTypes.DEFAULT_TYP
 
     mission_id = int(query.data.split(':')[1])
 
-    # Check if a battle already references this mission
+    # Check if a battle already references this mission.
+    # If so, cancel the battle and its attenders first to preserve the
+    # one-battle-per-mission invariant before resetting mission status.
     battle_id = await sqllite_helper.get_battle_id_by_mission_id(mission_id)
     if battle_id:
-        # Warn admin and require confirmation before unlocking
-        parts = query.data.split(':')
-        if len(parts) < 3 or parts[2] != 'confirm':
-            warn_msg = await localization.get_text_for_user(
-                user_id, "admin_unlock_mission_battle_warning", mission_id=mission_id, battle_id=battle_id
-            )
-            btn_confirm_text = await localization.get_text_for_user(user_id, "btn_confirm")
-            btn_back_text = await localization.get_text_for_user(user_id, "btn_back")
-            await query.edit_message_text(
-                warn_msg,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(btn_confirm_text, callback_data=f"admin_unlock_mission:{mission_id}:confirm")],
-                    [InlineKeyboardButton(btn_back_text, callback_data=f"admin_active_mission:{mission_id}")]
-                ])
-            )
-            return MAIN_MENU
+        await sqllite_helper.cancel_battle(battle_id)
 
     await sqllite_helper.update_mission_status(mission_id, 0)
 
