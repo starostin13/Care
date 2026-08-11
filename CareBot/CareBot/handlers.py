@@ -1925,11 +1925,7 @@ async def admin_unlock_mission(update: Update, context: ContextTypes.DEFAULT_TYP
     success_msg = await localization.get_text_for_user(
         user_id, "admin_mission_unlocked", mission_id=mission_id
     )
-    btn_back_text = await localization.get_text_for_user(user_id, "btn_back_admin_menu")
-    await query.edit_message_text(
-        success_msg,
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton(btn_back_text, callback_data="admin_active_missions")
+    btn_back_text = await localization.get_text_for_user(user_id, "btn_back")
         ]])
     )
     return MAIN_MENU
