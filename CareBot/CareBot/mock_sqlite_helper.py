@@ -132,6 +132,13 @@ async def get_battle_id_by_mission_id(mission_id):
     return None
 
 
+async def cancel_battle(battle_id: int) -> bool:
+    print(f"🧪 Mock: cancel_battle({battle_id})")
+    MOCK_BATTLES.pop(int(battle_id), None)
+    MOCK_BATTLE_ATTENDERS.pop(int(battle_id), None)
+    return True
+
+
 async def get_battle_participants(battle_id):
     print(f"🧪 Mock: get_battle_participants({battle_id})")
     attendees = MOCK_BATTLE_ATTENDERS.get(int(battle_id), [])
@@ -994,6 +1001,28 @@ async def update_mission_status(mission_id, status):
     if mission_id in MOCK_MISSIONS:
         MOCK_MISSIONS[mission_id]['status'] = status
     return True
+
+async def get_all_active_missions():
+    """Mock: get missions with status=1."""
+    print("🧪 Mock: get_all_active_missions()")
+    result = []
+    for m in MOCK_MISSIONS.values():
+        if m.get('status') == 1:
+            result.append((
+                m.get('id', 0),
+                m.get('deploy', ''),
+                m.get('rules', ''),
+                m.get('cell', ''),
+                m.get('mission_description', ''),
+                m.get('created_date', ''),
+            ))
+    return result
+
+async def get_active_missions_count():
+    """Mock: count missions with status=1."""
+    print("🧪 Mock: get_active_missions_count()")
+    return sum(1 for m in MOCK_MISSIONS.values() if m.get('status') == 1)
+
 
 async def set_mission_score_submitted(mission_id):
     """Set mission locked status to 2 when battle score is submitted."""

@@ -1998,6 +1998,36 @@ async def delete_pending_result(battle_id: int):
         await db.commit()
 
 
+async def get_all_active_missions():
+    """Get all missions with status=1 (active/locked).
+
+    Returns:
+        List of tuples: (mission_id, deploy, rules, cell, description, created_date)
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT id, deploy, rules, cell, mission_description, created_date
+            FROM mission_stack
+            WHERE status = 1
+            ORDER BY created_date DESC
+        ''') as cursor:
+            return await cursor.fetchall()
+
+
+async def get_active_missions_count():
+    """Get the count of missions with status=1 (active/locked).
+
+    Returns:
+        int: Number of active/locked missions
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute('''
+            SELECT COUNT(*) FROM mission_stack WHERE status = 1
+        ''') as cursor:
+            result = await cursor.fetchone()
+            return result[0] if result else 0
+
+
 async def get_all_pending_missions():
     """Get all missions with status=2 (pending confirmation).
     
@@ -2183,6 +2213,25 @@ async def get_battle_id_by_mission_id(mission_id: int):
         ''', (mission_id,)) as cursor:
             result = await cursor.fetchone()
             return result[0] if result else None
+
+
+async def cancel_battle(battle_id: int) -> bool:
+    """Delete a battle and its participants from battle_attenders and battles tables.
+
+    Used when unlocking a mission that has an associated battle, to prevent
+    orphaned battle records that would violate the one-battle-per-mission invariant.
+
+    Args:
+        battle_id: The battle ID to cancel
+
+    Returns:
+        bool: True if deletion was successful
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute('DELETE FROM battle_attenders WHERE battle_id = ?', (battle_id,))
+        await db.execute('DELETE FROM battles WHERE id = ?', (battle_id,))
+        await db.commit()
+        return True
 
 
 # ==================== Feature Flags Functions ====================
