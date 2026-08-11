@@ -1976,7 +1976,7 @@ async def handle_admin_score_input(update: Update, context: ContextTypes.DEFAULT
     if not mission_id:
         return MAIN_MENU
 
-    # Parse score in format "X:Y" or "X Y" or "X-Y"
+    # Parse score in format "X:Y" or "X-Y"
     score_match = re.match(r'^(\d+)\s*[:\-]\s*(\d+)$', text)
     if not score_match:
         invalid_msg = await localization.get_text_for_user(user_id, "admin_score_invalid_format")
