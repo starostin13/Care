@@ -39,3 +39,10 @@ bot for caring wh40k crusadess deals
 - **CareBot API:** http://192.168.0.125:5555
 - **SQLite Web UI:** http://192.168.0.125:8080
 - **Health Check:** http://192.168.0.125:5555/health
+
+## 📱 Android / Offline API
+
+- `GET /api/bootstrap` — отдает снимок карты, альянсов, игроков и список незавершенных миссий для кеширования на клиенте.
+- `POST /api/missions` — генерирует миссию для указанного правила и создает бой; тело: `rules`, `attacker_id`, `defender_id`.
+- `POST /api/battles/<id>/result` — сохраняет результат боя, применяет награды/последствия и обновляет патрона; тело: `submitter_id`, `fstplayer_score`, `sndplayer_score`.
+- `POST /api/battles/sync` — принимает массив результатов с теми же полями и применяет их пачкой для синхронизации офлайн-сессий.
